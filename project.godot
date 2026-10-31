@@ -1,0 +1,14 @@
+config_version=5
+
+[application]
+config/name="Cozy Incrementals"
+run/main_scene="res://games/ice_fishing/ice_fishing.tscn"
+config/features=PackedStringArray("4.7")
+
+[autoload]
+GameState="*res://shared/game_state.gd"
+
+[display]
+window/size/viewport_width=1920
+window/size/viewport_height=1080
+window/stretch/mode="canvas_items"
