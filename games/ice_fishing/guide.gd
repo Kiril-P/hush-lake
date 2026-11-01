@@ -103,6 +103,7 @@ var cam_home := Vector3.ZERO
 var cam_pitch := 0.0
 var bars := 0.0
 var ping_t := 0.0
+var cine_t := 0.0
 var strip_alpha := 0.0
 var drill_spot := Vector3.ZERO
 
@@ -345,6 +346,10 @@ func current() -> Dictionary:
 			return _step("goal%d" % i, title, String(h[0]), _resolve(String(h[1])) if h[1] != "" else null)
 	return _step("done", "Wake the Eye", "Keep feeding it. When the lake is empty, press R to refreeze.", _resolve("eye"))
 
+## Letterbox bars for a moment (the Eye waking).
+func cinematic(seconds: float) -> void:
+	cine_t = seconds
+
 func ping() -> void:
 	if intro_active or cur.is_empty():
 		return
@@ -367,7 +372,8 @@ func tick(delta: float, captured: bool) -> void:
 		_begin_intro()
 	if intro_active:
 		_tick_intro(delta)
-	bars = move_toward(bars, BAR_H if intro_active else 0.0, delta * 160.0)
+	cine_t = maxf(0.0, cine_t - delta)
+	bars = move_toward(bars, BAR_H if (intro_active or cine_t > 0.0) else 0.0, delta * 160.0)
 	bar_top.offset_bottom = bars
 	bar_bot.offset_top = -bars
 	cur = current()
@@ -380,7 +386,7 @@ func tick(delta: float, captured: bool) -> void:
 	else:
 		stuck_t += delta
 	var show: bool = captured and not intro_active and not game.journal_panel.visible and not game.refreeze_panel.visible \
-		and not game.ending_panel.visible and not game.riding
+		and not game.ending_panel.visible and not game.riding and cine_t <= 0.0
 	strip_alpha = move_toward(strip_alpha, 1.0 if show else 0.0, delta * 4.0)
 	strip.modulate.a = strip_alpha
 	strip_tag.text = "NEXT"
@@ -398,7 +404,7 @@ func tick(delta: float, captured: bool) -> void:
 	strip_hint.text = hint
 	strip_hint.visible = hint != ""
 	_tick_marker(delta, to, show)
-	_tick_tips(delta, captured and not intro_active)
+	_tick_tips(delta, captured and not intro_active and cine_t <= 0.0)
 
 func _pop() -> void:
 	strip.pivot_offset = strip.size * 0.5

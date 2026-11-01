@@ -70,6 +70,43 @@ func _ready() -> void:
 		g.carry.append(g._make_fish(g.SPECIES[0]) if g.has_method("_make_fish") else {})
 	check("full hands point at the eye", step(g) == "full")
 	g.carry.clear()
+	# --- hand-off feel: a bucket of fish is thrown one at a time, speeding up, and the streak climbs
+	g.carry.clear()
+	for i in 6:
+		g.carry.append(g._make_fish(g.SPECIES[0]))
+	var fed0: int = g.stats.eye_fed
+	var peak := 0
+	var staged: int = g.carry.size()
+	g._feed_by_hand()
+	check("feeding empties the hands at once", g.carry.is_empty())
+	await get_tree().create_timer(0.3).timeout
+	check("fish go in one at a time, not all at once", g.stats.eye_fed - fed0 < 6)
+	for i in 30:
+		await get_tree().create_timer(0.1).timeout
+		peak = maxi(peak, g.feed_streak)
+	check("all six are swallowed", g.stats.eye_fed - fed0 == 6)
+	check("the streak climbed to 6", peak == 6)
+	await get_tree().create_timer(1.8).timeout
+	check("the streak resets after a pause", g.feed_streak == 0)
+	check("no fish nodes are left over", g.dive_live == 0)
+	# belt fish dive into the funnel (visual) and pay as before
+	var held: int = g.get_child_count()
+	g._belt_dive(g._make_fish(g.SPECIES[0]), Vector3(0, 0.8, 8.0), Vector3(0, 0, -1))
+	check("a belt fish starts a dive", g.dive_live == 1 and g.get_child_count() == held + 1)
+	await get_tree().create_timer(1.2).timeout
+	check("the dive cleans itself up", g.dive_live == 0 and g.get_child_count() == held)
+	for i in g.DIVE_MAX + 4:
+		g._belt_dive(g._make_fish(g.SPECIES[0]), Vector3(0, 0.8, 8.0), Vector3(0, 0, -1))
+	check("dives are capped", g.dive_live == g.DIVE_MAX)
+	await get_tree().create_timer(1.2).timeout
+	# stage reveal
+	var fl0: float = g.flash_rect.color.a
+	g._stage_reveal(2)
+	check("a stage reveal starts bars, flash and title", g.reveal_t > 2.0 and gd.cine_t > 2.0 and g.flash_rect.color.a > fl0)
+	await get_tree().create_timer(0.8).timeout
+	check("the camera pulls back during a reveal", g.reveal_fov > 1.0 or g.reveal_t > 0.0)
+	await get_tree().create_timer(3.0).timeout
+	check("the reveal ends cleanly", g.reveal_t <= 0.0 and g.reveal_fov == 0.0)
 	# every main goal has either a hint or a generic one
 	var missing := []
 	for gl in g.GOALS:

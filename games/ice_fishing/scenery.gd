@@ -271,6 +271,9 @@ func set_eye_stage(st: int) -> void:
 func eye_stage_up(st: int) -> void:
 	eye.stage_up(st)
 
+func eye_gulp(power := 1.0) -> void:
+	eye.gulp(power)
+
 func eye_catch(c: Color, weight := 0.3) -> void:
 	eye.catch(c, weight)
 

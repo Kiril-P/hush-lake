@@ -577,6 +577,17 @@ func catch(c: Color, weight := 0.3) -> void:
 		_emit_sparks(c.lerp(Color(0.6, 1.0, 0.95), 0.5), weight)
 		spark_cd = 0.14
 
+## A big swallow: a streak milestone. Bigger wave, two ripples, a spray of gold.
+func gulp(power := 1.0) -> void:
+	flare = 1.5
+	flinch = 1.0
+	core_pulse = 1.0
+	wave = 0.0
+	wave_amp = 1.0 + 0.6 * clampf(power, 0.0, 2.0)
+	_spawn_ripple(1.4 + power)
+	get_tree().create_timer(0.25).timeout.connect(func(): _spawn_ripple(1.0 + power * 0.6))
+	_emit_sparks(Color(1.0, 0.88, 0.5), 1.0)
+
 func landing_point(from: Vector3) -> Vector3:
 	var d := Vector2(from.x, from.z)
 	d = d.normalized() if d.length() > 0.1 else Vector2(0, 1)

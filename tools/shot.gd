@@ -58,6 +58,30 @@ func _ready() -> void:
 			await get_tree().process_frame
 		get_viewport().get_texture().get_image().save_png("res://renders/shot_guide_arrow.png")
 		print("saved guide")
+	# the hand-off: a bucket of fish thrown at the Eye one by one, a belt fish diving, then a stage reveal
+	if only == "handoff":
+		var ph: Node3D = g.get_node("Player")
+		ph.position = Vector3(-6.0, 1.7, 11.0)
+		ph.rotation.y = deg_to_rad(-30.0)
+		g.cam.rotation.x = deg_to_rad(-14.0)
+		g.day_t = 0.0
+		g.scenery.set_time(0.0)
+		for i in 10:
+			g.carry.append(g._make_fish(g.SPECIES[i % 4]))
+		g._refresh_view()
+		for i in 20:
+			await get_tree().process_frame
+		g._feed_by_hand()
+		for step in [["a", 0.7], ["b", 0.9], ["c", 0.7]]:
+			await get_tree().create_timer(step[1]).timeout
+			get_viewport().get_texture().get_image().save_png("res://renders/shot_handoff_%s.png" % step[0])
+			print("saved handoff ", step[0])
+		await get_tree().create_timer(2.5).timeout
+		g._stage_reveal(3)
+		for step in [["rev1", 0.9], ["rev2", 1.3]]:
+			await get_tree().create_timer(step[1]).timeout
+			get_viewport().get_texture().get_image().save_png("res://renders/shot_handoff_%s.png" % step[0])
+			print("saved handoff ", step[0])
 	# staged mid-game: auto-rods with belts running into the Eye, fish riding them, the Eye partly fed
 	if only == "" or only == "belts":
 		GameState.currency = 99999.0

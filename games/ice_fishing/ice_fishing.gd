@@ -36,6 +36,8 @@ const CANNERY_MULT := 1.5                   # a cannery on a belt: every fish ri
 const SORTER_MULT := 1.6                    # a sorter: fish worth 5+ get x1.6
 const DEPOT_MULT := 1.05                    # a depot's sled run pays a little less than hand-feeding the Eye
 const BUILD_ITEMS := ["Cannery", "Sorter", "Depot", "Ice-Breaker"]
+const FEED_NOTES := [0, 2, 4, 7, 9, 12, 14, 16, 19, 21]   # semitones: a hand-fed streak climbs a pentatonic scale
+const DIVE_MAX := 16                                      # belt fish diving into the funnel at once (visual only)
 const RIG_INTERVAL := 7.0
 const RIG_BASE := 900.0
 const RIG_GROWTH := 2.4
@@ -253,6 +255,16 @@ var line_node: MeshInstance3D
 var tool_tip: Node3D
 var fight_amt := 0.0       # how hard the fish on the line is pulling (0..2): bends the rod, shakes the view
 var view_pop := 0.0
+var feed_streak := 0          # fish swallowed in a row (hand-fed ones show on the HUD)
+var feed_streak_t := 0.0
+var dive_live := 0
+var streak_label: Label
+var flash_rect: ColorRect
+var reveal_title: Label
+var reveal_sub: Label
+var reveal_t := 0.0
+var reveal_total := 1.0
+var reveal_fov := 0.0
 var card_panel: PanelContainer
 var card_rarity: Label
 var card_name: Label
@@ -1028,6 +1040,44 @@ func _build_ui() -> void:
 	banner_label.add_theme_constant_override("outline_size", 12)
 	banner_label.modulate.a = 0.0
 	ui.add_child(banner_label)
+	streak_label = Label.new()
+	streak_label.set_anchors_preset(Control.PRESET_CENTER)
+	streak_label.position = Vector2(-110, 88)
+	streak_label.size = Vector2(220, 60)
+	streak_label.pivot_offset = Vector2(110, 30)
+	streak_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	streak_label.add_theme_font_size_override("font_size", 46)
+	streak_label.add_theme_color_override("font_color", Style.AMBER)
+	streak_label.add_theme_constant_override("outline_size", 12)
+	streak_label.modulate.a = 0.0
+	ui.add_child(streak_label)
+	flash_rect = ColorRect.new()
+	flash_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	flash_rect.color = Color(1.0, 0.86, 0.55, 0.0)
+	ui.add_child(flash_rect)
+	reveal_title = Label.new()
+	reveal_title.set_anchors_preset(Control.PRESET_FULL_RECT)
+	reveal_title.anchor_top = 0.18
+	reveal_title.anchor_bottom = 0.30
+	reveal_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	reveal_title.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	reveal_title.add_theme_font_size_override("font_size", 58)
+	reveal_title.add_theme_color_override("font_color", Color(0.75, 1.0, 0.95))
+	reveal_title.add_theme_constant_override("outline_size", 16)
+	reveal_title.add_theme_color_override("font_outline_color", Color(0.03, 0.07, 0.14, 0.95))
+	reveal_title.modulate.a = 0.0
+	ui.add_child(reveal_title)
+	reveal_sub = Label.new()
+	reveal_sub.set_anchors_preset(Control.PRESET_FULL_RECT)
+	reveal_sub.anchor_top = 0.30
+	reveal_sub.anchor_bottom = 0.37
+	reveal_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	reveal_sub.add_theme_font_size_override("font_size", 24)
+	reveal_sub.add_theme_color_override("font_color", Style.CREAM)
+	reveal_sub.add_theme_constant_override("outline_size", 12)
+	reveal_sub.add_theme_color_override("font_outline_color", Color(0.03, 0.07, 0.14, 0.95))
+	reveal_sub.modulate.a = 0.0
+	ui.add_child(reveal_sub)
 	guide = GuideScript.new()
 	guide.game = self
 	add_child(guide)
@@ -1581,6 +1631,12 @@ func _process(delta: float) -> void:
 		msg_time -= delta
 		if msg_time <= 0.0:
 			msg_label.text = ""
+	if feed_streak_t > 0.0:
+		feed_streak_t -= delta
+		if feed_streak_t <= 0.0:
+			feed_streak = 0
+	if feed_streak_t < 0.45:
+		streak_label.modulate.a = clampf(feed_streak_t / 0.45, 0.0, 1.0)
 	if combo_t > 0.0:
 		combo_t -= delta
 		if combo_t <= 0.0:
@@ -1631,7 +1687,18 @@ func _animate(delta: float) -> void:
 	cam.v_offset = randf_range(-1.0, 1.0) * shake
 	fov_kick = lerpf(fov_kick, 0.0, delta * 6.0)
 	ride_fov = lerpf(ride_fov, 8.0 if (riding and moving) else 0.0, delta * 3.0)
-	cam.fov = BASE_FOV + fov_kick + ride_fov
+	if reveal_t > 0.0:
+		reveal_t -= delta
+		var rk := 1.0 - reveal_t / reveal_total
+		reveal_fov = 13.0 * sin(clampf(rk * 2.4, 0.0, 1.0) * PI)
+		var pl: Node3D = $Player
+		var off := Vector2(pl.global_position.x, pl.global_position.z)
+		if rk < 0.6 and not riding and off.length() > 3.0:  # turn toward the Eye (briefly, gently)
+			pl.rotation.y = lerp_angle(pl.rotation.y, atan2(off.x, off.y), minf(1.0, delta * 2.4))
+			cam.rotation.x = lerpf(cam.rotation.x, deg_to_rad(-12.0), minf(1.0, delta * 2.0))
+	else:
+		reveal_fov = 0.0
+	cam.fov = BASE_FOV + fov_kick + ride_fov + reveal_fov
 	tool_kick = move_toward(tool_kick, 0.0, delta * 3.0)
 	var any_cast := false
 	for h in holes:
@@ -1674,7 +1741,7 @@ func _animate(delta: float) -> void:
 	for id in sector_labels:
 		var sp: Vector3 = sector_labels[id].pos
 		var dist := Vector2(sp.x - pp.x, sp.z - pp.z).length()
-		sector_labels[id].label.visible = dist < (62.0 if model.sectors[id].unlocked else 22.0)
+		sector_labels[id].label.visible = reveal_t <= 0.0 and dist < (62.0 if model.sectors[id].unlocked else 22.0)
 
 func _walk(delta: float) -> void:
 	if guide.intro_active:
@@ -1943,29 +2010,64 @@ func _tick_cast(t: Dictionary, delta: float) -> void:
 				_catch(t)
 
 ## A fish arcs to the pupil's rim, pays and wakes the Eye as it crosses it, then spirals down the funnel.
-func _fly_fish(f: Dictionary, from: Vector3, delay: float, _dest := "eye", eye_mult := EYE_MULT) -> void:
+func _fly_fish(f: Dictionary, from: Vector3, delay: float, _dest := "eye", eye_mult := EYE_MULT, hand := false) -> void:
 	var holder := Node3D.new()
+	holder.visible = delay <= 0.0
 	add_child(holder)
 	var fm := _fish_mesh(f, holder, 1.4)
 	(fm as FishNode).amp = 2.0
 	holder.global_position = from
-	var target: Vector3 = scenery.eye_landing(from)
+	var pts := [from, scenery.eye_landing(from)]   # shared with the tween lambdas; a hand throw re-aims when it leaves the hand
 	var tw := create_tween()
 	if delay > 0.0:
 		tw.tween_interval(delay)
-	tw.tween_method(func(t: float):
-		holder.global_position = from.lerp(target, t) + Vector3(0, sin(t * PI) * 4.0, 0)
-		fm.rotation.z = t * 7.0, 0.0, 1.0, 0.8).set_trans(Tween.TRANS_SINE)
 	tw.tween_callback(func():
-		_feed_eye(f, eye_mult)
-		sfx.play("buy", -6.0, randf_range(1.2, 1.5)))
-	var a0 := atan2(target.z, target.x)
+		if hand:
+			pts[0] = _hand_origin()
+			pts[1] = scenery.eye_landing(pts[0])
+			_kick_tool(0.7)
+			view_pop = 0.6
+			sfx.play("cast", -9.0, 1.5)
+		holder.visible = true)
 	tw.tween_method(func(t: float):
+		holder.global_position = pts[0].lerp(pts[1], t) + Vector3(0, sin(t * PI) * 4.0, 0)
+		fm.rotation.z = t * 7.0, 0.0, 1.0, 0.8 if not hand else 0.62).set_trans(Tween.TRANS_SINE)
+	tw.tween_callback(func():
+		_feed_eye(f, eye_mult, hand))
+	_spiral_into_eye(tw, holder, pts)
+	tw.tween_callback(holder.queue_free)
+
+func _hand_origin() -> Vector3:
+	return cam.global_position + cam.global_basis * Vector3(-0.42, -0.4, -0.8)
+
+## Appends the last part of a fish's trip to a tween: it circles the pupil rim and spirals down the funnel.
+func _spiral_into_eye(tw: Tween, holder: Node3D, pts: Array, dur := 0.55) -> void:
+	tw.tween_method(func(t: float):
+		var a0 := atan2(pts[1].z, pts[1].x)
 		var ang := a0 + t * TAU * 1.5
 		var rad := lerpf(PUPIL_R * 0.72, 0.5, t)
 		holder.global_position = Vector3(cos(ang) * rad, lerpf(0.6, -7.0, t * t), sin(ang) * rad)
-		holder.scale = Vector3.ONE * lerpf(1.0, 0.1, t), 0.0, 1.0, 0.55).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	tw.tween_callback(holder.queue_free)
+		holder.scale = Vector3.ONE * lerpf(1.0, 0.1, t), 0.0, 1.0, dur).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+
+## A belt fish reaches the end of its belt: it hops the rim and dives down the funnel (the coins were paid already).
+func _belt_dive(f: Dictionary, from: Vector3, dir: Vector3) -> void:
+	if dive_live >= DIVE_MAX:
+		return
+	dive_live += 1
+	var holder := Node3D.new()
+	add_child(holder)
+	var fm := _fish_mesh(f, holder, 1.0)
+	(fm as FishNode).amp = 1.6
+	holder.global_position = from
+	holder.rotation.y = atan2(-dir.z, dir.x)
+	var target: Vector3 = scenery.eye_landing(from)
+	var tw := create_tween()
+	tw.tween_method(func(t: float):
+		holder.global_position = from.lerp(target, t) + Vector3(0, sin(t * PI) * 1.1, 0), 0.0, 1.0, 0.24)
+	_spiral_into_eye(tw, holder, [from, target], 0.5)
+	tw.tween_callback(func():
+		dive_live -= 1
+		holder.queue_free())
 
 func _coins(v: float) -> String:
 	return str(snappedf(v, 0.1)) if v < 10.0 else str(int(v))
@@ -2007,9 +2109,11 @@ func _feed_by_hand() -> void:
 	if carry.is_empty():
 		_tithe()
 		return
-	var from := cam.global_position + cam.global_basis * Vector3(-0.42, -0.4, -0.8)
-	for i in carry.size():
-		_fly_fish(carry[i], from, i * 0.1, "eye")
+	var from := _hand_origin()
+	var gap := 0.0
+	for i in carry.size():  # one at a time, faster and faster: a rhythm you can feel
+		_fly_fish(carry[i], from, gap, "eye", EYE_MULT, true)
+		gap += maxf(0.27 * pow(0.84, i), 0.085)
 	stats.deliveries += 1
 	carry.clear()
 	_refresh_view()
@@ -2038,26 +2142,48 @@ func _belt_mult() -> float:
 	return EYE_MULT * (1.0 + 0.15 * GameState.level("conveyor"))
 
 ## A fish drops into the Eye (hand-fed or off a belt): pays coins, counts toward the Eye's stages.
-func _feed_eye(f: Dictionary, mult: float) -> void:
+func _feed_eye(f: Dictionary, mult: float, hand := false) -> void:
 	var worth: float = f.base * f.mult * sale_mult() * mult
 	stats.eye_fed += 1
 	eye_pending += worth
 	_order_progress(f)
 	earn(worth)
-	if eye_burst_t <= 0.0:
+	feed_streak = feed_streak + 1 if feed_streak_t > 0.0 else 1
+	feed_streak_t = 1.3 if hand else 0.6
+	if hand:
+		_hand_feed_fx(worth)
+	elif eye_burst_t <= 0.0:
 		eye_burst_t = 0.12
 		sfx.play("coin", 0.0, randf_range(0.7, 0.95))
-	scenery.eye_catch(f.color, clampf(worth / 25.0, 0.0, 1.0))
+	scenery.eye_catch(f.color, clampf(worth / 25.0 + (0.05 * feed_streak if hand else 0.0), 0.0, 1.0))
 	var st := eye_stage()
 	if st > eye_seen_stage:
 		eye_seen_stage = st
 		_eye_stage_up(st)
 
+## The swallow itself: each fish in a hand-fed streak rings a higher note, and the Eye answers bigger and bigger.
+func _hand_feed_fx(worth: float) -> void:
+	var step := mini(feed_streak - 1, FEED_NOTES.size() - 1)
+	sfx.play("coin", -1.0, 0.8 * pow(2.0, FEED_NOTES[step] / 12.0))
+	eye_burst_t = 0.12
+	fov_kick = maxf(fov_kick, 1.0 + minf(feed_streak, 8) * 0.35)
+	if feed_streak >= 3:
+		streak_label.text = "x%d" % feed_streak
+		streak_label.modulate.a = 1.0
+		streak_label.scale = Vector2.ONE * 1.35
+		var tw := create_tween()
+		tw.tween_property(streak_label, "scale", Vector2.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	if feed_streak >= 5 and feed_streak % 5 == 0:
+		scenery.eye_gulp(minf(feed_streak / 10.0, 2.0))
+		_float_text(Vector3(0, 8.0, 0), "STREAK x%d" % feed_streak, Style.AMBER, 0.05)
+		sfx.play("rare", -7.0, 1.0 + minf(feed_streak * 0.02, 0.4))
+		shake = maxf(shake, 0.03)
+
 func _eye_stage_up(st: int) -> void:
 	_log("EYE stage %d" % st)
 	sfx.play("rare")
 	shake = maxf(shake, 0.1)
-	_banner("THE EYE STIRS  (%d / %d)" % [st, EYE_STAGES.size()], Color(0.6, 1.0, 0.9))
+	_stage_reveal(st)
 	_say("Olga: %s\nNew: %s" % [EYE_LINES[st - 1], EYE_BOONS[st - 1]])
 	if st >= EYE_STAGES.size() and stats.awakened == 0:
 		stats.awakened = 1
@@ -2066,6 +2192,27 @@ func _eye_stage_up(st: int) -> void:
 	scenery.set_eye_open(eye_open_frac())
 	scenery.eye_stage_up(st)
 	_refresh()
+
+## The Eye wakes a stage: bars slide in, the view turns to it and pulls back, a flash, and the stage and its gift are named.
+func _stage_reveal(st: int) -> void:
+	var last := st >= EYE_STAGES.size()
+	reveal_total = 3.8 if last else 3.0
+	reveal_t = reveal_total
+	guide.cinematic(reveal_total)
+	reveal_title.text = "THE EYE AWAKENS" if last else "THE EYE STIRS"
+	reveal_sub.text = "Stage %d of %d   -   %s" % [st, EYE_STAGES.size(), EYE_BOONS[st - 1]]
+	var tw := create_tween()
+	tw.tween_property(reveal_title, "modulate:a", 1.0, 0.5).set_delay(0.5)
+	tw.tween_interval(reveal_total - 2.2)
+	tw.tween_property(reveal_title, "modulate:a", 0.0, 0.9)
+	var tw2 := create_tween()
+	tw2.tween_property(reveal_sub, "modulate:a", 1.0, 0.5).set_delay(1.0)
+	tw2.tween_interval(reveal_total - 2.7)
+	tw2.tween_property(reveal_sub, "modulate:a", 0.0, 0.9)
+	flash_rect.color.a = 0.4
+	var fl := create_tween()
+	fl.tween_property(flash_rect, "color:a", 0.0, 1.1)
+	get_tree().create_timer(0.45).timeout.connect(func(): sfx.play("goal", -4.0, 0.75))
 
 # ---------- belts ----------
 func belt_cost(t: Dictionary) -> int:
@@ -2384,6 +2531,7 @@ func _update_belt_fish(delta: float) -> void:
 		if it.d >= it.belt.len:
 			belt_fish.remove_at(i)
 			_feed_eye(it.f, _belt_mult() * _belt_flag_mult(it.belt, it.f))
+			_belt_dive(it.f, it.belt.b + Vector3(0, 0.78, 0), it.belt.dir)
 	for k in belt_fish.size():
 		var it2: Dictionary = belt_fish[k]
 		var b: Dictionary = it2.belt
