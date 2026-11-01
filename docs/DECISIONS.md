@@ -53,3 +53,13 @@
 - Added `tools/econ_sim.gd` + `tools/run_econ.sh`: a headless economy simulation using the real rules. It found the lake could be emptied in 10.5 minutes; after retuning (bigger lake, slower automation, steeper prices, smaller multipliers, later Eye stages) an optimal player needs about 53 minutes and a half-active one about 66.
 - Auto-rod, rig and cannery prices and the lake size are now named constants (`AUTO_*`, `RIG_*`, `COUNT_SCALE`) that the sim reads, so retuning is one edit plus one run.
 - Refreeze now needs 6 sectors.
+
+## The point of the game, and the late game (Eye-driven)
+- **The point from the first minute:** wake the Eye. The left HUD card shows its stage bar and, under it, what the NEXT stage gives you (`EYE_BOONS`). The goals card ends in "Wake the Eye (stage 5)".
+- **Stage boons:** 1 = tithes unlock; 2, 3, 4 = one more Ice-Breaker slot each (3 -> 6); 5 = the Eye wakes: +25% fish value, +3 pearls, a 7th rig, and the next lake is bigger. `rig_cap() = 3 + max(stage - 1, 0)`.
+- **Tithe (endless sink):** with empty hands, click the Eye to offer `150 x 1.8^n` coins; each level adds +7% to every fish's value for this lake. Gold flare, banner, sparks.
+- **Rigs as a sink:** the 4th to 7th rig cost 12k / 30k / 72k / 172k coins (`900 x 2.4^n`).
+- **Going out and scaling:** every lake you finish makes the next one 30% bigger (`DEPTH_FISH`), its fish 25% richer (`DEPTH_VALUE`) and the Eye 30% hungrier (`eye_stage_at`). The refreeze panel previews it. Pearl perks and the Eye's awakening reward carry over.
+- **Goals:** 12 new late goals (Eye stages 3/4/5, tithes 1/5/12, 2 and 4 rigs, 12 auto-rods, 10k and 100k coins, 15 sectors) with 100-10000 coin rewards. Side goals (species, gutting, smoking, journal) are flagged `opt` and only show when fewer than 3 main-line goals remain, so a hard side goal can no longer hide the main line.
+- Old saves: only the last goal ("Empty the lake") shifted index; goals are saved by position.
+- `tools/econ_sim.gd` now models tithes, rig caps, goal rewards and later lakes (`ECON_LAKES=n`).

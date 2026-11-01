@@ -40,3 +40,15 @@ A real player will be slower than the sim (placing machines, walking, hesitating
 - The sim ignores goal rewards and unlocks (it assumes all upgrades are available), snowmobile/sorter/depot/wide drill/sonar, and real walking.
 - Dead stretch: the longest wait between purchases is about 5-6 minutes near the end.
 - Offline income uses the same constants but has not been re-tuned.
+
+## Late game update
+Added tithes (endless value sink), Eye-stage rig slots (up to 7), goal rewards, an awakening bonus and lake-to-lake scaling. Fish per patch is now x6 and Eye stages are 50 / 300 / 1050 / 4000 / 8500 (scaled up 30% per finished lake).
+
+| Lake | Eye stage 5 | Lake emptied (always active) |
+|---|---|---|
+| 1st | 52 min | 61 min |
+| 2nd (1 finished) | 62 min | 74 min |
+| 4th (3 finished) | 81 min | 98 min |
+
+Half-active play on the first lake: about 76 minutes. Run `ECON_LAKES=3 tools/run_econ.sh` to see a later lake.
+Still true: a few tens of thousands of unspent coins at the very end of a lake. A second machine tier would absorb them.

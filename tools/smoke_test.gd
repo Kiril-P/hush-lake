@@ -152,6 +152,33 @@ func _ready() -> void:
 	g.scenery.set_eye_offering(false, Vector3.ZERO)
 	eye.flare = 0.0
 
+	# --- the late game: tithes, rig slots, awakening, deeper lakes
+	var fed_keep: int = g.stats.eye_fed
+	var coins_keep: float = GameState.currency
+	g.stats.eye_fed = 0
+	GameState.currency = 99999.0
+	g._tithe()
+	check("the Eye refuses tithes before it has stirred", g.stats.tithe == 0 and GameState.currency == 99999.0)
+	g.stats.eye_fed = g.eye_stage_at(0)
+	var sm0: float = g.sale_mult()
+	var tc0: float = g.tithe_cost()
+	g._tithe()
+	check("a tithe costs coins and raises every fish's value", g.stats.tithe == 1 and GameState.currency < 99999.0 - tc0 + 500.0 and g.sale_mult() > sm0 + g.TITHE_BONUS - 0.001)
+	check("tithes get dearer", g.tithe_cost() > tc0)
+	check("rig slots grow with the Eye's stage", (func():
+		g.stats.eye_fed = g.eye_stage_at(0)
+		var c1: int = g.rig_cap()
+		g.stats.eye_fed = g.eye_stage_at(3)
+		var c4: int = g.rig_cap()
+		return c1 == g.RIG_BASE_CAP and c4 == g.RIG_BASE_CAP + 3).call())
+	GameState.meta = {"lakes": 2}
+	check("deeper lakes pay more and ask more of the Eye", g.depth_value() > 1.4 and g.eye_stage_at(0) > g.EYE_STAGES[0])
+	GameState.meta = {}
+	check("optional goals do not hide the main line", not g._goals_text().contains("Fill the journal"))
+	g.stats.tithe = 0
+	g.stats.eye_fed = fed_keep
+	GameState.currency = coins_keep
+
 	# --- Olga talks but never buys
 	g.carry.append(g.roll_fish())
 	coins0 = GameState.currency
@@ -308,10 +335,11 @@ func _ready() -> void:
 	var fed_r: int = g.stats.eye_fed
 	g._update_belt_fish(60.0)
 	check("the rig's catch rides into the Eye", g.stats.eye_fed > fed_r)
-	check("rigs are capped at three", (func():
-		g.rigs.append(g.rigs[0].duplicate()); g.rigs.append(g.rigs[0].duplicate())
+	check("rigs are capped by the Eye's stage", (func():
+		while g.rigs.size() < g.rig_cap():
+			g.rigs.append(g.rigs[0].duplicate())
 		g._build_rig(g._hex_pos(Vector2i(2, 1)) + Vector3(20, 0, 0))
-		var ok: bool = g.rigs.size() == 3
+		var ok: bool = g.rigs.size() == g.rig_cap()
 		g.rigs.resize(1)
 		return ok).call())
 	g.tool = 0
@@ -550,7 +578,7 @@ func _ready() -> void:
 	check("fuzz: no negative stock", g2.model.stock.values().all(func(st): return st.values().all(func(n): return n > 0)))
 	check("fuzz: belt fish stay within the cap", g2.belt_fish.size() <= g2.BELT_MAX_FISH)
 	check("fuzz: every belt fish rides a live belt or a rig line", g2.belt_fish.all(func(it): return g2.belts.has(it.belt) or g2.rigs.any(func(rg): return rg.belt == it.belt)))
-	check("fuzz: at most three rigs", g2.rigs.size() <= 3)
+	check("fuzz: rigs within the cap", g2.rigs.size() <= g2.rig_cap())
 	check("fuzz: every belt belongs to an auto-rod", g2.belts.all(func(b): return b.hole.belt == b and b.hole.state == "auto"))
 	await get_tree().create_timer(1.5).timeout
 	g2._on_about_to_save()

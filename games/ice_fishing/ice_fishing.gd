@@ -23,7 +23,7 @@ const EYE_R := 10.0          # the Eye at the centre of the lake (see scenery.gd
 const PUPIL_R := 4.8
 const EYE_H := 1.7           # eye height: you are a person on a big lake
 const EYE_MULT := 1.25       # every fish fed to the Eye pays this multiple of its base value
-const EYE_STAGES := [40, 240, 800, 3000, 6400]   # fish fed to reach each stage
+const EYE_STAGES := [50, 300, 1050, 4000, 8500]   # fish fed to reach each stage
 const EYE_LINES := ["The Eye blinks.", "The Eye turns to look at you.", "The Eye opens wider. The ice hums.",
 	"The Eye is almost fully open. It is still hungry.", "THE EYE IS AWAKE."]
 const BELT_SPEED := 4.5
@@ -41,7 +41,18 @@ const RIG_GROWTH := 2.4
 const AUTO_WAIT := [16.0, 22.0]   # seconds between an auto-rod's fish
 const AUTO_BASE := 60.0
 const AUTO_GROWTH := 1.55
-const RIG_MAX := 3
+const RIG_BASE_CAP := 3     # rigs allowed at the start; every Eye stage past the first allows one more
+# The Eye is the point: waking it unlocks the late game. Coins offered at its rim (a "tithe") are an endless sink.
+const TITHE_BASE := 150.0
+const TITHE_GROWTH := 1.8
+const TITHE_BONUS := 0.07    # +7% fish value per tithe level
+const TITHE_MIN_STAGE := 1
+const AWAKEN_BONUS := 0.25   # waking the Eye fully: +25% fish value for the rest of the lake
+const AWAKEN_PEARLS := 3
+const DEPTH_VALUE := 0.25    # each lake finished before this one makes its fish 25% richer (and the lake 30% bigger)
+const EYE_BOONS := ["The Eye takes tithes: with empty hands, click it to offer coins for endless value",
+	"A 4th Ice-Breaker may be built", "A 5th Ice-Breaker may be built", "A 6th Ice-Breaker may be built",
+	"The Eye wakes: +25% fish value, +3 pearls, a 7th rig; the next lake is bigger and richer"]
 const RANGE_BUILD := 9.0
 const BITE_WINDOW := 1.5
 const REACH := 70.0
@@ -132,28 +143,52 @@ const GOALS := [
 		"line": "Olga: Wide Drill opens up several holes at once.", "unlock": ["wide"]},
 	{"text": "Clear the Shallows", "stat": "sectors", "target": 1, "reward": 60,
 		"line": "Olga: One sector down! The shelves beyond are open now."},
-	{"text": "Catch a Silver Pike", "stat": "found:Silver Pike", "target": 1, "reward": 25,
+	{"opt": true, "text": "Catch a Silver Pike", "stat": "found:Silver Pike", "target": 1, "reward": 25,
 		"line": "Olga: Ooh, shiny. Keep a journal (Tab) of what you find."},
 	{"text": "Earn 250 coins", "stat": "earned", "target": 250, "reward": 60,
 		"line": "Olga: Gut the fish at a table, smoke them... extra coin! Build them on fished-out tiles.", "unlock": ["t_smoker", "t_table"]},
-	{"text": "Gut 5 fish", "stat": "gutted", "target": 5, "reward": 50,
+	{"opt": true, "text": "Gut 5 fish", "stat": "gutted", "target": 5, "reward": 50,
 		"line": "Olga: Clean work. Gutted fish fetch 40% more."},
-	{"text": "Smoke a batch", "stat": "smokes", "target": 1, "reward": 70,
+	{"opt": true, "text": "Smoke a batch", "stat": "smokes", "target": 1, "reward": 70,
 		"line": "Olga: Mmm, smoked. 2.5x! I'd pay double for these."},
 	{"text": "Build 3 Auto-Rods", "stat": "autos", "target": 3, "reward": 120,
 		"line": "Olga: A conveyor would save your legs, dear.", "unlock": ["conveyor"]},
 	{"text": "Clear 3 sectors", "stat": "sectors", "target": 3, "reward": 150,
 		"line": "Olga: The fish are getting wary. The last ones take their time."},
-	{"text": "Find a Golden Trout", "stat": "found:Golden Trout", "target": 1, "reward": 120,
+	{"opt": true, "text": "Find a Golden Trout", "stat": "found:Golden Trout", "target": 1, "reward": 120,
 		"line": "Olga: Gold! In MY lake?"},
 	{"text": "Clear 6 sectors", "stat": "sectors", "target": 6, "reward": 400,
 		"line": "Olga: Something down there is stirring. The water's colder."},
 	{"text": "Clear 10 sectors", "stat": "sectors", "target": 10, "reward": 800,
 		"line": "Olga: More than half. Keep going. I don't like how quiet it's got."},
-	{"text": "Find an Ancient Fish", "stat": "found:Ancient Fish", "target": 1, "reward": 1000,
+	{"opt": true, "text": "Find an Ancient Fish", "stat": "found:Ancient Fish", "target": 1, "reward": 1000,
 		"line": "Olga: That one's older than the hut. Older than the lake, maybe."},
-	{"text": "Fill the journal", "stat": "journal", "target": 8, "reward": 800,
+	{"opt": true, "text": "Fill the journal", "stat": "journal", "target": 8, "reward": 800,
 		"line": "Olga: You've found everything the lake gives up."},
+	{"text": "Tithe the Eye", "stat": "tithe", "target": 1, "reward": 100,
+		"line": "Olga: It likes being given things. Every offering makes the fish worth more."},
+	{"text": "Reach Eye stage 3", "stat": "eye_stage", "target": 3, "reward": 400,
+		"line": "Olga: Its eyelid is all the way up now. Build more rigs. It wants more."},
+	{"text": "Own 2 Ice-Breakers", "stat": "rigs", "target": 2, "reward": 1200,
+		"line": "Olga: Two of those monsters... the lake is shaking."},
+	{"text": "Tithe the Eye 5 times", "stat": "tithe", "target": 5, "reward": 800,
+		"line": "Olga: Five gifts. It hums when you walk up now."},
+	{"text": "Earn 10000 coins", "stat": "earned", "target": 10000, "reward": 1500,
+		"line": "Olga: More money than I've seen in forty winters."},
+	{"text": "Build 12 Auto-Rods", "stat": "autos", "target": 12, "reward": 2500,
+		"line": "Olga: A whole forest of rods. Mind the belts, dear."},
+	{"text": "Reach Eye stage 4", "stat": "eye_stage", "target": 4, "reward": 3000,
+		"line": "Olga: Almost awake. Can you feel the ice breathing?"},
+	{"text": "Own 4 Ice-Breakers", "stat": "rigs", "target": 4, "reward": 4000,
+		"line": "Olga: ...Four. The lake can hardly hold them."},
+	{"text": "Tithe the Eye 12 times", "stat": "tithe", "target": 12, "reward": 5000,
+		"line": "Olga: It remembers every one of them."},
+	{"text": "Clear 15 sectors", "stat": "sectors", "target": 15, "reward": 4000,
+		"line": "Olga: Nearly all of it. The deep is very quiet."},
+	{"text": "Earn 100000 coins", "stat": "earned", "target": 100000, "reward": 8000,
+		"line": "Olga: A fortune. In fish."},
+	{"text": "Wake the Eye (stage 5)", "stat": "eye_stage", "target": 5, "reward": 10000,
+		"line": "Olga: ...It's looking right at me. It's awake. Dear, it has been waiting for you."},
 	{"text": "Empty the lake", "stat": "sectors", "target": 19, "reward": 5000,
 		"line": "Olga: ...Every last one."},
 ]
@@ -206,7 +241,7 @@ var hut_pos := Vector3.ZERO
 var tool := 0
 var carry: Array = []      # fish dicts: {name, base, color, mult, gutted, smoked}
 var journal := {}          # species name -> count
-var stats := {"holes": 0, "caught": 0, "deliveries": 0, "earned": 0.0, "autos": 0, "smokes": 0, "gutted": 0, "tiles_cleared": 0, "sectors": 0, "ended": 0, "eye_fed": 0, "belts": 0, "cans": 0, "sorters": 0, "depots": 0, "rigs": 0, "rides": 0}
+var stats := {"holes": 0, "caught": 0, "deliveries": 0, "earned": 0.0, "autos": 0, "smokes": 0, "gutted": 0, "tiles_cleared": 0, "sectors": 0, "ended": 0, "eye_fed": 0, "belts": 0, "cans": 0, "sorters": 0, "depots": 0, "rigs": 0, "rides": 0, "tithe": 0, "awakened": 0}
 var unlocked := {}
 var goal_done: Array = []
 var combo := 0
@@ -260,6 +295,7 @@ var hotbar_panels: Array[PanelContainer] = []
 var carry_bar: ProgressBar
 var eye_bar: ProgressBar
 var eye_label: Label
+var eye_next_label: Label
 var start_panel: PanelContainer
 var work_bar: ProgressBar
 
@@ -301,7 +337,7 @@ func _ready() -> void:
 	cam.add_child(tool_view)
 	model = LakeModelScript.new()
 	var fresh_lake := GameState.extra.is_empty()
-	model.generate(randi(), String(GameState.meta.get("next_mod", "")) if fresh_lake else "")
+	model.generate(randi(), String(GameState.meta.get("next_mod", "")) if fresh_lake else "", _meta_int("lakes") if fresh_lake else 0)
 	_build_world()
 	_build_ui()
 	for c in model.tile_sector:
@@ -830,6 +866,9 @@ func _build_ui() -> void:
 	eye_label = _plain(left, 17, Style.AQUA)
 	eye_bar = Style.bar(Style.AQUA, 7.0)
 	left.add_child(eye_bar)
+	eye_next_label = _plain(left, 14, Style.CREAM)
+	eye_next_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	eye_next_label.custom_minimum_size = Vector2(270, 0)
 	lake_label = _plain(left, 15, Style.MUTED)
 	msg_label = Label.new()
 	msg_label.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
@@ -1026,7 +1065,11 @@ func capacity() -> int:
 func next_capacity() -> int: return CAPACITIES[mini(GameState.level("bucket") + 1, CAPACITIES.size() - 1)]
 func lines() -> int: return 1 + GameState.level("lines")
 func sale_mult() -> float:
-	return (1.0 + 0.10 * GameState.level("market") + SECTOR_PERK * stats.sectors + 0.1 * perk_level("favour")) * model.mod_info().value
+	return (1.0 + 0.10 * GameState.level("market") + SECTOR_PERK * stats.sectors + 0.1 * perk_level("favour")
+		+ TITHE_BONUS * stats.tithe + AWAKEN_BONUS * stats.awakened) * model.mod_info().value * depth_value()
+func depth_value() -> float: return 1.0 + DEPTH_VALUE * _meta_int("lakes")
+func rig_cap() -> int: return RIG_BASE_CAP + maxi(eye_stage() - 1, 0)
+func tithe_cost() -> float: return ceil(TITHE_BASE * pow(TITHE_GROWTH, stats.tithe))
 func bite_mult() -> float: return pow(0.88, GameState.level("bait"))
 func ride_mult() -> float: return RIDE_SPEED[mini(GameState.level("snowmobile"), RIDE_SPEED.size() - 1)] if riding else 1.0
 func walk_speed() -> float: return (6.0 + 1.6 * GameState.level("boots")) * ride_mult()
@@ -1167,6 +1210,8 @@ func _stat(key: String) -> float:
 		return 1.0 if journal.has(key.substr(6)) else 0.0
 	if key == "journal":
 		return journal.size()
+	if key == "eye_stage":
+		return eye_stage()
 	return stats.get(key, 0.0)
 
 func _check_goals() -> void:
@@ -1193,15 +1238,14 @@ func _check_goals() -> void:
 func _goals_text() -> String:
 	var lines_out := []
 	var shown := 0
-	for i in GOALS.size():
-		if goal_done[i]:
-			continue
-		var g: Dictionary = GOALS[i]
-		var cur := mini(int(_stat(g.stat)), int(g.target))
-		lines_out.append("%s  (%d/%d)" % [g.text, cur, int(g.target)])
-		shown += 1
-		if shown >= 3:
-			break
+	for pass_opt in [false, true]:  # main-line goals first; optional side goals only fill the gaps
+		for i in GOALS.size():
+			if goal_done[i] or shown >= 3 or bool(GOALS[i].get("opt", false)) != pass_opt:
+				continue
+			var g: Dictionary = GOALS[i]
+			var cur := mini(int(_stat(g.stat)), int(g.target))
+			lines_out.append("%s  (%d/%d)" % [g.text, cur, int(g.target)])
+			shown += 1
 	if shown == 0:
 		lines_out.append("All goals complete!")
 	return "\n".join(lines_out)
@@ -1211,8 +1255,8 @@ func _eye_progress() -> float:
 	var st := eye_stage()
 	if st >= EYE_STAGES.size():
 		return 1.0
-	var lo: int = EYE_STAGES[st - 1] if st > 0 else 0
-	var hi: int = EYE_STAGES[st]
+	var lo: int = eye_stage_at(st - 1) if st > 0 else 0
+	var hi: int = eye_stage_at(st)
 	return clampf(float(stats.eye_fed - lo) / maxf(1.0, float(hi - lo)), 0.0, 1.0)
 
 func _done_count() -> int:
@@ -1238,6 +1282,8 @@ func _refresh() -> void:
 	carry_bar.value = float(carry.size()) / maxf(1.0, float(capacity()))
 	eye_label.text = "The Eye   stage %d / %d   %d fed" % [eye_stage(), EYE_STAGES.size(), stats.eye_fed]
 	eye_bar.value = _eye_progress()
+	var est := eye_stage()
+	eye_next_label.text = ("Next: %s" % EYE_BOONS[est]) if est < EYE_STAGES.size() else "The Eye is awake.  Tithe Lv %d" % stats.tithe
 	lake_label.text = "%d fish left  -  %d / %d sectors\n%s #%d  -  %d pearls  -  [R] refreeze" % [model.total_left(),
 		model.cleared_count(), model.sectors.size(), model.mod_info().name, _meta_int("lakes") + 1, _meta_int("pearls")]
 	combo_label.text = ("Combo x%d  (+%d%%)" % [combo, mini(combo - 1, 10) * 10]) if combo > 1 else ""
@@ -1928,9 +1974,26 @@ func _talk_olga() -> void:
 		_say(OLGA_CHATTER.pick_random())
 	sfx.play("coin", -8.0, 0.8)
 
+## Coins offered to the Eye: an endless sink that raises the value of every fish.
+func _tithe() -> void:
+	if eye_stage() < TITHE_MIN_STAGE:
+		_say("The Eye does not notice coins yet. Feed it fish first.")
+		return
+	if not _spend(tithe_cost()):
+		return
+	stats.tithe += 1
+	scenery.eye_catch(Color(1.0, 0.82, 0.4), 1.0)
+	scenery.eye.flare = maxf(scenery.eye.flare, 1.2)
+	sfx.play("rare")
+	shake = maxf(shake, 0.04)
+	_burst(Vector3(0, 0.6, 0), Color(1.0, 0.82, 0.4), 18, 4.0, 1.0, 0.1)
+	_banner("TITHE  Lv %d   fish are worth +%d%% more" % [stats.tithe, int(TITHE_BONUS * 100.0 * stats.tithe)], Color(1.0, 0.85, 0.45))
+	_log("TITHE Lv%d" % stats.tithe)
+	_refresh()
+
 func _feed_by_hand() -> void:
 	if carry.is_empty():
-		_say("Nothing in your hands. The Eye waits.")
+		_tithe()
 		return
 	var from := cam.global_position + cam.global_basis * Vector3(-0.42, -0.4, -0.8)
 	for i in carry.size():
@@ -1941,15 +2004,20 @@ func _feed_by_hand() -> void:
 	_refresh()
 
 # ---------- the Eye ----------
+## Fish needed for stage i: later lakes are bigger, and so is the Eye's appetite.
+func eye_stage_at(i: int) -> int:
+	return int(round(EYE_STAGES[i] * (1.0 + 0.3 * _meta_int("lakes"))))
+
 func eye_stage() -> int:
 	var n := 0
-	for s in EYE_STAGES:
+	for i in EYE_STAGES.size():
+		var s := eye_stage_at(i)
 		if stats.eye_fed >= s:
 			n += 1
 	return n
 
 func eye_open_frac() -> float:
-	return clampf(sqrt(float(stats.eye_fed) / EYE_STAGES[EYE_STAGES.size() - 1]), 0.0, 1.0)
+	return clampf(sqrt(float(stats.eye_fed) / float(eye_stage_at(EYE_STAGES.size() - 1))), 0.0, 1.0)
 
 func _belt_speed() -> float:
 	return BELT_SPEED * (1.0 + 0.25 * GameState.level("conveyor"))
@@ -1978,7 +2046,11 @@ func _eye_stage_up(st: int) -> void:
 	sfx.play("rare")
 	shake = maxf(shake, 0.1)
 	_banner("THE EYE STIRS  (%d / %d)" % [st, EYE_STAGES.size()], Color(0.6, 1.0, 0.9))
-	_say("Olga: %s" % EYE_LINES[st - 1])
+	_say("Olga: %s\nNew: %s" % [EYE_LINES[st - 1], EYE_BOONS[st - 1]])
+	if st >= EYE_STAGES.size() and stats.awakened == 0:
+		stats.awakened = 1
+		GameState.meta.pearls = _meta_int("pearls") + AWAKEN_PEARLS
+		_log("EYE AWAKE")
 	scenery.set_eye_open(eye_open_frac())
 	scenery.eye_stage_up(st)
 	_refresh()
@@ -2178,8 +2250,8 @@ func _use_depot(d: Dictionary) -> void:
 	_refresh()
 
 func _build_rig(pos: Vector3, pay := true) -> void:
-	if rigs.size() >= RIG_MAX:
-		_say("Three ice-breakers is all the lake can bear.")
+	if rigs.size() >= rig_cap():
+		_say("The lake can bear %d ice-breakers for now. Wake the Eye further for more." % rig_cap())
 		return
 	if pay and not _spend(float(_build_cost(3))):
 		return
@@ -2407,6 +2479,8 @@ func _prompt_for(a: String) -> String:
 		return "Click: talk to Olga" if carry.is_empty() else "Olga doesn't buy fish: the Eye does"
 	if a == "eye":
 		if carry.is_empty():
+			if eye_stage() >= TITHE_MIN_STAGE:
+				return "Click: tithe %d coins to the Eye  (Lv %d, +%d%% value)" % [tithe_cost(), stats.tithe, int(TITHE_BONUS * 100.0 * stats.tithe)]
 			return "The Eye (carry fish here, or run belts into it)"
 		return "Click: feed %d fish to the Eye for %d coins" % [carry.size(), floor(carry_worth() * EYE_MULT)]
 	if a.begins_with("depot:"):
@@ -2435,8 +2509,8 @@ func _prompt_for(a: String) -> String:
 			else:
 				var rad := 2.6 if build_item == 2 else 6.0
 				var ok := _can_place_at(Vector3(aim_pos.x, 0, aim_pos.z), rad)
-				if build_item == 3 and rigs.size() >= RIG_MAX:
-					head = "Three ice-breakers is all the lake can bear"
+				if build_item == 3 and rigs.size() >= rig_cap():
+					head = "The lake bears %d ice-breakers: wake the Eye for more" % rig_cap()
 				elif ok:
 					head = "Click: build %s (%d)  [Q: switch]" % [BUILD_ITEMS[build_item], _build_cost(build_item)]
 				else:
@@ -2564,7 +2638,8 @@ func _update_refreeze() -> void:
 	var out := ["REFREEZE THE LAKE\n"]
 	out.append("Pearls: %d     This lake is worth +%d more" % [_meta_int("pearls"), pearls_pending()])
 	var best := float(GameState.meta.get("best_time", 0.0))
-	out.append("Lakes finished: %d     Fastest clear: %s\n" % [_meta_int("lakes_cleared"), _clock(best) if best > 0.0 else "-"])
+	out.append("Lakes finished: %d     Fastest clear: %s" % [_meta_int("lakes_cleared"), _clock(best) if best > 0.0 else "-"])
+	out.append("Next lake: %d%% more fish, fish worth %d%% more\n" % [int(30.0 * (_meta_int("lakes") + 1)), int(DEPTH_VALUE * 100.0 * (_meta_int("lakes") + 1))])
 	var i := 1
 	for id in PERKS:
 		var p: Dictionary = PERKS[id]

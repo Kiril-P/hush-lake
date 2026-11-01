@@ -31,6 +31,8 @@ func _ready() -> void:
 	GameState.save_slot = "test_econ"
 	GameState.delete_save()
 	GameState.reset()
+	if OS.get_environment("ECON_LAKES") != "":
+		GameState.meta = {"lakes": int(OS.get_environment("ECON_LAKES"))}   # simulate a later lake
 	g = load("res://games/ice_fishing/ice_fishing.tscn").instantiate()
 	add_child(g)
 	await get_tree().process_frame
@@ -191,7 +193,9 @@ func candidates() -> Array:
 	out.append({"k": "auto", "cost": ceil(g.AUTO_BASE * pow(g.AUTO_GROWTH, autos)) + BELT_COST, "name": "Auto-Rod + belt"})
 	if autos > cans:
 		out.append({"k": "can", "cost": ceil(120.0 * pow(1.9, cans)), "name": "Cannery"})
-	if rigs < g.RIG_MAX:
+	if g.eye_stage() >= g.TITHE_MIN_STAGE:
+		out.append({"k": "tithe", "cost": g.tithe_cost(), "name": "Tithe"})
+	if rigs < g.rig_cap():
 		out.append({"k": "rig", "cost": ceil(g.RIG_BASE * pow(g.RIG_GROWTH, rigs)), "name": "Ice-Breaker rig"})
 	return out
 
@@ -199,6 +203,7 @@ func apply(k: String, dir: int) -> void:
 	if k == "auto": autos += dir
 	elif k == "can": cans += dir
 	elif k == "rig": rigs += dir
+	elif k == "tithe": g.stats.tithe += dir
 	else: GameState.upgrades[k] = GameState.level(k) + dir
 
 func shop() -> void:
@@ -240,6 +245,14 @@ func run() -> void:
 		if int(t) % 5 == 0:
 			refresh_cache()
 		step()
+		if int(t) % 5 == 0:
+			g.stats.autos = autos
+			g.stats.belts = autos
+			g.stats.cans = cans
+			g.stats.rigs = rigs
+			g.stats.holes = autos + 4
+			g.stats.tiles_cleared = g.stats.sectors * 7
+			g._check_goals()   # goal rewards are part of the real income
 		if int(t) % 3 == 0:
 			shop()
 		if int(t) % 300 == 0:
@@ -255,4 +268,5 @@ func run() -> void:
 	for k in milestones:
 		print("%-8s %s" % [k, "%02d:%02d" % [int(milestones[k] / 60.0), int(milestones[k]) % 60]])
 	print("longest wait between purchases: %ds at %s" % [int(max_gap), gap_at])
+	print("tithe level %d | rigs %d | autos %d | awakened %d | coins left %d" % [g.stats.tithe, rigs, autos, g.stats.awakened, int(GameState.currency)])
 	print("lake emptied: %s" % ("yes at " + stamp() if milestones.has("empty") else "NO within 8h (left %d)" % g.model.total_left()))
