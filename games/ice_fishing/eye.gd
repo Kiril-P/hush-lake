@@ -676,7 +676,7 @@ func _process(delta: float) -> void:
 	core.scale = Vector3(cs, 1.0, cs)
 	var oe := clampf(open * 1.3, 0.0, 1.0)
 	for p in petals:
-		var base := lerpf(0.12, 0.34, oe) + (0.12 if p.ring == 1 else 0.0)
+		var base := lerpf(0.1, 0.26, oe) + (0.12 if p.ring == 1 else 0.0)
 		p.pivot.rotation.x = base + flinch * 0.4 + sin(t * 1.1 + p.ph) * 0.025
 	petal_mat.emission_energy_multiplier = 0.2 + glow * 0.5 + flare * 0.8
 	for m in crystal_mats:

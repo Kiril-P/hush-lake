@@ -88,7 +88,7 @@ func _ready() -> void:
 	check("range: hatch 12m away is out of reach", not g._in_range("olga"))
 	g.get_node("Player").position = Vector3(0, g.EYE_H, 60.0)
 	check("range: the Eye 50m from its rim is out of reach", not g._in_range("eye"))
-	g.get_node("Player").position = Vector3(-6.7, g.EYE_H, 11.6)
+	g.get_node("Player").position = Vector3(-8.2, g.EYE_H, 14.3)
 	g.aim_flat = 3.0
 	check("range: ice 3m away is in reach", g._in_range("ice"))
 	check("range: the Eye is in reach from the start spot", g._in_range("eye"))
@@ -113,7 +113,13 @@ func _ready() -> void:
 	check("bite happens", t.cast == 2)
 	var left_before: int = g.model.tile_left(t.c)
 	g._click("hole:%d" % t.idx)
-	check("catch fills hands", g.carry.size() == 1)
+	check("clicking the bite hooks the fish and starts the fight", t.cast == 3 and t.hooked.size() == 1)
+	g._click("hole:%d" % t.idx)
+	check("clicking mid-fight does nothing", t.cast == 3 and g.carry.is_empty())
+	t.fight = 0.0
+	g._tick_hole(t, 0.1)
+	check("catch fills hands", g.carry.size() == 1 and t.cast == 0)
+	check("the catch has a length and a record", g.carry[0].len > 0.0 and g.records.has(g.carry[0].name))
 	check("catch removes a fish from the lake", g.model.tile_left(t.c) == left_before - 1)
 	g._click("hole:%d" % t.idx)
 	check("cannot cast with full hands", t.cast == 0)
@@ -284,7 +290,7 @@ func _ready() -> void:
 	check("a depot empties your hands", g.carry.is_empty())
 	await get_tree().create_timer(2.4).timeout
 	check("the depot's sled delivers the fish to the Eye", g.stats.eye_fed == fed_d + 2)
-	g.get_node("Player").position = Vector3(-6.7, g.EYE_H, 11.6)
+	g.get_node("Player").position = Vector3(-8.2, g.EYE_H, 14.3)
 
 	# --- ice-breaker rig: a big machine that eats the lake and feeds the Eye by itself
 	g.build_item = 3

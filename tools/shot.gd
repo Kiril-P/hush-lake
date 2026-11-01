@@ -5,13 +5,13 @@ extends Node
 
 const VIEWS := [
 	# name, player pos, yaw, pitch, time of day, [eye height]
-	["start", Vector3(-6.7, 0, 11.6), -30.0, -5.0, 0.0],
-	["rim", Vector3(-6.7, 0, 11.6), -30.0, -30.0, 0.0],
+	["start", Vector3(-8.2, 0, 14.3), -30.0, -5.0, 0.0],
+	["rim", Vector3(-8.2, 0, 14.3), -30.0, -30.0, 0.0],
 	["eyetop", Vector3(0, 0, 0.1), 0.0, -89.0, 0.0, 34.0],
-	["camp", Vector3(-6.7, 0, 11.6), 40.0, -3.0, 0.0],
-	["hutview", Vector3(-6.7, 0, 11.6), -95.0, -3.0, 0.0],
+	["camp", Vector3(-8.2, 0, 14.3), 40.0, -3.0, 0.0],
+	["hutview", Vector3(-8.2, 0, 14.3), -95.0, -3.0, 0.0],
 	["aerial", Vector3(0, 0, 190), 0.0, -38.0, 0.0, 130.0],
-	["night", Vector3(-6.7, 0, 11.6), -30.0, 4.0, 0.5],
+	["night", Vector3(-8.2, 0, 14.3), -30.0, 4.0, 0.5],
 ]
 
 func _ready() -> void:
@@ -62,7 +62,7 @@ func _ready() -> void:
 		g.scenery.set_eye_open(g.eye_open_frac())
 		g._refresh()
 		var pb: Node3D = g.get_node("Player")
-		for v2 in [["belts", Vector3(-6.7, 1.7, 11.6), -30.0, -14.0], ["belts_top", Vector3(0, 55, 0.1), 0.0, -89.0], ["belts_low", Vector3(14, 1.7, -4), 100.0, -4.0]]:
+		for v2 in [["belts", Vector3(-8.2, 1.7, 14.3), -30.0, -14.0], ["belts_top", Vector3(0, 55, 0.1), 0.0, -89.0], ["belts_low", Vector3(14, 1.7, -4), 100.0, -4.0]]:
 			pb.position = v2[1]
 			pb.rotation.y = deg_to_rad(v2[2])
 			g.cam.rotation.x = deg_to_rad(v2[3])
@@ -106,7 +106,7 @@ func _ready() -> void:
 		g.scenery.set_eye_open(g.eye_open_frac())
 		g._refresh()
 		var ps: Node3D = get_node("/root/Shot/IceFishing/Player") if false else g.get_node("Player")
-		var views2 := [["ride", Vector3(-6.7, 1.7, 11.6), -30.0, -6.0], ["machines", Vector3(10, 1.7, 20), -14.0, -9.0],
+		var views2 := [["ride", Vector3(-8.2, 1.7, 14.3), -30.0, -6.0], ["machines", Vector3(10, 1.7, 20), -14.0, -9.0],
 			["depot", Vector3(-8, 1.7, 8), 50.0, -6.0], ["rig", Vector3(26, 1.7, -3), -159.0, -4.0],
 			["stall", Vector3(-12, 1.7, -22), -12.0, -2.0]]
 		for v3 in views2:
@@ -122,6 +122,72 @@ func _ready() -> void:
 				await get_tree().process_frame
 			get_viewport().get_texture().get_image().save_png("res://renders/shot_%s.png" % v3[0])
 			print("saved ", v3[0])
+	# the whole fishing sequence, frame by frame
+	if only == "fishing":
+		var pf2: Node3D = g.get_node("Player")
+		pf2.position = Vector3(-8.2, 1.7, 14.3)
+		pf2.rotation.y = deg_to_rad(-30)
+		g.cam.rotation.x = deg_to_rad(-24)
+		g.day_t = 0.0
+		g.scenery.set_time(0.0)
+		g.unlocked["lines"] = true
+		var fwd: Vector3 = -pf2.global_basis.z
+		var hp3: Vector3 = pf2.position * Vector3(1, 0, 1) + fwd * Vector3(1, 0, 1) * 4.5
+		var hh: Dictionary = g._make_hole(hp3)
+		g.tool = 1
+		g._sync_tool_view()
+		g._refresh()
+		await get_tree().create_timer(0.3).timeout
+		g._cast(hh)
+		for step in [["fishing_1_cast", 0.28], ["fishing_2_wait", 0.9]]:
+			await get_tree().create_timer(step[1]).timeout
+			get_viewport().get_texture().get_image().save_png("res://renders/shot_%s.png" % step[0])
+		var dbg := Camera3D.new()
+		g.add_child(dbg)
+		dbg.global_position = pf2.global_position + Vector3(5.5, 1.2, 0.5)
+		dbg.look_at(hh.pos * 0.5 + pf2.global_position * 0.5 + Vector3(0, 0.8, 0), Vector3.UP)
+		dbg.current = true
+		await get_tree().process_frame
+		await get_tree().process_frame
+		get_viewport().get_texture().get_image().save_png("res://renders/shot_fishing_side.png")
+		g.cam.current = true
+		dbg.queue_free()
+		hh.nib = []
+		hh.timer = 0.0
+		await get_tree().create_timer(0.12).timeout
+		get_viewport().get_texture().get_image().save_png("res://renders/shot_fishing_3_bite.png")
+		g._click("hole:%d" % hh.idx)
+		await get_tree().create_timer(0.35).timeout
+		get_viewport().get_texture().get_image().save_png("res://renders/shot_fishing_4_fight.png")
+		while hh.cast == 3:
+			await get_tree().process_frame
+		await get_tree().create_timer(0.3).timeout
+		get_viewport().get_texture().get_image().save_png("res://renders/shot_fishing_5_launch.png")
+		await get_tree().create_timer(0.5).timeout
+		get_viewport().get_texture().get_image().save_png("res://renders/shot_fishing_6_card.png")
+		print("saved fishing")
+	# every catch lined up in front of the camera
+	if only == "fish":
+		var pf: Node3D = g.get_node("Player")
+		pf.position = Vector3(-8.2, 1.7, 14.3)
+		pf.rotation.y = deg_to_rad(-30)
+		g.cam.rotation.x = deg_to_rad(-8)
+		g.day_t = 0.0
+		g.scenery.set_time(0.0)
+		var i := 0
+		for sp in g.SPECIES:
+			var fish: Dictionary = g._make_fish(sp)
+			fish.lenk = 1.0
+			var node: Node3D = g._fish_mesh(fish, g, 3.6)
+			var base: Vector3 = pf.position + (-pf.global_basis.z) * 3.0
+			var right: Vector3 = pf.global_basis.x
+			node.global_position = base + right * (float(i % 4) - 1.5) * 1.5 + Vector3(0, 0.15 - float(i / 4) * 1.15, 0)
+			node.rotation.y = deg_to_rad(pf.rotation_degrees.y + 200.0)
+			i += 1
+		for k in 10:
+			await get_tree().process_frame
+		get_viewport().get_texture().get_image().save_png("res://renders/shot_fish.png")
+		print("saved fish")
 	# the Eye at each stage, day and night, plus a feed reaction
 	if only == "eye":
 		var pe: Node3D = g.get_node("Player")

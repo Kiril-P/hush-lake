@@ -24,6 +24,11 @@ func _ready() -> void:
 	streams["buy"] = _wav(_tone(520.0, 780.0, 0.18, 10.0, 0.45))
 	streams["deny"] = _wav(_tone(200.0, 150.0, 0.16, 12.0, 0.4))
 	streams["drill"] = _wav(_noise(0.1, 0.35, 28.0, 0.35))
+	streams["tick"] = _wav(_tone(1900.0, 1500.0, 0.035, 60.0, 0.5))
+	streams["splash"] = _wav(_mix([_noise(0.4, 0.45, 8.0, 0.55), _tone(300.0, 140.0, 0.22, 14.0, 0.25)]))
+	streams["plop"] = _wav(_tone(420.0, 160.0, 0.16, 18.0, 0.6))
+	streams["hook"] = _wav(_mix([_noise(0.16, 0.5, 20.0, 0.45), _tone(500.0, 1100.0, 0.1, 22.0, 0.35)]))
+	streams["reel"] = _wav(_noise(0.04, 0.8, 70.0, 0.55))
 	streams["wind"] = _wav(_wind(6.0), true)
 	streams["pad"] = _wav(_pad(8.0), true)
 

@@ -38,3 +38,13 @@
 - Hand-fed fish now arc to the pupil rim facing the thrower, pay and trigger `catch` as they cross it, then spiral down the funnel.
 - Bug found on the way: the sun-glitter strip lay over the pupil hole (tan disc); it now starts beyond the Eye. Frost/thaw sector patches also fade out around the Eye.
 - Shader changes only show in windowed runs (`tools/shot.sh`, `SHOT_ONLY=eye`); headless can't render. Frame times are spiky for the first couple of seconds while shaders compile; the bot now waits 3 s.
+
+## Fishing overhaul (fish_model.gd, fish_node.gd, fishing_fx.gd)
+- Every catch has its own procedural model: lofted body with vertex-coloured markings (minnow lateral stripe, perch bands and orange spiky dorsal, pike long with pale spots, golden trout gold with red stripe and shimmer, ancient fish glowing cyan runes), tails, dorsals, pectorals, eyes. Boot, coin and pearl are their own objects. FishNode animates tail wag, sway and fin flaps; `amp` sets the energy (bucket 0.3 .. thrashing 3).
+- Fish have a cosmetic length in cm (per-species range) and the game keeps personal records (saved). Length scales the model, shows on the catch card, and in the journal.
+- The cast: the float arcs out from the rod tip with a visible line (ribbon mesh: slack while waiting, taut and trembling on a bite) and lands with a plop, droplets and a ripple.
+- Nibbles (1-2 dips with ripples and a tick) before the real bite, which plunges the float, pops a "!" and yanks the rod.
+- Clicking the bite now HOOKS the fish (state `cast == 3`): a 0.7-1.5 s fight whose length and violence depend on the species (`_fight_intensity`): float circles and thrashes, splashes, reel ratchet clicks, rod bends, view shakes; rare hooks add coloured ripples and the ancient fish makes the Eye flare. The stock is drawn at hook time; the fish lands in hand when the fight ends (`_catch`).
+- Landing: the fish leaps out of the hole in a spinning, flapping arc into your hands, splash and rings; rare finds (value 14+) add a light beam and sparks. A catch card (rarity, name, length, worth, NEW SPECIES / NEW RECORD) pops at the bottom of the screen.
+- The spawn moved from 13.4 m to 16.5 m from the Eye so you no longer start inside its ice lashes.
+- Tests: smoke test covers hook, fight, landing, length and records; the bot waits for the fight to end.

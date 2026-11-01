@@ -47,8 +47,8 @@ func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	await frames(3)
 	var player: Node3D = g.get_node("Player")
-	var out_dir := Vector3(-0.5, 0, 0.866)   # away from the Eye, deeper into the Shallows
-	var spot: Vector3 = player.global_position * Vector3(1, 0, 1) + out_dir * 3.5
+	var out_dir := Vector3(0.5, 0, -0.866)   # toward the Eye, still inside the Shallows
+	var spot: Vector3 = player.global_position * Vector3(1, 0, 1) + out_dir * 2.5
 
 	# 1. aim at open ice and hold click: a hole appears where we aimed
 	aim_at(Vector3(spot.x, 0.0, spot.z))
@@ -85,7 +85,12 @@ func _ready() -> void:
 	mouse(true)
 	mouse(false)
 	await frames(3)
-	check("clicking on the bite catches it", g.carry.size() == 1)
+	check("clicking on the bite hooks it", h.cast == 3)
+	var fought := 0.0
+	while g.carry.is_empty() and fought < 4.0:
+		await get_tree().create_timer(0.1).timeout
+		fought += 0.1
+	check("the fish lands in your hands after the fight", g.carry.size() == 1)
 
 	# 3. carry it to the Eye and click on it
 	aim_at(Vector3(0, 0.2, 0))

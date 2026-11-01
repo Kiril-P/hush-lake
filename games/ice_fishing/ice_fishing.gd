@@ -206,6 +206,17 @@ var unlocked := {}
 var goal_done: Array = []
 var combo := 0
 var combo_t := 0.0
+var records := {}          # species name -> longest catch (cm)
+var line_im: ImmediateMesh
+var line_node: MeshInstance3D
+var tool_tip: Node3D
+var fight_amt := 0.0       # how hard the fish on the line is pulling (0..2): bends the rod, shakes the view
+var view_pop := 0.0
+var card_panel: PanelContainer
+var card_rarity: Label
+var card_name: Label
+var card_info: Label
+var card_tween: Tween
 var tiles := {}            # hex fish cells: invisible, hold the stock and the shoal shadows
 var holes: Array = []      # every hole you drilled; each is a "tile-like" dict (see _make_hole)
 var belts: Array = []
@@ -261,12 +272,24 @@ func _ready() -> void:
 	goal_done.resize(GOALS.size())
 	goal_done.fill(false)
 	cam = $Player/Camera3D
-	$Player.position = Vector3(-6.7, EYE_H, 11.6)   # inside the Shallows, a few steps from the Eye
+	$Player.position = Vector3(-8.2, EYE_H, 14.3)   # inside the Shallows, a few steps from the Eye
 	$Player.rotation.y = deg_to_rad(-30.0)             # ...facing it
 	cam.rotation.x = deg_to_rad(-5)
 	view = Node3D.new()
 	view.position = Vector3(-0.42, -0.4, -0.8)
 	cam.add_child(view)
+	line_im = ImmediateMesh.new()
+	line_node = MeshInstance3D.new()
+	line_node.mesh = line_im
+	var lm := StandardMaterial3D.new()
+	lm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	lm.albedo_color = Color(0.93, 0.97, 1.0, 0.85)
+	lm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	lm.cull_mode = BaseMaterial3D.CULL_DISABLED
+	line_node.material_override = lm
+	line_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	line_node.extra_cull_margin = 200.0
+	add_child(line_node)
 	tool_view = Node3D.new()
 	tool_view.position = Vector3(0.38, -0.36, -0.65)
 	tool_view.scale = Vector3.ONE * 0.85
@@ -352,17 +375,7 @@ func _label3d(parent: Node, pos: Vector3, text: String, px := 0.008, billboard :
 	return l
 
 func _fish_mesh(f: Dictionary, parent: Node, scale_f := 1.0) -> Node3D:
-	var root := Node3D.new()
-	var body := MeshInstance3D.new()
-	var sp := SphereMesh.new()
-	sp.radius = 0.5
-	sp.height = 1.0
-	body.mesh = sp
-	body.scale = Vector3(0.28, 0.1, 0.12) * scale_f
-	body.material_override = _mat(f.color, 0.15)
-	root.add_child(body)
-	var tail := _box(root, Vector3(-0.16 * scale_f, 0, 0), Vector3(0.08, 0.02, 0.1) * scale_f, f.color)
-	tail.rotation.z = 0.4
+	var root := FishModel.build(f.name, f.color, 0.34 * scale_f * float(f.get("lenk", 1.0)))
 	parent.add_child(root)
 	return root
 
@@ -644,7 +657,8 @@ func _make_hole(pos: Vector3, count := true) -> Dictionary:
 	add_child(node)
 	var t := {"c": c, "sector": tiles[c].sector, "pos": node.position, "node": node, "state": "hole", "prog": 0.0,
 		"cast": 0, "timer": 0.0, "bobber": null, "mark": null, "extra": null, "announced": false, "shadows": [],
-		"stash": [], "slot": [], "smoke_t": 0.0, "auto_t": 0.0, "tag": null, "arm": null, "belt": null, "idx": holes.size()}
+		"stash": [], "slot": [], "smoke_t": 0.0, "auto_t": 0.0, "tag": null, "arm": null, "belt": null, "idx": holes.size(),
+		"hooked": [], "fight": 0.0, "fight_total": 1.0, "fight_i": 1.0, "nib": [], "dip": 0.0, "flying": false, "fx_t": 0.0}
 	holes.append(t)
 	if count:
 		stats.holes += 1
@@ -666,12 +680,29 @@ func _make_hole(pos: Vector3, count := true) -> Dictionary:
 	cyl.radius = 0.9
 	cyl.height = 0.8
 	_add_collider(disc, cyl, Vector3.ZERO, "hole:%d" % t.idx)
-	var b := MeshInstance3D.new()
-	var sp := SphereMesh.new()
-	sp.radius = 0.16
-	sp.height = 0.32
-	b.mesh = sp
-	b.material_override = _mat(Color(1, 0.35, 0.2), 0.4)
+	var b := Node3D.new()  # a float: red top, white bottom, a thin antenna
+	var top := MeshInstance3D.new()
+	var tsm := SphereMesh.new()
+	tsm.radius = 0.15
+	tsm.height = 0.3
+	tsm.radial_segments = 12
+	tsm.rings = 6
+	top.mesh = tsm
+	top.material_override = _mat(Color(1, 0.3, 0.18), 0.5)
+	top.scale = Vector3(1, 0.8, 1)
+	top.position = Vector3(0, 0.05, 0)
+	b.add_child(top)
+	var bot := MeshInstance3D.new()
+	var bsm := SphereMesh.new()
+	bsm.radius = 0.12
+	bsm.height = 0.24
+	bsm.radial_segments = 12
+	bsm.rings = 6
+	bot.mesh = bsm
+	bot.material_override = _mat(Color(0.96, 0.96, 1.0))
+	bot.position = Vector3(0, -0.07, 0)
+	b.add_child(bot)
+	_box(b, Vector3(0, 0.26, 0), Vector3(0.02, 0.22, 0.02), Color(1.0, 0.9, 0.3), "", 0.6)
 	b.position = Vector3(0, 0.18, 0)
 	b.visible = false
 	node.add_child(b)
@@ -921,6 +952,25 @@ func _build_ui() -> void:
 	refreeze_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	refreeze_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
 	refreeze_panel.visible = false
+	var cbox := VBoxContainer.new()
+	cbox.add_theme_constant_override("separation", 0)
+	card_rarity = _plain(cbox, 14, Style.CREAM)
+	card_rarity.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	card_name = _plain(cbox, 34, Style.CREAM)
+	card_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	card_info = _plain(cbox, 17, Style.MUTED)
+	card_info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	card_panel = _panel(ui, cbox)
+	card_panel.anchor_left = 0.5
+	card_panel.anchor_right = 0.5
+	card_panel.anchor_top = 1.0
+	card_panel.anchor_bottom = 1.0
+	card_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	card_panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	card_panel.offset_top = -330.0
+	card_panel.offset_bottom = -200.0
+	card_panel.custom_minimum_size = Vector2(320, 0)
+	card_panel.visible = false
 	banner_label = Label.new()
 	banner_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	banner_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
@@ -1009,8 +1059,15 @@ func roll_fish() -> Dictionary:
 			return _make_fish(s)
 	return _make_fish(SPECIES[0])
 
+## cm range per species: purely cosmetic (shown on the catch card, kept as personal records)
+const LENGTHS := {"Minnow": [6.0, 10.0], "Perch": [14.0, 28.0], "Silver Pike": [45.0, 90.0], "Golden Trout": [30.0, 55.0],
+	"Old Boot": [27.0, 32.0], "Old Coin": [3.0, 4.0], "Glass Pearl": [2.0, 3.0], "Ancient Fish": [140.0, 220.0]}
+
 func _make_fish(s: Dictionary) -> Dictionary:
-	return {"name": s.name, "base": s.value, "color": s.color, "mult": 1.0, "gutted": false, "smoked": false}
+	var r: Array = LENGTHS.get(s.name, [10.0, 20.0])
+	var l := snappedf(lerpf(r[0], r[1], pow(randf(), 1.4)), 0.1)
+	return {"name": s.name, "base": s.value, "color": s.color, "mult": 1.0, "gutted": false, "smoked": false,
+		"len": l, "lenk": l / ((r[0] + r[1]) * 0.5)}
 
 func _note_found(f: Dictionary) -> void:
 	if not journal.has(f.name):
@@ -1218,7 +1275,7 @@ func _update_journal() -> void:
 	var out := ["JOURNAL  (%d / %d found)\n" % [journal.size(), SPECIES.size()]]
 	for s in SPECIES:
 		if journal.has(s.name):
-			out.append("%s   x%d   (%d coins base)" % [s.name, journal[s.name], s.value])
+			out.append("%s   x%d   best %.1f cm   (%d coins base)" % [s.name, journal[s.name], records.get(s.name, 0.0), s.value])
 		else:
 			out.append("???")
 	out.append("\nTab to close")
@@ -1239,10 +1296,12 @@ func _refresh_view() -> void:
 		var n := mini(carry.size(), 10)
 		for i in n:
 			var f := _fish_mesh(carry[i], view, 0.8)
+			(f as FishNode).amp = 0.3
 			f.position = Vector3(randf_range(-0.07, 0.07), 0.15 + 0.02 * i, randf_range(-0.07, 0.07))
 			f.rotation = Vector3(randf_range(-0.4, 0.4), randf() * TAU, randf_range(-0.4, 0.4))
 	elif carry.size() == 1:
 		var f := _fish_mesh(carry[0], view, 1.2)
+		(f as FishNode).amp = 0.9
 		f.rotation = Vector3(0.3, 0.6, 0.2)
 	view.rotation = Vector3(0.1, 0.3, 0.0)
 
@@ -1261,6 +1320,7 @@ func _sync_tool_view() -> void:
 	tool_view.add_child(tool_body)
 	tool_spin = null
 	tool_line = null
+	tool_tip = null
 	var steel := Color(0.6, 0.62, 0.68)
 	var wood := Color(0.45, 0.3, 0.2)
 	match tool:
@@ -1311,11 +1371,10 @@ func _sync_tool_view() -> void:
 			reel.rotation_degrees.z = 90
 			reel.position = Vector3(0.04, -0.03, 0.0)
 			tool_body.add_child(reel)
-			tool_line = Node3D.new()
-			tool_line.position = Vector3(0, 0, -0.93)
-			tool_body.add_child(tool_line)
-			_box(tool_line, Vector3(0, -0.3, 0), Vector3(0.004, 0.6, 0.004), Color(0.9, 0.9, 0.95))
-			_box(tool_line, Vector3(0, -0.62, 0), Vector3(0.05, 0.05, 0.05), Color(1, 0.35, 0.2), "", 0.4)
+			tool_tip = Node3D.new()
+			tool_tip.position = Vector3(0, 0, -0.93)
+			tool_body.add_child(tool_tip)
+			tool_line = null
 		_:  # building hammer
 			tool_base_x = deg_to_rad(-10)
 			_box(tool_body, Vector3(0, 0, -0.18), Vector3(0.035, 0.035, 0.42), wood)
@@ -1517,12 +1576,19 @@ func _animate(delta: float) -> void:
 	tool_view.position = Vector3(0.38 + sin(tm * 1.3) * 0.004, -0.36 + sin(tm * 2.1) * 0.004, -0.65)
 	if working and tool == 0:
 		tool_view.position += Vector3(randf_range(-1, 1), randf_range(-1, 1), 0) * 0.004
+	var fight_target := 0.0
+	for h in holes:
+		if h.state == "hole" and h.cast == 3:
+			fight_target = maxf(fight_target, h.fight_i)
+	fight_amt = lerpf(fight_amt, fight_target, minf(1.0, delta * 12.0))
+	view_pop = move_toward(view_pop, 0.0, delta * 3.5)
+	view.scale = Vector3.ONE * (1.0 + 0.4 * sin(view_pop * PI))
+	_update_fishing_lines()
 	if tool_body:
-		tool_body.rotation.x = tool_base_x + tool_kick * 0.6
+		tool_body.rotation.x = tool_base_x + tool_kick * 0.6 + fight_amt * (0.12 + 0.1 * sin(Time.get_ticks_msec() * 0.035))
+		tool_body.rotation.z = fight_amt * 0.05 * sin(Time.get_ticks_msec() * 0.027)
 	if tool_spin and working and tool == 0:
 		tool_spin.rotation.z += 16.0 * delta
-	if tool_line:
-		tool_line.visible = any_cast
 	working = false
 	var pp: Vector3 = $Player.global_position
 	scenery.follow(pp)
@@ -1565,21 +1631,7 @@ func _walk(delta: float) -> void:
 func _tick_hole(t: Dictionary, delta: float) -> void:
 	match t.state:
 		"hole":
-			if t.cast == 1:
-				t.timer -= delta
-				if t.timer <= 0.0:
-					t.cast = 2
-					t.timer = BITE_WINDOW
-					t.mark.visible = true
-					sfx.play("bite")
-					fov_kick = -5.0
-					shake = maxf(shake, 0.01)
-			elif t.cast == 2:
-				t.timer -= delta
-				t.bobber.position.y = 0.18 + sin(Time.get_ticks_msec() * 0.03) * 0.05
-				if t.timer <= 0.0:
-					_end_cast(t)
-					_say("It got away...")
+			_tick_cast(t, delta)
 		"auto":
 			var working_rod: bool = model.tile_left(t.c) > 0
 			if working_rod:
@@ -1615,16 +1667,219 @@ func _tick_hole(t: Dictionary, delta: float) -> void:
 			elif t.slot.is_empty():
 				t.tag.text = "Smoker"
 
+## One thin ribbon per active line, from the rod tip to the float: slack while you wait, taut and trembling on a bite.
+func _update_fishing_lines() -> void:
+	line_im.clear_surfaces()
+	var anchor := _line_anchor()
+	var cam_pos := cam.global_position
+	var began := false
+	var tm := Time.get_ticks_msec() * 0.001
+	for h in holes:
+		if h.state != "hole" or h.cast == 0 or not h.bobber.visible:
+			continue
+		var b: Vector3 = h.bobber.global_position + Vector3(0, 0.25, 0)
+		var dist := anchor.distance_to(b)
+		var slack := 1.0
+		var vib := 0.0
+		match h.cast:
+			1: slack = 0.35 if h.dip > 0.0 else 1.0
+			2:
+				slack = 0.0
+				vib = 0.7
+			3:
+				slack = 0.0
+				vib = 1.2
+		if h.flying:
+			slack = 0.5
+		var sag: float = clampf(dist * 0.07, 0.1, 1.0) * slack
+		var n := 16
+		if not began:
+			line_im.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
+			began = true
+		else:
+			# degenerate join between two lines
+			pass
+		var prev_left := Vector3.ZERO
+		for i in n + 1:
+			var k := float(i) / n
+			var p := anchor.lerp(b, k) + Vector3(0, -sag * 4.0 * k * (1.0 - k), 0)
+			p.y += sin(k * PI * 5.0 + tm * 45.0) * 0.012 * vib * sin(k * PI)
+			var dir := (b - anchor).normalized()
+			var view_dir := (p - cam_pos).normalized()
+			var side := dir.cross(view_dir)
+			side = side.normalized() if side.length() > 0.001 else Vector3.RIGHT
+			var w := 0.006 + 0.0018 * p.distance_to(cam_pos)
+			if i == 0:
+				prev_left = p - side * w
+				line_im.surface_add_vertex(prev_left)
+				line_im.surface_add_vertex(prev_left)
+			line_im.surface_add_vertex(p - side * w)
+			line_im.surface_add_vertex(p + side * w)
+			if i == n:
+				line_im.surface_add_vertex(p + side * w)
+				line_im.surface_add_vertex(p + side * w)
+	if began:
+		line_im.surface_end()
+
 func _end_cast(t: Dictionary) -> void:
 	t.cast = 0
+	t.flying = false
+	t.hooked = []
+	t.nib = []
+	t.dip = 0.0
 	t.bobber.visible = false
+	t.bobber.position = Vector3(0, 0.18, 0)
 	t.mark.visible = false
+
+## Where the line leaves the rod: the tip of the rod in hand, or a spot by your hand if you have put it away.
+func _line_anchor() -> Vector3:
+	if tool == 1 and is_instance_valid(tool_tip) and tool_tip.is_inside_tree():
+		return tool_tip.global_position
+	return cam.global_position + cam.global_basis * Vector3(0.38, -0.3, -0.9)
+
+## Click on a hole with the rod: the float arcs out from the rod tip and lands with a plop.
+func _cast(t: Dictionary) -> void:
+	t.cast = 1
+	t.timer = wait_time(t)
+	t.nib = []
+	if t.timer > 1.6:
+		t.nib.append(t.timer * 0.55)
+	if t.timer > 3.2:
+		t.nib.append(t.timer * 0.22)
+	t.dip = 0.0
+	t.flying = true
+	t.bobber.visible = true
+	var from := _line_anchor()
+	var dest: Vector3 = t.node.global_position + Vector3(0, 0.18, 0)
+	var dist := from.distance_to(dest)
+	var arc := 1.0 + dist * 0.12
+	sfx.play("cast")
+	_kick_tool(1.1)
+	var tw := create_tween()
+	tw.tween_method(func(k: float):
+		if t.flying and is_instance_valid(t.bobber):
+			t.bobber.global_position = from.lerp(dest, k) + Vector3(0, sin(k * PI) * arc, 0), 0.0, 1.0, 0.32 + dist * 0.018).set_trans(Tween.TRANS_SINE)
+	tw.tween_callback(func():
+		if t.cast == 1 and t.flying:
+			t.flying = false
+			t.bobber.position = Vector3(0, 0.18, 0)
+			sfx.play("plop")
+			FishingFX.splash(t.node, Vector3(0, 0.12, 0), 10, 0.8)
+			FishingFX.ripple(t.node, Vector3(0, 0.1, 0), 1.3, Color(0.75, 0.95, 1.0), 1.0))
+
+func _nibble(t: Dictionary) -> void:
+	t.dip = 0.35
+	sfx.play("tick", -3.0, randf_range(0.9, 1.25))
+	FishingFX.ripple(t.node, Vector3(0, 0.1, 0), 0.7, Color(0.8, 0.95, 1.0), 0.7, 0.55)
+
+func _bite(t: Dictionary) -> void:
+	t.cast = 2
+	t.timer = BITE_WINDOW
+	t.mark.visible = true
+	t.mark.scale = Vector3.ONE * 0.2
+	var mt := create_tween()
+	mt.tween_property(t.mark, "scale", Vector3.ONE * 1.35, 0.12).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	mt.tween_property(t.mark, "scale", Vector3.ONE, 0.1)
+	t.dip = 0.5
+	sfx.play("bite")
+	fov_kick = -5.0
+	shake = maxf(shake, 0.015)
+	_kick_tool(-1.0)
+	FishingFX.splash(t.node, Vector3(0, 0.12, 0), 12, 0.9)
+	FishingFX.ripple(t.node, Vector3(0, 0.1, 0), 1.6, Color(1.0, 0.95, 0.6), 0.8, 0.9)
+
+## How hard a species fights, 0.6 (minnow) to 2.0 (the ancient one).
+func _fight_intensity(f: Dictionary) -> float:
+	var v := _species_value(f.name)
+	if v < 2.5: return 0.6
+	if v < 6.0: return 1.0
+	if v < 20.0: return 1.35
+	if v < 100.0: return 1.7
+	return 2.0
+
+## Click during the bite: the fish is hooked and the fight starts. What you hooked decides how long it lasts.
+func _hook(t: Dictionary) -> void:
+	var n := mini(lines(), free_space())
+	var got := []
+	for i in n:
+		var f := _draw_fish(t)
+		if f.is_empty():
+			break
+		got.append(f)
+	if got.is_empty():
+		_end_cast(t)
+		_say("Nothing left to catch here." if n > 0 else "Your hands were full - it got away!")
+		_after_draw(t)
+		_refresh()
+		return
+	var inten := 0.0
+	for f in got:
+		inten = maxf(inten, _fight_intensity(f))
+	t.hooked = got
+	t.cast = 3
+	t.fight_i = inten
+	t.fight_total = 0.5 + 0.3 * inten + (0.4 if inten >= 2.0 else 0.0)
+	t.fight = t.fight_total
+	t.fx_t = 0.0
+	t.mark.visible = false
+	t.dip = 0.0
+	sfx.play("hook")
+	fov_kick = -9.0
+	shake = maxf(shake, 0.03)
+	_kick_tool(-1.4)
+	FishingFX.splash(t.node, Vector3(0, 0.12, 0), 16, 1.1)
+	if inten >= 2.0:
+		scenery.pulse_eye()
+	_after_draw(t)
+	_refresh()
+
+func _tick_cast(t: Dictionary, delta: float) -> void:
+	var ms := Time.get_ticks_msec()
+	var bob_y := 0.18 + sin(ms * 0.004 + t.idx) * 0.012
+	if t.dip > 0.0:
+		t.dip -= delta
+		bob_y -= sin(clampf(t.dip / 0.5, 0.0, 1.0) * PI) * 0.13
+	match t.cast:
+		1:
+			t.timer -= delta
+			if not t.nib.is_empty() and t.timer < t.nib[0]:
+				t.nib.remove_at(0)
+				_nibble(t)
+			if t.timer <= 0.0:
+				_bite(t)
+			if not t.flying:
+				t.bobber.position = Vector3(0, bob_y, 0)
+		2:
+			t.timer -= delta
+			t.bobber.position = Vector3(sin(ms * 0.05) * 0.03, 0.09 + sin(ms * 0.045) * 0.05, cos(ms * 0.043) * 0.03)
+			if t.timer <= 0.0:
+				_end_cast(t)
+				_say("It got away...")
+		3:
+			t.fight -= delta
+			var inten: float = t.fight_i
+			var p: float = 1.0 - t.fight / t.fight_total
+			var ang := ms * 0.011 * (0.8 + inten * 0.4)
+			var r := 0.3 * (0.6 + 0.3 * inten) * (1.0 - 0.4 * p)
+			t.bobber.position = Vector3(cos(ang) * r, 0.1 + absf(sin(ang * 1.7)) * 0.1, sin(ang) * r)
+			t.fx_t -= delta
+			if t.fx_t <= 0.0:
+				t.fx_t = 0.13 / inten
+				FishingFX.splash(t.node, t.bobber.position, 5, 0.7)
+				FishingFX.ripple(t.node, Vector3(t.bobber.position.x, 0.1, t.bobber.position.z), 0.9 + 0.3 * inten, Color(0.8, 0.95, 1.0), 0.6, 0.5)
+				sfx.play("reel", -6.0, 0.85 + p * 0.6)
+				if inten >= 1.35:
+					FishingFX.ripple(t.node, Vector3(0, 0.1, 0), 1.8, t.hooked[0].color, 0.8, 0.6)
+			shake = maxf(shake, 0.004 + 0.006 * inten)
+			if t.fight <= 0.0:
+				_catch(t)
 
 ## A fish arcs to the pupil's rim, pays and wakes the Eye as it crosses it, then spirals down the funnel.
 func _fly_fish(f: Dictionary, from: Vector3, delay: float, _dest := "eye", eye_mult := EYE_MULT) -> void:
 	var holder := Node3D.new()
 	add_child(holder)
 	var fm := _fish_mesh(f, holder, 1.4)
+	(fm as FishNode).amp = 2.0
 	holder.global_position = from
 	var target: Vector3 = scenery.eye_landing(from)
 	var tw := create_tween()
@@ -2381,7 +2636,7 @@ func _bank_and_reset() -> void:
 
 # ---------- save / load ----------
 func _fish_to(f: Dictionary) -> Dictionary:
-	return {"n": f.name, "b": f.base, "m": f.mult, "g": f.gutted, "s": f.smoked}
+	return {"n": f.name, "b": f.base, "m": f.mult, "g": f.gutted, "s": f.smoked, "l": f.get("len", 10.0)}
 
 func _fish_from(d: Dictionary) -> Dictionary:
 	var f := _make_fish(SPECIES[0])
@@ -2392,6 +2647,10 @@ func _fish_from(d: Dictionary) -> Dictionary:
 	f.mult = d.get("m", 1.0)
 	f.gutted = d.get("g", false)
 	f.smoked = d.get("s", false)
+	if d.has("l"):
+		var rr: Array = LENGTHS.get(f.name, [10.0, 20.0])
+		f.len = d.l
+		f.lenk = d.l / ((rr[0] + rr[1]) * 0.5)
 	return f
 
 func _on_about_to_save() -> void:
@@ -2401,7 +2660,7 @@ func _on_about_to_save() -> void:
 			"sm": t.smoke_t, "b": t.belt != null, "cn": t.belt != null and t.belt.get("cannery", false),
 			"so": t.belt != null and t.belt.get("sorter", false)})
 	var p: Node3D = $Player
-	GameState.extra = {"holes": hl, "stats": stats, "goals": goal_done, "unlocked": unlocked, "journal": journal,
+	GameState.extra = {"holes": hl, "stats": stats, "goals": goal_done, "unlocked": unlocked, "journal": journal, "records": records,
 		"carry": carry.map(_fish_to), "tool": tool, "pos": [p.position.x, p.position.z],
 		"yaw": p.rotation.y, "pitch": cam.rotation.x,
 		"day": day_t, "time": play_time,
@@ -2420,6 +2679,8 @@ func _restore(d: Dictionary) -> bool:
 		goal_done[i] = g[i]
 	for k in d.get("unlocked", {}):
 		unlocked[k] = d.unlocked[k]
+	for k in d.get("records", {}):
+		records[k] = float(d.records[k])
 	for k in d.get("journal", {}):
 		journal[k] = int(d.journal[k])
 	for fd in d.get("carry", []):
@@ -2635,8 +2896,10 @@ func _click(a: String) -> void:
 		return
 	match t.state:
 		"hole":
+			if t.cast == 3:
+				return
 			if t.cast == 2:
-				_catch(t)
+				_hook(t)
 			elif t.cast == 1:
 				_end_cast(t)
 				_say("Too early!")
@@ -2655,13 +2918,7 @@ func _click(a: String) -> void:
 				if free_space() <= 0:
 					_say("Hands full - feed the Eye first!")
 					return
-				t.cast = 1
-				t.timer = wait_time(t)
-				t.bobber.position.y = 0.18
-				t.bobber.visible = true
-				sfx.play("cast")
-				_kick_tool(0.9)
-				_burst(t.node.global_position + Vector3(0, 0.15, 0), Color(0.6, 0.85, 1.0), 8, 2.5, 0.6)
+				_cast(t)
 			elif tool == 2 and _tool_unlocked(2):
 				if _spend(auto_cost()):
 					_build_auto(t)
@@ -2740,10 +2997,11 @@ func _use_smoker(t: Dictionary) -> void:
 		_refresh_view()
 		_refresh()
 
+## The fight is over: the fish leaps out of the hole in an arc and lands in your hands.
 func _catch(t: Dictionary) -> void:
+	var got: Array = t.hooked
 	_end_cast(t)
-	if free_space() <= 0:
-		_say("Your hands were full - it got away!")
+	if got.is_empty():
 		return
 	if combo_t > 0.0:
 		combo += 1
@@ -2752,36 +3010,99 @@ func _catch(t: Dictionary) -> void:
 	combo_t = COMBO_WINDOW
 	var bonus := 1.0 + 0.1 * mini(combo - 1, 10)
 	var best: Dictionary = {}
-	var drawn := 0
-	for i in mini(lines(), free_space()):
-		var f := _draw_fish(t)
-		if f.is_empty():
-			break
-		drawn += 1
+	var new_record := false
+	var new_species := false
+	for f in got:
 		f.base *= bonus
 		stats.caught += 1
+		if f.get("new", false) or journal.get(f.name, 0) == 1:
+			new_species = new_species or journal.get(f.name, 0) == 1
+		if f.get("len", 0.0) > records.get(f.name, 0.0):
+			new_record = new_record or records.has(f.name)
+			records[f.name] = f.len
 		_add_carry(f)
 		if best.is_empty() or f.base > best.base:
 			best = f
-	if drawn == 0:
-		_say("Nothing left to catch here.")
-		_after_draw(t)
-		_refresh()
-		return
-	var pos: Vector3 = t.node.global_position + Vector3(0, 1.0, 0)
-	_float_text(pos, best.name, best.color)
+	_launch_catch(t, got, best)
+	_show_card(best, got.size(), new_species, new_record)
 	sfx.play("rare" if best.base >= 5.0 else "catch")
 	shake = maxf(shake, 0.07 if best.base >= 5.0 else 0.025)
 	_kick_tool(-1.0)
-	_burst(t.node.global_position + Vector3(0, 0.2, 0), Color(0.6, 0.85, 1.0), 12, 3.5, 0.7)
-	_burst(t.node.global_position + Vector3(0, 0.4, 0), best.color, 6, 2.5, 0.8, 0.05)
 	if best.name == "Old Boot":
 		_say("Olga will love this... an Old Boot.")
-	else:
-		_say("Caught %s!" % best.name)
-	_refresh_view()
 	_after_draw(t)
 	_refresh()
+
+func _hand_point() -> Vector3:
+	return cam.global_position + cam.global_basis * Vector3(0.1, -0.3, -0.7)
+
+func _launch_catch(t: Dictionary, got: Array, best: Dictionary) -> void:
+	var hole_pos: Vector3 = t.node.global_position
+	var inten := _fight_intensity(best)
+	FishingFX.splash(t.node, Vector3(0, 0.2, 0), int(18 + 10 * inten), 1.3)
+	FishingFX.ripple(t.node, Vector3(0, 0.1, 0), 2.6, Color(0.85, 0.97, 1.0), 1.1, 0.9)
+	sfx.play("splash")
+	if _species_value(best.name) >= 14.0:
+		FishingFX.beam(self, hole_pos, best.color, 5.0 + inten * 2.0)
+		FishingFX.ripple(t.node, Vector3(0, 0.1, 0), 4.5, best.color, 1.4, 1.0)
+		_burst(hole_pos + Vector3(0, 0.6, 0), best.color, 16, 4.5, 1.0, 0.07)
+	for i in got.size():
+		var f: Dictionary = got[i]
+		var holder := Node3D.new()
+		add_child(holder)
+		var fm: FishNode = _fish_mesh(f, holder, 2.4) as FishNode
+		fm.amp = 3.0
+		fm.rate = 14.0
+		holder.global_position = hole_pos + Vector3(0, 0.2, 0)
+		var last := i == got.size() - 1
+		var arc := 2.6 + inten * 0.5
+		var spin := TAU * (1.5 + 0.5 * i) * (1.0 if i % 2 == 0 else -1.0)
+		var tw := create_tween()
+		tw.tween_interval(0.13 * i)
+		tw.tween_method(func(k: float):
+			var tgt := _hand_point()
+			var from := hole_pos + Vector3(0, 0.2, 0)
+			holder.global_position = from.lerp(tgt, k) + Vector3(0, sin(k * PI) * arc, 0)
+			var dir := (tgt - from) * Vector3(1, 0, 1)
+			holder.rotation = Vector3(k * spin, atan2(-dir.z, dir.x), sin(k * PI) * 0.7)
+			fm.amp = lerpf(3.0, 0.8, k)
+			holder.scale = Vector3.ONE * lerpf(1.0, 0.55, k * k), 0.0, 1.0, 0.7).set_trans(Tween.TRANS_LINEAR)
+		tw.tween_callback(func():
+			holder.queue_free()
+			sfx.play("plop", -4.0, randf_range(1.0, 1.3))
+			view_pop = 1.0
+			if last:
+				_refresh_view())
+
+func _rarity(name: String) -> Array:
+	var v := _species_value(name)
+	if v < 2.5: return ["COMMON", Style.CREAM]
+	if v < 6.0: return ["UNCOMMON", Color(0.62, 0.92, 0.5)]
+	if v < 20.0: return ["RARE", Color(0.45, 0.78, 1.0)]
+	if v < 100.0: return ["EPIC", Color(0.82, 0.58, 1.0)]
+	return ["LEGENDARY", Style.AMBER]
+
+func _show_card(best: Dictionary, count: int, new_species: bool, new_record: bool) -> void:
+	var rar := _rarity(best.name)
+	card_rarity.text = "%s%s" % [rar[0], "  -  NEW SPECIES" if new_species else ""]
+	card_rarity.add_theme_color_override("font_color", rar[1])
+	card_name.text = best.name
+	card_name.add_theme_color_override("font_color", best.color.lerp(Color.WHITE, 0.35))
+	var extra := ""
+	if count > 1:
+		extra = "   +%d more" % (count - 1)
+	card_info.text = "%.1f cm  -  worth %d%s%s" % [best.get("len", 0.0), floor(best.base * best.mult * sale_mult()), "   NEW RECORD" if new_record else "", extra]
+	card_panel.visible = true
+	card_panel.pivot_offset = card_panel.size * 0.5
+	if card_tween:
+		card_tween.kill()
+	card_panel.modulate.a = 0.0
+	card_panel.scale = Vector2(0.85, 0.85)
+	card_tween = create_tween().set_parallel(true)
+	card_tween.tween_property(card_panel, "modulate:a", 1.0, 0.18)
+	card_tween.tween_property(card_panel, "scale", Vector2.ONE, 0.28).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	card_tween.chain().tween_interval(2.3)
+	card_tween.chain().tween_property(card_panel, "modulate:a", 0.0, 0.6)
 
 func _buy(id: String) -> void:
 	var u: Dictionary = UPGRADES[id]
