@@ -36,6 +36,28 @@ func _ready() -> void:
 		var img := get_viewport().get_texture().get_image()
 		img.save_png("res://renders/shot_%s.png" % v[0])
 		print("saved ", v[0])
+	# onboarding: the intro flyover at four moments, then the first objective with its marker
+	if only == "guide":
+		var gd = g.guide
+		gd.want_intro = true
+		for i in 3:
+			await get_tree().process_frame
+		for tt in [1.8, 5.0, 9.0, 11.6]:
+			gd.intro_t = tt
+			for i in 5:
+				await get_tree().process_frame
+			get_viewport().get_texture().get_image().save_png("res://renders/shot_guide_intro_%d.png" % int(tt))
+			print("saved intro ", tt)
+		gd.skip_intro()
+		for i in 12:
+			await get_tree().process_frame
+		get_viewport().get_texture().get_image().save_png("res://renders/shot_guide_drill.png")
+		var pg: Node3D = g.get_node("Player")
+		pg.rotation.y = deg_to_rad(120.0)
+		for i in 6:
+			await get_tree().process_frame
+		get_viewport().get_texture().get_image().save_png("res://renders/shot_guide_arrow.png")
+		print("saved guide")
 	# staged mid-game: auto-rods with belts running into the Eye, fish riding them, the Eye partly fed
 	if only == "" or only == "belts":
 		GameState.currency = 99999.0

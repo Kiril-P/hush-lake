@@ -17,6 +17,7 @@ const SceneryScript := preload("res://games/ice_fishing/scenery.gd")
 const SfxScript := preload("res://shared/sfx.gd")
 const LakeModelScript := preload("res://games/ice_fishing/lake_model.gd")
 const LakeMapScript := preload("res://games/ice_fishing/lake_map.gd")
+const GuideScript := preload("res://games/ice_fishing/guide.gd")
 
 const TILE := 7.0            # hex radius of a fish cell. Cells are invisible now: the lake is open ice
 const EYE_R := 10.0          # the Eye at the centre of the lake (see scenery.gd)
@@ -297,6 +298,7 @@ var eye_bar: ProgressBar
 var eye_label: Label
 var eye_next_label: Label
 var start_panel: PanelContainer
+var guide: Guide
 var work_bar: ProgressBar
 
 func _ready() -> void:
@@ -361,7 +363,10 @@ func _ready() -> void:
 	else:
 		if _meta_int("lakes") > 0:
 			_banner("%s #%d: %s" % [model.mod_info().name, _meta_int("lakes") + 1, model.mod_info().desc], Color(0.7, 0.9, 1.0))
-		_say("Olga: The Eye wants feeding, dear. Press 1 and hold click anywhere on the ice. Carry what you catch to the Eye.")
+		if GameState.save_slot.begins_with("test"):
+			_say("Olga: The Eye wants feeding, dear. Press 1 and hold click anywhere on the ice. Carry what you catch to the Eye.")
+		else:
+			guide.want_intro = true
 
 # ---------- hex helpers ----------
 func _ring(c: Vector2i) -> int:
@@ -959,7 +964,7 @@ func _build_ui() -> void:
 	title.text = "HUSH LAKE"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	start_label = _plain(sbox, 20)
-	start_label.text = "Click to play\n\nHold click on any ice to drill  -  fish  -  carry it to the Eye\nWASD walk   1-7 tools   V snowmobile   Q build item\nTab journal   R refreeze   M mute   Esc free mouse\n(N while paused: erase save & start over)"
+	start_label.text = "Click to play\n\nDrill a hole (1), fish it (2), carry the catch to the Eye\nLost? Press H and Olga points the way\n\nWASD walk   V snowmobile   Tab journal   R refreeze\nM mute   Esc free mouse   (N while paused: start over)"
 	start_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	start_panel = _panel(ui, sbox)
 	start_panel.set_anchors_preset(Control.PRESET_CENTER)
@@ -1023,6 +1028,10 @@ func _build_ui() -> void:
 	banner_label.add_theme_constant_override("outline_size", 12)
 	banner_label.modulate.a = 0.0
 	ui.add_child(banner_label)
+	guide = GuideScript.new()
+	guide.game = self
+	add_child(guide)
+	guide.build(ui)
 	_ignore_mouse(ui)
 
 func _banner(text: String, color := Color(1, 0.9, 0.4)) -> void:
@@ -1598,6 +1607,11 @@ func _process(delta: float) -> void:
 		prompt_label.text = "" if raw == "ice" else "Too far - walk closer"
 	else:
 		prompt_label.text = _prompt_for(a)
+	guide.tick(delta, captured)
+	if guide.intro_active:
+		prompt_label.text = ""
+		msg_label.text = ""
+		return
 	var pp3: Vector3 = $Player.global_position
 	scenery.set_eye_offering(captured and not carry.is_empty() and Vector2(pp3.x, pp3.z).length() - EYE_R <= RANGE_EYE + 4.0, pp3)
 	_update_hold(a, delta)
@@ -1663,6 +1677,9 @@ func _animate(delta: float) -> void:
 		sector_labels[id].label.visible = dist < (62.0 if model.sectors[id].unlocked else 22.0)
 
 func _walk(delta: float) -> void:
+	if guide.intro_active:
+		moving = false
+		return
 	var d := Vector3(int(Input.is_physical_key_pressed(KEY_D)) - int(Input.is_physical_key_pressed(KEY_A)), 0,
 		int(Input.is_physical_key_pressed(KEY_S)) - int(Input.is_physical_key_pressed(KEY_W)))
 	moving = d != Vector3.ZERO and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
@@ -1963,13 +1980,8 @@ func _talk_olga() -> void:
 	if not carry.is_empty():
 		_say("Olga: Not to me, dear. It's the Eye that's hungry.")
 		return
-	var next := ""
-	for i in GOALS.size():
-		if not goal_done[i]:
-			next = GOALS[i].text
-			break
-	if next != "" and randf() < 0.65:
-		_say("Olga: Next, dear: %s." % next.to_lower())
+	if guide.is_early() or randf() < 0.75:
+		_say(guide.olga_line())
 	else:
 		_say(OLGA_CHATTER.pick_random())
 	sfx.play("coin", -8.0, 0.8)
@@ -2740,7 +2752,7 @@ func _on_about_to_save() -> void:
 			"sm": t.smoke_t, "b": t.belt != null, "cn": t.belt != null and t.belt.get("cannery", false),
 			"so": t.belt != null and t.belt.get("sorter", false)})
 	var p: Node3D = $Player
-	GameState.extra = {"holes": hl, "stats": stats, "goals": goal_done, "unlocked": unlocked, "journal": journal, "records": records,
+	GameState.extra = {"holes": hl, "stats": stats, "goals": goal_done, "unlocked": unlocked, "journal": journal, "records": records, "tips": guide.to_dict(),
 		"carry": carry.map(_fish_to), "tool": tool, "pos": [p.position.x, p.position.z],
 		"yaw": p.rotation.y, "pitch": cam.rotation.x,
 		"day": day_t, "time": play_time,
@@ -2759,6 +2771,7 @@ func _restore(d: Dictionary) -> bool:
 		goal_done[i] = g[i]
 	for k in d.get("unlocked", {}):
 		unlocked[k] = d.unlocked[k]
+	guide.from_dict(d.get("tips", null))
 	for k in d.get("records", {}):
 		records[k] = float(d.records[k])
 	for k in d.get("journal", {}):
@@ -2865,6 +2878,10 @@ func _new_game() -> void:
 	get_tree().reload_current_scene()
 
 func _unhandled_input(event: InputEvent) -> void:
+	if guide.intro_active:
+		if guide.intro_t > 1.0 and ((event is InputEventMouseButton and event.pressed) or (event is InputEventKey and event.pressed and event.keycode in [KEY_SPACE, KEY_ENTER, KEY_E])):
+			guide.skip_intro()
+		return
 	if event is InputEventKey and event.pressed and not event.echo:
 		if refreeze_panel.visible:
 			if _refreeze_key(event.keycode):
@@ -2891,6 +2908,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.keycode == KEY_F4:
 			day_t = fmod(day_t + 0.125, 1.0)
 			_say("[debug] time of day skipped")
+			return
+		if event.keycode == KEY_H:
+			guide.ping()
 			return
 		if event.keycode == KEY_V:
 			_toggle_ride()

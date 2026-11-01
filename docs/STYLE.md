@@ -26,3 +26,6 @@ All UI colors and widgets live in `shared/style.gd` (`Style`); do not hardcode U
 
 ## Still to do
 Minimap and 3D plaques still use the old colors and fonts. Machines (cannery, sorter, depot, rig) need a consistent trim color. Add icons for tools.
+
+## Guidance
+The amber accent also means 'go here': the NEXT strip border, the world pin and the edge arrow are all amber on ink. Tips use the aqua accent. Nothing guiding the player is ever red or blocks the crosshair.

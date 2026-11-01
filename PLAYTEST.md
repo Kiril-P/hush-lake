@@ -8,13 +8,15 @@
 **Controls**
 - Mouse: look · WASD: walk · Click: use tool / interact · 1-7: pick tool, V: ride the snowmobile, Q: cycle what Build (7) builds · Tab: journal
 - R: Refreeze (after 3 sectors): bank pearls, buy perks, start a new lake with a modifier · M: mute · Esc: free the mouse (click to resume) · N (while paused): erase save & start over
+- H: where do I go? (Olga repeats the current step)
 - Debug: F2 +1000 coins · F3 unlock everything · F4 skip time of day
 
 **The goal:** feed the Eye. The lake is ~180 m of open ice with a huge hole at the centre. Drill anywhere, fish, and carry what you catch to the Eye (it pays 25% more than Olga). Later, build an Auto-Rod on a hole and lay a belt (tool 6) so its catch rides into the Eye by itself. The Eye wakes in 5 stages as it eats. The lake still holds ~1,800 fish in 19 hidden sectors: fish a sector dry to thaw it and open the next ones (pale frost = locked). Clear them all to finish.
 
-**Start here:** you spawn a few steps from the Eye, facing it. Hold click on the ice (tool 1) to drill a hole -> press 2, click the hole to cast -> click again on "!" -> walk to the Eye and click it. Follow the GOALS panel (top right). The camp (Olga's hut + first stalls) is on the ice beside the Eye; later stalls are further out.
+**Start here:** a new game opens with a short flyover (click to skip). Then follow the NEXT strip at the top of the screen: it always says the one thing to do, and an amber pin plus an edge arrow point at where. Press H any time and Olga tells you the step again (her window does too). The opening is: drill the marked spot (1) -> cast (2) -> click when it bites -> carry the fish to the Eye -> buy a Bucket. The GOALS card (top right) tracks the longer list. The camp (Olga's hut + first stalls) is on the ice beside the Eye; later stalls are further out.
 
 **What I want to know after ~30 minutes**
+0. Onboarding: did the intro grab you or drag? Did you ever not know what to do next? Did the NEXT strip and pin help or nag?
 1. When did you first feel bored? When did you first feel hooked?
 2. Which moment felt best / worst?
 3. Was anything confusing or hard to find?
