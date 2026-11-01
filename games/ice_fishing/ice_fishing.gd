@@ -527,7 +527,7 @@ func _make_sector_labels() -> void:
 		sector_labels[id] = {"label": l, "pos": pos}
 
 ## Locked sectors lie under a soft frost; cleared ones have thawed into dark open water. Both are feathered discs.
-func _soft_disc(col: Color, plateau: float) -> StandardMaterial3D:
+func _soft_disc(col: Color, plateau: float) -> ShaderMaterial:
 	var grad := Gradient.new()
 	grad.offsets = PackedFloat32Array([0.0, plateau, 1.0])
 	grad.colors = PackedColorArray([col, col, Color(col.r, col.g, col.b, 0.0)])
@@ -538,11 +538,24 @@ func _soft_disc(col: Color, plateau: float) -> StandardMaterial3D:
 	tex.fill_to = Vector2(1.0, 0.5)
 	tex.width = 128
 	tex.height = 128
-	var m := StandardMaterial3D.new()
-	m.albedo_texture = tex
-	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	# the patch fades out near the Eye so frost/thaw never lies over its pupil
+	var sh := Shader.new()
+	sh.code = """
+shader_type spatial;
+render_mode unshaded, cull_disabled, blend_mix, depth_draw_never;
+uniform sampler2D tex : source_color;
+varying vec3 wpos;
+void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
+void fragment() {
+	vec4 c = texture(tex, UV);
+	float k = smoothstep(11.0, 14.0, length(wpos.xz));
+	ALBEDO = c.rgb;
+	ALPHA = c.a * k;
+}
+"""
+	var m := ShaderMaterial.new()
+	m.shader = sh
+	m.set_shader_parameter("tex", tex)
 	return m
 
 func _make_sector_patches() -> void:
@@ -1194,6 +1207,7 @@ func _refresh() -> void:
 	if scenery:
 		scenery.set_eye_glow(float(model.cleared_count()) / model.sectors.size() * 1.4)
 		scenery.set_eye_open(eye_open_frac())
+		scenery.set_eye_stage(eye_seen_stage)
 		scenery.set_crane(GameState.level("conveyor") >= 2)
 	if journal_panel.visible:
 		_update_journal()
@@ -1474,6 +1488,8 @@ func _process(delta: float) -> void:
 		prompt_label.text = "" if raw == "ice" else "Too far - walk closer"
 	else:
 		prompt_label.text = _prompt_for(a)
+	var pp3: Vector3 = $Player.global_position
+	scenery.set_eye_offering(captured and not carry.is_empty() and Vector2(pp3.x, pp3.z).length() - EYE_R <= RANGE_EYE + 4.0, pp3)
 	_update_hold(a, delta)
 	view.position.y = -0.4 + sin(Time.get_ticks_msec() * 0.002) * 0.005
 	_animate(delta)
@@ -1604,24 +1620,29 @@ func _end_cast(t: Dictionary) -> void:
 	t.bobber.visible = false
 	t.mark.visible = false
 
-## A fish arcs into the Eye and pays on landing.
-func _fly_fish(f: Dictionary, from: Vector3, delay: float, dest := "eye", eye_mult := EYE_MULT) -> void:
+## A fish arcs to the pupil's rim, pays and wakes the Eye as it crosses it, then spirals down the funnel.
+func _fly_fish(f: Dictionary, from: Vector3, delay: float, _dest := "eye", eye_mult := EYE_MULT) -> void:
 	var holder := Node3D.new()
 	add_child(holder)
 	var fm := _fish_mesh(f, holder, 1.4)
 	holder.global_position = from
-	var to_eye := dest == "eye"
-	var target := Vector3(0, 0.5, 0) if to_eye else hut_pos
-	var arc := 5.0 if to_eye else 1.4
+	var target: Vector3 = scenery.eye_landing(from)
 	var tw := create_tween()
 	if delay > 0.0:
 		tw.tween_interval(delay)
 	tw.tween_method(func(t: float):
-		holder.global_position = from.lerp(target, t) + Vector3(0, sin(t * PI) * arc, 0)
-		fm.rotation.z = t * 6.0, 0.0, 1.0, 0.9 if to_eye else 0.6).set_trans(Tween.TRANS_SINE)
+		holder.global_position = from.lerp(target, t) + Vector3(0, sin(t * PI) * 4.0, 0)
+		fm.rotation.z = t * 7.0, 0.0, 1.0, 0.8).set_trans(Tween.TRANS_SINE)
 	tw.tween_callback(func():
-		holder.queue_free()
-		_feed_eye(f, eye_mult))
+		_feed_eye(f, eye_mult)
+		sfx.play("buy", -6.0, randf_range(1.2, 1.5)))
+	var a0 := atan2(target.z, target.x)
+	tw.tween_method(func(t: float):
+		var ang := a0 + t * TAU * 1.5
+		var rad := lerpf(PUPIL_R * 0.72, 0.5, t)
+		holder.global_position = Vector3(cos(ang) * rad, lerpf(0.6, -7.0, t * t), sin(ang) * rad)
+		holder.scale = Vector3.ONE * lerpf(1.0, 0.1, t), 0.0, 1.0, 0.55).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_callback(holder.queue_free)
 
 func _coins(v: float) -> String:
 	return str(snappedf(v, 0.1)) if v < 10.0 else str(int(v))
@@ -1685,9 +1706,8 @@ func _feed_eye(f: Dictionary, mult: float) -> void:
 	earn(worth)
 	if eye_burst_t <= 0.0:
 		eye_burst_t = 0.12
-		_burst(Vector3(0, 0.4, 0), Color(0.5, 1.0, 0.9), 6, 3.5, 0.7, 0.14)
-		scenery.pulse_eye()
 		sfx.play("coin", 0.0, randf_range(0.7, 0.95))
+	scenery.eye_catch(f.color, clampf(worth / 25.0, 0.0, 1.0))
 	var st := eye_stage()
 	if st > eye_seen_stage:
 		eye_seen_stage = st
@@ -1700,6 +1720,7 @@ func _eye_stage_up(st: int) -> void:
 	_banner("THE EYE STIRS  (%d / %d)" % [st, EYE_STAGES.size()], Color(0.6, 1.0, 0.9))
 	_say("Olga: %s" % EYE_LINES[st - 1])
 	scenery.set_eye_open(eye_open_frac())
+	scenery.eye_stage_up(st)
 	_refresh()
 
 # ---------- belts ----------

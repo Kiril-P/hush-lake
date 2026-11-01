@@ -42,6 +42,7 @@ func _ready() -> void:
 	GameState.reset()
 	g = load("res://games/ice_fishing/ice_fishing.tscn").instantiate()
 	add_child(g)
+	await get_tree().create_timer(3.0).timeout  # let shaders compile so frame times are steady
 	await frames(5)
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	await frames(3)

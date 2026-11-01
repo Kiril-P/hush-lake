@@ -122,6 +122,36 @@ func _ready() -> void:
 				await get_tree().process_frame
 			get_viewport().get_texture().get_image().save_png("res://renders/shot_%s.png" % v3[0])
 			print("saved ", v3[0])
+	# the Eye at each stage, day and night, plus a feed reaction
+	if only == "eye":
+		var pe: Node3D = g.get_node("Player")
+		pe.position = Vector3(-9, 1.7, 17)
+		pe.rotation.y = deg_to_rad(-28)
+		g.cam.rotation.x = deg_to_rad(-14)
+		for cfg in [["eye_s0", 0, 0.0, 1.7], ["eye_s3", 3, 0.0, 1.7], ["eye_s5_night", 5, 0.5, 1.7], ["eye_catch", 5, 0.5, 1.7], ["eye_high", 5, 0.5, 14.0], ["eye_high_day", 3, 0.0, 14.0], ["eye_top5", 5, 0.5, 52.0, true]]:
+			pe.position.y = cfg[3]
+			g.cam.rotation.x = deg_to_rad(-14 if cfg[3] < 5.0 else -30)
+			if cfg.size() > 4:
+				pe.position = Vector3(0, cfg[3], 0.1)
+				pe.rotation.y = 0.0
+				g.cam.rotation.x = deg_to_rad(-89)
+			else:
+				pe.position = Vector3(-9, cfg[3], 17)
+				pe.rotation.y = deg_to_rad(-28)
+			g.stats.eye_fed = [0, 10, 60, 200, 600, 1500][cfg[1]]
+			g.eye_seen_stage = cfg[1]
+			g.scenery.set_eye_open(g.eye_open_frac())
+			g.scenery.set_eye_stage(cfg[1])
+			g.scenery.set_eye_glow(0.7 if cfg[1] > 0 else 0.0)
+			g.day_t = cfg[2]
+			g.scenery.set_time(cfg[2])
+			if cfg[0] == "eye_catch":
+				g.scenery.eye_catch(Color(1.0, 0.8, 0.3), 1.0)
+				g.scenery.eye.stage_up(5)
+			for i in (14 if cfg[0] == "eye_catch" else 10):
+				await get_tree().process_frame
+			get_viewport().get_texture().get_image().save_png("res://renders/shot_%s.png" % cfg[0])
+			print("saved ", cfg[0])
 	# progress view: pretend 9 sectors are cleared so the shore lanterns are lit
 	var n := 0
 	for id in g.model.sectors:

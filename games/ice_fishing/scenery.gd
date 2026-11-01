@@ -40,8 +40,6 @@ var spinners: Array = []
 var beam: Node3D
 var beam_mat: StandardMaterial3D
 var beacon_light: OmniLight3D
-var eye_mats: Array[StandardMaterial3D] = []
-var eye_base: Array[Color] = []
 var crane: Node3D
 var sky_mat: ProceduralSkyMaterial
 var env_ref: Environment
@@ -117,9 +115,9 @@ func build(env: Environment, sun: DirectionalLight3D, hut: Node3D) -> void:
 	sky_mat = env.sky.sky_material as ProceduralSkyMaterial
 	sun.look_at_from_position(sun_pos, Vector3.ZERO)
 	# glittering sun path on the ice
-	var path := _box(self, Vector3.ZERO, Vector3(14, 0.02, 120), _mat(Color(1.0, 0.8, 0.5, 0.3), 0.0, true))
+	var path := _box(self, Vector3.ZERO, Vector3(14, 0.02, 80), _mat(Color(1.0, 0.8, 0.5, 0.3), 0.0, true))
 	sun_path = path
-	path.position = (sun_dir * Vector3(1, 0, 1)).normalized() * 36.0 + Vector3(0, 0.03, 0)  # glitter only on the ice
+	path.position = (sun_dir * Vector3(1, 0, 1)).normalized() * 56.0 + Vector3(0, 0.03, 0)  # glitter only on the ice
 	path.rotation.y = atan2(-sun_dir.x, -sun_dir.z)
 	var mm := SphereMesh.new()
 	mm.radius = 15.0
@@ -252,112 +250,42 @@ func _ice_and_eye() -> void:
 	_mesh(self, floor_m, _mat(Color(0.05, 0.16, 0.28)), Vector3(0, -9.0, 0))
 	_build_eye()
 
-# The Eye: iris bands lie on the ice around an open pupil; a dark funnel drops to a gold glow far below.
-var eye_group: Node3D
-var eye_light: OmniLight3D
-var eye_glow := 0.0
-var eye_open := 0.0
-var eye_pulse := 0.0
-
-## A flat ring in the XZ plane, facing up.
-func _annulus(r_in: float, r_out: float, segs := 72) -> ArrayMesh:
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for j in segs:
-		var a0 := TAU * j / segs
-		var a1 := TAU * (j + 1) / segs
-		var p0 := Vector3(sin(a0) * r_in, 0, -cos(a0) * r_in)
-		var p1 := Vector3(sin(a0) * r_out, 0, -cos(a0) * r_out)
-		var p2 := Vector3(sin(a1) * r_in, 0, -cos(a1) * r_in)
-		var p3 := Vector3(sin(a1) * r_out, 0, -cos(a1) * r_out)
-		for v in [p0, p1, p2, p2, p1, p3]:
-			st.set_normal(Vector3.UP)
-			st.add_vertex(v)
-	return st.commit()
+# The Eye lives in eye.gd (iris shader, lids, petals, crystals, funnel, reactions); these are the facade calls.
+const EyeScript = preload("res://games/ice_fishing/eye.gd")
+var eye: Node3D
 
 func _build_eye() -> void:
-	eye_group = Node3D.new()
-	add_child(eye_group)
-	var bands := [[EYE_R, EYE_R - 1.2, Color(0.7, 1.0, 1.0)], [EYE_R - 1.2, EYE_R - 1.7, Color(1.0, 0.78, 0.35)],
-		[EYE_R - 1.7, EYE_R - 3.6, Color(0.10, 0.58, 0.72)], [EYE_R - 3.6, PUPIL_R, Color(0.05, 0.32, 0.5)]]
-	var lift := 0.0
-	for b in bands:
-		var mat := _mat(b[2], 0.0, true)   # unshaded: the iris glows its own colour, whatever the sun is doing
-		eye_mats.append(mat)
-		eye_base.append(b[2])
-		var disc := CylinderMesh.new()
-		disc.top_radius = b[0]
-		disc.bottom_radius = b[0]
-		disc.height = 0.02
-		disc.radial_segments = 72
-		disc.cap_bottom = false
-		_mesh(eye_group, disc, mat, Vector3(0, 0.01 + lift, 0))
-		lift += 0.015
-	# the pupil: a black disc sitting over the hole's edge so the Eye reads as a dark centre from afar
-	var pm := _mat(Color(0.0, 0.012, 0.035), 0.0, true)
-	var pd := CylinderMesh.new()
-	pd.top_radius = PUPIL_R
-	pd.bottom_radius = PUPIL_R
-	pd.height = 0.02
-	pd.radial_segments = 48
-	_mesh(eye_group, pd, pm, Vector3(0, 0.01 + lift, 0))
-	# rim of broken ice chunks around the hole
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 77
-	for k in 26:
-		var a := TAU * k / 26.0 + rng.randf_range(-0.08, 0.08)
-		var rr := EYE_R + rng.randf_range(0.9, 2.4)
-		var sz := rng.randf_range(0.5, 1.2)
-		var chunk := _box(eye_group, Vector3(sin(a) * rr, 0.02, -cos(a) * rr), Vector3(sz * 1.3, 0.16, sz), _mat(Color(0.55, 0.8, 1.0)))
-		chunk.rotation.y = rng.randf() * TAU
-	# funnel down into the dark
-	var fn := CylinderMesh.new()
-	fn.top_radius = PUPIL_R + 0.1
-	fn.bottom_radius = 0.9
-	fn.height = 8.6
-	fn.radial_segments = 40
-	fn.cap_top = false
-	fn.cap_bottom = false
-	var fm := _mat(Color(0.0, 0.015, 0.04), 0.0, true)  # a black pupil
-	fm.cull_mode = BaseMaterial3D.CULL_DISABLED
-	_mesh(self, fn, fm, Vector3(0, -4.4, 0))
-	var deep := CylinderMesh.new()
-	deep.top_radius = 2.2
-	deep.bottom_radius = 2.2
-	deep.height = 0.1
-	var dm := _mat(Color(1.0, 0.8, 0.3), 0.0, true)
-	eye_mats.append(dm)
-	eye_base.append(Color(1.0, 0.8, 0.3))
-	_mesh(self, deep, dm, Vector3(0, -8.5, 0))
-	eye_light = OmniLight3D.new()
-	eye_light.position = Vector3(0, -2.5, 0)
-	eye_light.omni_range = 16.0
-	eye_light.light_color = Color(0.4, 0.95, 0.9)
-	eye_light.light_energy = 1.0
-	add_child(eye_light)
+	eye = EyeScript.new()
+	add_child(eye)
 
 func set_eye_glow(amount: float) -> void:
-	eye_glow = clampf(amount, 0.0, 1.0)
-	for i in eye_mats.size():
-		var k := lerpf(0.85, 1.3, eye_glow)
-		eye_mats[i].albedo_color = Color(eye_base[i].r * k, eye_base[i].g * k, eye_base[i].b * k)
+	eye.set_glow(amount)
 
-## 0 = barely stirring .. 1 = fully open. Widens the iris and brightens the light below.
+## 0 = barely stirring .. 1 = fully open: the eyelids lift.
 func set_eye_open(x: float) -> void:
-	eye_open = clampf(x, 0.0, 1.0)
-	var s := lerpf(0.72, 1.0, eye_open)
-	eye_group.scale = Vector3(s, 1.0, s)
+	eye.set_open(x)
+
+func set_eye_stage(st: int) -> void:
+	eye.set_stage(st)
+
+func eye_stage_up(st: int) -> void:
+	eye.stage_up(st)
+
+func eye_catch(c: Color, weight := 0.3) -> void:
+	eye.catch(c, weight)
+
+func eye_landing(from: Vector3) -> Vector3:
+	return eye.landing_point(from)
+
+func set_eye_offering(on: bool, from: Vector3) -> void:
+	eye.set_offering(on, from)
 
 func pulse_eye() -> void:
-	eye_pulse = 1.0
+	eye.catch(Color(0.6, 1.0, 0.95), 0.2)
 
-## The iris drifts toward whoever is on the ice, so the Eye seems to watch you.
+## The inner pupil drifts toward whoever is on the ice, so the Eye seems to watch you.
 func set_eye_look(pp: Vector2, delta: float) -> void:
-	var off := Vector2.ZERO
-	if pp.length() > 0.5:
-		off = pp.normalized() * minf(pp.length() / 30.0, 1.0) * 0.9
-	eye_group.position.x = move_toward(eye_group.position.x, off.x, delta * 1.5)
-	eye_group.position.z = move_toward(eye_group.position.z, off.y, delta * 1.5)
+	eye.look(pp, delta)
 
 ## Mountain ranges as single flat-shaded meshes: jagged peaks with a real snow line, no overlapping solids.
 ## Two ranks: tall back range, lower front range. Radius is capped by the arc length so neighbours never intersect.
@@ -529,9 +457,6 @@ func _process(delta: float) -> void:
 		aurora_mats[i].set_shader_parameter("strength", _night * (0.55 + 0.35 * sin(_time * 0.5 + i * 2.1)))
 	if crane and crane.visible:
 		crane_arm.rotation.y = sin(_time * 0.35) * 0.9
-	eye_pulse = move_toward(eye_pulse, 0.0, delta * 1.6)
-	if eye_light:
-		eye_light.light_energy = (1.0 + eye_open * 3.5 + eye_glow * 1.5) * (1.0 + eye_pulse * 2.5)
 	if beam:
 		beam.rotation.y = _time * 0.7
 		beam_mat.albedo_color.a = 0.24 * clampf((_night - 0.25) / 0.5, 0.0, 1.0)  # invisible by day
@@ -588,6 +513,8 @@ func set_time(t: float) -> void:
 	sun_light.light_energy = lerpf(a.e, b.e, k)
 	_night = clampf(1.0 - absf(t - 0.5) * 4.0, 0.0, 1.0)
 	env_ref.ambient_light_energy = 1.0 + _night * 0.8
+	if eye:
+		eye.set_night(_night)
 	sun_disc.visible = _night < 0.85
 	sun_path.visible = _night < 0.6
 	moon.visible = _night > 0.15

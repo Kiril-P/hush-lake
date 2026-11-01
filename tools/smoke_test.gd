@@ -126,6 +126,26 @@ func _ready() -> void:
 	await get_tree().create_timer(1.6).timeout
 	check("the Eye pays 1.25x and counts the fish", g.stats.eye_fed == 1 and GameState.currency >= coins0 + eye_worth - 0.01)
 
+	# --- the Eye as a living thing
+	var eye = g.scenery.eye
+	check("the Eye node exists with petals and crystals", eye != null and eye.petals.size() > 20 and eye.crystals.size() == 5)
+	eye.set_stage(2)
+	check("stage 2 shows two crystal groups", eye.crystals[1][0].visible and not eye.crystals[2][0].visible)
+	eye.set_stage(0)
+	check("refreeze hides the crystals again", not eye.crystals[0][0].visible)
+	var lp: Vector3 = g.scenery.eye_landing(Vector3(30, 1.7, -40))
+	check("fish land on the pupil rim facing the thrower", Vector2(lp.x, lp.z).length() < g.PUPIL_R and lp.x > 0.0 and lp.z < 0.0)
+	eye.wave_cd = 0.0
+	eye.catch(Color(1, 0.8, 0.3), 1.0)
+	var waves_a: float = eye.wave
+	eye.catch(Color(1, 0.8, 0.3), 1.0)
+	check("catching flares the Eye and throttles repeat waves", eye.flare > 0.5 and waves_a == 0.0 and eye.wave == waves_a)
+	g.scenery.set_eye_offering(true, Vector3(0, 0, 20))
+	eye._process(0.5)
+	check("the feed marker shows while offering", eye.marker.visible)
+	g.scenery.set_eye_offering(false, Vector3.ZERO)
+	eye.flare = 0.0
+
 	# --- Olga talks but never buys
 	g.carry.append(g.roll_fish())
 	coins0 = GameState.currency

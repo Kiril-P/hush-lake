@@ -30,3 +30,11 @@
 - Ice-breaker rigs now earn while you are away (40% of live pace). Added a smoke test for it.
 - Locked-sector labels only show within 22 m, which cuts the "LOCKED" clutter.
 - New class_name scripts need `godot --headless --import` once before headless tests see them.
+
+## The Eye, rebuilt (games/ice_fishing/eye.gd)
+- The Eye is now its own script. Layers: iris shader (radial fibres, gold collarette, travelling "gulp" wave, frosted eyelids that close from top and bottom), open pupil, swirling funnel shader, a dark inner pupil with a catchlight that tracks the player, ice-lash petals that flex, crystals (4 per stage, 20 total) that burst out at each stage, a light shaft (strong at night), drifting motes.
+- It starts drowsy (lids about half shut) and wakes as `open` grows; blinks every 6-13 s. Warmth (gold) rises with stage.
+- Hooks for interaction work: `catch(color, weight)` (throttled, safe for belts), `stage_up`, `set_stage` (instant sync), `landing_point(from)`, `set_offering(on, pos)` (amber chevrons toward the player while carrying fish near the Eye), `look`.
+- Hand-fed fish now arc to the pupil rim facing the thrower, pay and trigger `catch` as they cross it, then spiral down the funnel.
+- Bug found on the way: the sun-glitter strip lay over the pupil hole (tan disc); it now starts beyond the Eye. Frost/thaw sector patches also fade out around the Eye.
+- Shader changes only show in windowed runs (`tools/shot.sh`, `SHOT_ONLY=eye`); headless can't render. Frame times are spiky for the first couple of seconds while shaders compile; the bot now waits 3 s.
