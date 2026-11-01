@@ -220,10 +220,10 @@ func _ready() -> void:
 	check("belt fish are drawn as instances", g.belt_mm.visible_instance_count == 1)
 	g._update_belt_fish(60.0)
 	check("the belt delivers the fish into the Eye", g.belt_fish.is_empty() and g.stats.eye_fed == fed0 + 1)
-	g.stats.eye_fed = 9
+	g.stats.eye_fed = g.EYE_STAGES[0] - 1
 	var seen_before: int = g.eye_seen_stage
 	g._feed_eye(g.roll_fish(), 1.0)
-	check("the 10th fish raises the Eye to stage 1", seen_before == 0 and g.eye_stage() == 1 and g.eye_seen_stage == 1)
+	check("the last fish before the threshold raises the Eye to stage 1", seen_before == 0 and g.eye_stage() == 1 and g.eye_seen_stage == 1)
 
 	# --- machines on a belt: cannery and sorter change what its fish are worth
 	g.unlocked["t_build"] = true
@@ -426,9 +426,12 @@ func _ready() -> void:
 	g._refreeze_key(KEY_1)
 	g._refreeze_key(KEY_3)
 	check("cannot buy a perk without pearls", g.perk_level("pockets") == 1 and g.perk_level("favour") == 1 and GameState.meta.pearls == 5)
-	g.model.sectors[Vector2i(1, 0)].cleared = true
-	g.model.sectors[Vector2i(0, 1)].cleared = true
-	check("refreeze unlocks at 3 cleared sectors", g._can_refreeze())
+	var marked := 0
+	for sid in g.model.sectors:
+		if marked < g.REFREEZE_MIN_SECTORS:
+			g.model.sectors[sid].cleared = true
+			marked += 1
+	check("refreeze unlocks at the minimum cleared sectors", g._can_refreeze())
 	var pend: int = g.pearls_pending()
 	var pearls_before: int = GameState.meta.pearls
 	g._bank_and_reset()
@@ -465,6 +468,7 @@ func _ready() -> void:
 	GameState.save_game()
 	var coins_before := GameState.currency
 	var left_total: int = g.model.total_left()
+	var cleared_before: int = g.model.cleared_count()
 	var autos_before: int = g.stats.autos
 	var holes_before: int = g.holes.size()
 	var fed_before: int = g.stats.eye_fed
@@ -479,7 +483,7 @@ func _ready() -> void:
 	add_child(g2)
 	await get_tree().process_frame
 	check("save restores coins", GameState.currency >= coins_before - 1.0)
-	check("save restores lake stock", g2.model.total_left() <= left_total and g2.model.cleared_count() == 1)
+	check("save restores lake stock", g2.model.total_left() <= left_total and g2.model.cleared_count() == cleared_before)
 	check("save restores every hole", g2.holes.size() == holes_before)
 	check("save restores stations", g2.holes[t2_idx].state == "table" and g2.holes[t3_idx].state == "smoker")
 	check("save restores belts", g2.belts.size() == 1 and g2.holes[tb_idx].state == "auto" and g2.holes[tb_idx].belt != null)

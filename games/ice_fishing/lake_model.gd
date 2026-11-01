@@ -20,6 +20,7 @@ const MIX := {
 	2: {"Minnow": 4, "Perch": 26, "Silver Pike": 32, "Golden Trout": 20, "Old Coin": 9, "Glass Pearl": 5, "Old Boot": 4},
 }
 const COUNT_RANGE := {0: [6, 9], 1: [9, 14], 2: [12, 18]}
+const COUNT_SCALE := 4.5   # fish per patch multiplier: sets how long a lake takes (tuned with tools/run_econ.sh)
 
 # Lake modifiers: every lake after the first rolls one, so each run plays a little differently.
 #   count = fish per tile x, rare = rare-species weight x, wait = bite wait x, value = sale price x
@@ -88,7 +89,7 @@ func generate(seed_in: int, mod_in := "") -> void:
 				for k in RARE:
 					if mix.has(k):
 						mix[k] = int(round(mix[k] * mod_info().rare))
-				for i in int(round(rng.randi_range(rr[0], rr[1]) * mod_info().count)):
+				for i in int(round(rng.randi_range(rr[0], rr[1]) * mod_info().count * COUNT_SCALE)):
 					var sp := _pick(rng, mix)
 					st[sp] = st.get(sp, 0) + 1
 			stock[tc] = st

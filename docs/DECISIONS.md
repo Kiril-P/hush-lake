@@ -48,3 +48,8 @@
 - Landing: the fish leaps out of the hole in a spinning, flapping arc into your hands, splash and rings; rare finds (value 14+) add a light beam and sparks. A catch card (rarity, name, length, worth, NEW SPECIES / NEW RECORD) pops at the bottom of the screen.
 - The spawn moved from 13.4 m to 16.5 m from the Eye so you no longer start inside its ice lashes.
 - Tests: smoke test covers hook, fight, landing, length and records; the bot waits for the fight to end.
+
+## Balance pass (docs/BALANCE.md)
+- Added `tools/econ_sim.gd` + `tools/run_econ.sh`: a headless economy simulation using the real rules. It found the lake could be emptied in 10.5 minutes; after retuning (bigger lake, slower automation, steeper prices, smaller multipliers, later Eye stages) an optimal player needs about 53 minutes and a half-active one about 66.
+- Auto-rod, rig and cannery prices and the lake size are now named constants (`AUTO_*`, `RIG_*`, `COUNT_SCALE`) that the sim reads, so retuning is one edit plus one run.
+- Refreeze now needs 6 sectors.

@@ -23,7 +23,7 @@ const EYE_R := 10.0          # the Eye at the centre of the lake (see scenery.gd
 const PUPIL_R := 4.8
 const EYE_H := 1.7           # eye height: you are a person on a big lake
 const EYE_MULT := 1.25       # every fish fed to the Eye pays this multiple of its base value
-const EYE_STAGES := [10, 60, 200, 600, 1500]   # fish fed to reach each stage
+const EYE_STAGES := [40, 240, 800, 3000, 6400]   # fish fed to reach each stage
 const EYE_LINES := ["The Eye blinks.", "The Eye turns to look at you.", "The Eye opens wider. The ice hums.",
 	"The Eye is almost fully open. It is still hungry.", "THE EYE IS AWAKE."]
 const BELT_SPEED := 4.5
@@ -31,11 +31,16 @@ const BELT_MAX_FISH := 600
 const MIN_HOLE_GAP := 1.6
 const RIDE_SPEED := [1.0, 2.4, 3.0, 3.6]   # snowmobile levels 0..3
 const SLED_BONUS := 10                      # snowmobile level 3 tows a sled: +10 carry while riding
-const CANNERY_MULT := 1.8                   # a cannery on a belt: every fish riding it is worth x1.8
+const CANNERY_MULT := 1.5                   # a cannery on a belt: every fish riding it is worth x1.5
 const SORTER_MULT := 1.6                    # a sorter: fish worth 5+ get x1.6
 const DEPOT_MULT := 1.05                    # a depot's sled run pays a little less than hand-feeding the Eye
 const BUILD_ITEMS := ["Cannery", "Sorter", "Depot", "Ice-Breaker"]
-const RIG_INTERVAL := 2.4
+const RIG_INTERVAL := 7.0
+const RIG_BASE := 900.0
+const RIG_GROWTH := 2.4
+const AUTO_WAIT := [16.0, 22.0]   # seconds between an auto-rod's fish
+const AUTO_BASE := 60.0
+const AUTO_GROWTH := 1.55
 const RIG_MAX := 3
 const RANGE_BUILD := 9.0
 const BITE_WINDOW := 1.5
@@ -54,8 +59,8 @@ const RANGE_ICE := 7.0      # you must walk to things: ice and holes within 7 m,
 const RANGE_SIGN := 7.0     # shop stalls within 7 m,
 const RANGE_HATCH := 6.0    # Olga's hatch within 6 m,
 const RANGE_EYE := 9.0      # you must be within 9 m of the Eye's rim (aim anywhere on it)
-const SECTOR_REWARD := [60, 180, 420]
-const REFREEZE_MIN_SECTORS := 3   # clear this many sectors before you may refreeze the lake
+const SECTOR_REWARD := [200, 700, 1800]
+const REFREEZE_MIN_SECTORS := 6   # clear this many sectors before you may refreeze the lake
 const EMPTY_LAKE_PEARLS := 5      # bonus pearls for emptying the whole lake
 # Pearls are the permanent currency. Earned by clearing sectors, spent between lakes. Cost = base * (level + 1).
 const PERKS := {
@@ -64,7 +69,7 @@ const PERKS := {
 	"favour":  {"name": "Olga's Favour", "desc": "+10% sale value, always",            "cost": 3, "max": 5},
 	"hands":   {"name": "Quick Hands",  "desc": "start with +1 drill speed level",     "cost": 2, "max": 3},
 }
-const SECTOR_PERK := 0.03   # +3% sale value per cleared sector
+const SECTOR_PERK := 0.02   # +2% sale value per cleared sector
 const COMBO_WINDOW := 8.0
 const CAPACITIES := [1, 3, 6, 10, 16, 24, 36, 50]
 const TOOLS := ["Drill", "Rod", "Auto-Rod", "Smoker", "Gut Table", "Belt", "Build"]
@@ -88,11 +93,11 @@ const UPGRADES := {
 	"boots":    {"name": "Boots",       "base": 12.0,  "growth": 1.8,  "max": 5, "start": true, "desc": "walk faster"},
 	"drill":    {"name": "Drill Speed", "base": 18.0,  "growth": 1.6,  "max": 6, "start": true, "desc": "drill & gut faster"},
 	"lines":    {"name": "Extra Line",  "base": 14.0,  "growth": 1.9,  "max": 4, "desc": "+1 fish per bite"},
-	"market":   {"name": "Lure Polish", "base": 25.0,  "growth": 1.85, "max": 12, "desc": "+15% fish value"},
+	"market":   {"name": "Lure Polish", "base": 25.0,  "growth": 1.85, "max": 12, "desc": "+10% fish value"},
 	"sonar":    {"name": "Sonar",       "base": 40.0,  "growth": 2.0,  "max": 3, "desc": "see the fish under the ice"},
 	"wide":     {"name": "Wide Drill",  "base": 60.0,  "growth": 2.2,  "max": 3, "desc": "drilling opens neighbours"},
 	"snowmobile": {"name": "Snowmobile", "base": 90.0, "growth": 2.6, "max": 3, "desc": "V to ride: faster. Lv3 tows a sled (+10 carry)"},
-	"conveyor": {"name": "Belt Motor",  "base": 140.0, "growth": 2.3,  "max": 4, "desc": "belts run faster, +25% value"},
+	"conveyor": {"name": "Belt Motor",  "base": 140.0, "growth": 2.3,  "max": 4, "desc": "belts run faster, +15% value"},
 }
 
 # goals: stat keys are counters (stats[...]), "lvl:<upgrade>", "found:<species>", or "journal"
@@ -118,7 +123,7 @@ const GOALS := [
 	{"text": "Buy a Snowmobile", "stat": "lvl:snowmobile", "target": 1, "reward": 80,
 		"line": "Olga: Press V to ride. Mind the ice, dear."},
 	{"text": "Build a Cannery on a belt", "stat": "cans", "target": 1, "reward": 90,
-		"line": "Olga: Canned fish fetch nearly double. Q cycles what you build."},
+		"line": "Olga: Canned fish fetch half again. Q cycles what you build."},
 	{"text": "Build a Depot", "stat": "depots", "target": 1, "reward": 80,
 		"line": "Olga: Drop fish at a depot and a sled runs them to the Eye. Less walking."},
 	{"text": "Build an Ice-Breaker", "stat": "rigs", "target": 1, "reward": 400,
@@ -1021,15 +1026,15 @@ func capacity() -> int:
 func next_capacity() -> int: return CAPACITIES[mini(GameState.level("bucket") + 1, CAPACITIES.size() - 1)]
 func lines() -> int: return 1 + GameState.level("lines")
 func sale_mult() -> float:
-	return (1.0 + 0.15 * GameState.level("market") + SECTOR_PERK * stats.sectors + 0.1 * perk_level("favour")) * model.mod_info().value
+	return (1.0 + 0.10 * GameState.level("market") + SECTOR_PERK * stats.sectors + 0.1 * perk_level("favour")) * model.mod_info().value
 func bite_mult() -> float: return pow(0.88, GameState.level("bait"))
 func ride_mult() -> float: return RIDE_SPEED[mini(GameState.level("snowmobile"), RIDE_SPEED.size() - 1)] if riding else 1.0
 func walk_speed() -> float: return (6.0 + 1.6 * GameState.level("boots")) * ride_mult()
 func work_speed() -> float: return 1.0 + 0.6 * GameState.level("drill")
 func drill_time() -> float: return DRILL_BASE_TIME / work_speed()
 func wait_time(t: Dictionary) -> float: return randf_range(2.0, 5.0) * bite_mult() * model.wait_factor(t.c)
-func _auto_wait(t: Dictionary) -> float: return randf_range(6.0, 9.0) * bite_mult() * model.wait_factor(t.c)
-func auto_cost() -> float: return ceil(35.0 * pow(1.35, _count("auto")))
+func _auto_wait(t: Dictionary) -> float: return randf_range(AUTO_WAIT[0], AUTO_WAIT[1]) * bite_mult() * model.wait_factor(t.c)
+func auto_cost() -> float: return ceil(AUTO_BASE * pow(AUTO_GROWTH, _count("auto")))
 func smoker_cost() -> float: return ceil(90.0 * pow(1.5, _count("smoker")))
 func table_cost() -> float: return ceil(60.0 * pow(1.5, _count("table")))
 func free_space() -> int: return capacity() - carry.size()
@@ -1950,7 +1955,7 @@ func _belt_speed() -> float:
 	return BELT_SPEED * (1.0 + 0.25 * GameState.level("conveyor"))
 
 func _belt_mult() -> float:
-	return EYE_MULT * (1.0 + 0.25 * GameState.level("conveyor"))
+	return EYE_MULT * (1.0 + 0.15 * GameState.level("conveyor"))
 
 ## A fish drops into the Eye (hand-fed or off a belt): pays coins, counts toward the Eye's stages.
 func _feed_eye(f: Dictionary, mult: float) -> void:
@@ -2065,10 +2070,10 @@ func _count_belts(flag: String) -> int:
 
 func _build_cost(item: int) -> int:
 	match item:
-		0: return int(ceil(120.0 * pow(1.6, _count_belts("cannery"))))
-		1: return int(ceil(90.0 * pow(1.6, _count_belts("sorter"))))
+		0: return int(ceil(120.0 * pow(1.9, _count_belts("cannery"))))
+		1: return int(ceil(90.0 * pow(1.9, _count_belts("sorter"))))
 		2: return int(ceil(70.0 * pow(1.5, depots.size())))
-		_: return int(ceil(600.0 * pow(2.0, rigs.size())))
+		_: return int(ceil(RIG_BASE * pow(RIG_GROWTH, rigs.size())))
 
 ## Is p a legal spot for a free-standing building (depot / ice-breaker)?
 func _can_place_at(p: Vector3, radius: float) -> bool:
@@ -2105,7 +2110,7 @@ func _build_machine_visual(belt: Dictionary, kind: String) -> void:
 		_box(m, Vector3(0, 2.3, 0), Vector3(2.8, 0.2, 3.0), Color(0.88, 0.86, 0.98))
 		_box(m, Vector3(0.9, 3.0, 0.8), Vector3(0.5, 1.4, 0.5), Color(0.25, 0.25, 0.3))
 		_box(m, Vector3(0, 1.5, 1.42), Vector3(1.6, 0.9, 0.06), Color(1.0, 0.75, 0.35), "", 1.6)
-		var l := _label3d(m, Vector3(0, 3.2, 0), "CANNERY x1.8", 0.012)
+		var l := _label3d(m, Vector3(0, 3.2, 0), "CANNERY x1.5", 0.012)
 		l.modulate = Color(1.0, 0.9, 0.7)
 	else:
 		for sx in [-1.5, 1.5]:
@@ -2395,7 +2400,7 @@ func _tile_action_text(t: Dictionary) -> String:
 	return ""
 
 func _refund() -> int:
-	return int(floor(0.6 * 35.0 * pow(1.35, maxi(_count("auto") - 1, 0))))
+	return int(floor(0.6 * AUTO_BASE * pow(AUTO_GROWTH, maxi(_count("auto") - 1, 0))))
 
 func _prompt_for(a: String) -> String:
 	if a == "olga":
@@ -2751,7 +2756,7 @@ func _offline(away: float) -> void:
 			continue
 		var budget := away
 		while budget > 0.0 and model.tile_left(t.c) > 0:
-			budget -= 7.5 * bite_mult() * model.wait_factor(t.c)
+			budget -= (AUTO_WAIT[0] + AUTO_WAIT[1]) * 0.5 * bite_mult() * model.wait_factor(t.c)
 			if t.belt != null:
 				var f := _draw_fish(t)
 				if f.is_empty():
