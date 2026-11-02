@@ -82,6 +82,21 @@ func _ready() -> void:
 			await get_tree().create_timer(step[1]).timeout
 			get_viewport().get_texture().get_image().save_png("res://renders/shot_handoff_%s.png" % step[0])
 			print("saved handoff ", step[0])
+	# the awakening cutscene at six moments
+	if only == "awaken":
+		g.stats.eye_fed = 7000
+		g.eye_seen_stage = 4
+		g.scenery.set_eye_stage(4)
+		g.scenery.set_eye_open(0.8)
+		g.awaken_hold = true
+		for i in 10:
+			await get_tree().process_frame
+		g.guide.play_awakening(true)
+		for tt in [1.8, 3.2, 3.75, 4.9, 9.0, 13.2]:
+			g.guide.intro_t = tt - 0.05 if tt != 3.75 else g.guide.AWAKEN_OPEN - 0.02
+			await get_tree().create_timer(0.12 if tt != 3.75 else 0.35).timeout
+			get_viewport().get_texture().get_image().save_png("res://renders/shot_awaken_%d.png" % int(tt * 10))
+			print("saved awaken ", tt)
 	# staged mid-game: auto-rods with belts running into the Eye, fish riding them, the Eye partly fed
 	if only == "" or only == "belts":
 		GameState.currency = 99999.0

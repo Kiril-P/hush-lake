@@ -197,6 +197,8 @@ var offer_on := false
 var offer_a := 0.0
 var offer_bearing := 0.0
 var ripples_live := 0
+var hush := 0.0          # 0..1: the Eye holds its breath before waking (lids shut, glow low)
+var hush_target := 0.0
 
 var iris_mat: ShaderMaterial
 var funnel_mat: ShaderMaterial
@@ -588,6 +590,30 @@ func gulp(power := 1.0) -> void:
 	get_tree().create_timer(0.25).timeout.connect(func(): _spawn_ripple(1.0 + power * 0.6))
 	_emit_sparks(Color(1.0, 0.88, 0.5), 1.0)
 
+## The long breath before the awakening: lids close, glow drops.
+func prelude(on: bool) -> void:
+	hush_target = 1.0 if on else 0.0
+
+## THE moment: the lids snap open, the light surges, ripples roll out across the whole lake, the crystals jolt.
+func awaken() -> void:
+	hush_target = 0.0
+	flare = 2.4
+	flinch = 1.0
+	core_pulse = 1.0
+	wave = 0.0
+	wave_amp = 2.6
+	_spawn_ripple(3.0)
+	for pair in [[0.3, 2.2], [0.65, 1.7], [1.0, 1.3]]:
+		get_tree().create_timer(pair[0]).timeout.connect(func(): _spawn_ripple(pair[1]))
+	_emit_sparks(Color(1.0, 0.9, 0.55), 1.0)
+	get_tree().create_timer(0.5).timeout.connect(func(): _emit_sparks(Color(0.7, 1.0, 0.95), 1.0))
+	for g in crystals:
+		for n in g:
+			if n.visible:
+				var tw := create_tween()
+				tw.tween_property(n, "scale", Vector3.ONE * 1.3, 0.18).set_trans(Tween.TRANS_SINE)
+				tw.tween_property(n, "scale", Vector3.ONE, 0.9).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
 func landing_point(from: Vector3) -> Vector3:
 	var d := Vector2(from.x, from.z)
 	d = d.normalized() if d.length() > 0.1 else Vector2(0, 1)
@@ -643,10 +669,10 @@ func _blink() -> void:
 
 func _lid_amount() -> float:
 	var rest := lerpf(0.5, 0.0, clampf(open * 1.3, 0.0, 1.0))
-	return clampf(rest + blink_k * (1.0 - rest), 0.0, 1.0)
+	return clampf(maxf(rest + blink_k * (1.0 - rest), hush), 0.0, 1.0)
 
 func _apply_uniforms() -> void:
-	var g := clampf(0.25 + glow * 0.75, 0.0, 1.0)
+	var g := clampf(0.25 + glow * 0.75, 0.0, 1.0) * (1.0 - 0.55 * hush)
 	iris_mat.set_shader_parameter("t", t)
 	iris_mat.set_shader_parameter("glow", g)
 	iris_mat.set_shader_parameter("warmth", warmth)
@@ -676,8 +702,9 @@ func _process(delta: float) -> void:
 	flare = move_toward(flare, 0.0, delta * 1.5)
 	flinch = move_toward(flinch, 0.0, delta * 1.9)
 	core_pulse = move_toward(core_pulse, 0.0, delta * 3.0)
+	hush = move_toward(hush, hush_target, delta * (0.7 if hush_target > hush else 4.5))
 	blink_t -= delta
-	if blink_t <= 0.0:
+	if blink_t <= 0.0 and hush <= 0.0:
 		_blink()
 	offer_a = move_toward(offer_a, 1.0 if offer_on else 0.0, delta * 3.0)
 	marker.visible = offer_a > 0.01

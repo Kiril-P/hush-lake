@@ -12,6 +12,15 @@ const INTRO := [
 	[7.0, 9.8, "It is very hungry.\nAnd it pays well for what it is fed.", false],
 	[10.0, 12.4, "Olga: Drill a hole, dear. Catch a fish.\nCarry it to the Eye.", true],
 ]
+const AWAKEN := [
+	[0.4, 3.2, "The ice goes quiet.", false],
+	[4.4, 7.5, "It is awake.", false],
+	[8.0, 11.5, "Olga: Forty winters I have watched it, dear.\nIt never once looked back.", true],
+	[11.9, 14.9, "Every fish you feed it now is worth a quarter more.\nThe lake will remember you.", false],
+]
+const AWAKEN_LEN := 15.8
+const AWAKEN_OPEN := 3.6
+const AWAKEN_TITLE := 12.4
 const INTRO_LEN := 12.8
 const INTRO_FLY := 11.0
 const BAR_H := 78.0
@@ -99,6 +108,10 @@ var tip_t := 0.0
 var tip_scan_t := 0.0
 var intro_t := 0.0
 var intro_started := false
+var scene := "intro"          # "intro" or "awaken": both use the same letterboxed, input-locked machinery
+var skip_after := 1.0
+var awaken_opened := false
+var awaken_titled := false
 var cam_home := Vector3.ZERO
 var cam_pitch := 0.0
 var bars := 0.0
@@ -503,6 +516,25 @@ func _show_tip(text: String) -> void:
 # ---------- intro ----------
 func _begin_intro() -> void:
 	intro_started = true
+	scene = "intro"
+	skip_after = 1.0
+	_begin_scene()
+
+## The Eye wakes for the first time. Returns false if the cutscene is not played (tests, or one is already running).
+func play_awakening(force := false) -> bool:
+	if intro_active or (GameState.save_slot.begins_with("test") and not force):
+		return false
+	scene = "awaken"
+	skip_after = 2.5
+	awaken_opened = false
+	awaken_titled = false
+	_begin_scene()
+	game.scenery.eye_prelude(true)
+	game.sfx.play("rumble", -2.0)
+	game.sfx.play("swell", -4.0)
+	return true
+
+func _begin_scene() -> void:
 	intro_active = true
 	intro_t = 0.0
 	var cam: Camera3D = game.cam
@@ -511,7 +543,7 @@ func _begin_intro() -> void:
 	game.get_node("Player").set_process_unhandled_input(false)
 	game.view.visible = false
 	game.tool_view.visible = false
-	var own := [strip, tip_panel, arrow, bar_top, bar_bot, caption, skip_label]
+	var own := [strip, tip_panel, arrow, bar_top, bar_bot, caption, skip_label, game.flash_rect, game.reveal_title, game.reveal_sub, game.streak_label]
 	hidden_hud.clear()
 	for c in ui_root.get_children():  # a clean frame for the flyover
 		if c is Control and not own.has(c) and c.visible:
@@ -519,7 +551,8 @@ func _begin_intro() -> void:
 			hidden_hud.append(c)
 	game.prompt_label.text = ""
 	game.msg_label.text = ""
-	_apply_cam(0.0)
+	if scene == "intro":
+		_apply_cam(0.0)
 
 func _apply_cam(k: float) -> void:
 	var cam: Camera3D = game.cam
@@ -531,10 +564,15 @@ func _apply_cam(k: float) -> void:
 func _tick_intro(delta: float) -> void:
 	var before := intro_t
 	intro_t += delta
-	_apply_cam(clampf(intro_t / INTRO_FLY, 0.0, 1.0))
-	skip_label.modulate.a = lerpf(skip_label.modulate.a, 0.7 if intro_t > 1.2 else 0.0, minf(1.0, delta * 4.0))
+	var lines: Array = INTRO if scene == "intro" else AWAKEN
+	var length := INTRO_LEN if scene == "intro" else AWAKEN_LEN
+	if scene == "intro":
+		_apply_cam(clampf(intro_t / INTRO_FLY, 0.0, 1.0))
+	else:
+		_tick_awaken(before, delta)
+	skip_label.modulate.a = lerpf(skip_label.modulate.a, 0.7 if intro_t > skip_after + 0.2 else 0.0, minf(1.0, delta * 4.0))
 	var line_a := 0.0
-	for ln in INTRO:
+	for ln in lines:
 		var t0: float = ln[0]
 		var t1: float = ln[1]
 		if intro_t >= t0 and intro_t <= t1:
@@ -543,17 +581,73 @@ func _tick_intro(delta: float) -> void:
 				caption.add_theme_color_override("font_color", Style.AMBER if ln[3] else Style.CREAM)
 			line_a = clampf(minf((intro_t - t0) / 0.6, (t1 - intro_t) / 0.6), 0.0, 1.0)
 	caption.modulate.a = line_a
-	if before < 3.4 and intro_t >= 3.4 and is_instance_valid(game.scenery):
+	if scene == "intro" and before < 3.4 and intro_t >= 3.4 and is_instance_valid(game.scenery):
 		game.scenery.pulse_eye()
 		game.sfx.play("rare", -12.0, 0.6)
-	if intro_t >= INTRO_LEN:
+	if intro_t >= length:
 		skip_intro()
+
+## The awakening: pull up and back, hold the breath, then the Eye opens and everything answers.
+func _tick_awaken(before: float, delta: float) -> void:
+	var cam: Camera3D = game.cam
+	var t := intro_t
+	var rise := sin(PI * clampf(t / 13.5, 0.0, 1.0))
+	rise = rise * rise * (3.0 - 2.0 * rise)
+	cam.position = cam_home + Vector3(0.0, 11.0 * rise, 7.0 * rise)
+	cam.rotation.x = lerpf(cam_pitch, deg_to_rad(-22.0), rise)
+	cam.rotation.y = 0.16 * sin(t * 0.45) * rise
+	var pl: Node3D = game.get_node("Player")
+	var off := Vector2(pl.global_position.x, pl.global_position.z)
+	if t < 2.5 and off.length() > 3.0:
+		pl.rotation.y = lerp_angle(pl.rotation.y, atan2(off.x, off.y), minf(1.0, delta * 2.5))
+	if t < AWAKEN_OPEN:
+		game.cine_fov = -5.0 * clampf(t / AWAKEN_OPEN, 0.0, 1.0)
+		game.shake = maxf(game.shake, 0.012 + 0.02 * clampf(t / AWAKEN_OPEN, 0.0, 1.0))
+	else:
+		game.cine_fov = lerpf(14.0, 0.0, clampf((t - AWAKEN_OPEN) / 3.5, 0.0, 1.0))
+	if not awaken_opened and t >= AWAKEN_OPEN:
+		_awaken_open(false)
+	if not awaken_titled and t >= AWAKEN_TITLE:
+		awaken_titled = true
+		game.reveal_title.text = "THE EYE IS AWAKE"
+		game.reveal_sub.text = "+25% fish value   -   +3 pearls   -   a 7th Ice-Breaker   -   deeper lakes"
+		var tw := create_tween()
+		tw.tween_property(game.reveal_title, "modulate:a", 1.0, 0.6)
+		tw.tween_interval(AWAKEN_LEN - AWAKEN_TITLE - 1.8)
+		tw.tween_property(game.reveal_title, "modulate:a", 0.0, 0.8)
+		var tw2 := create_tween()
+		tw2.tween_property(game.reveal_sub, "modulate:a", 1.0, 0.6).set_delay(0.5)
+		tw2.tween_interval(AWAKEN_LEN - AWAKEN_TITLE - 2.3)
+		tw2.tween_property(game.reveal_sub, "modulate:a", 0.0, 0.8)
+
+func _awaken_open(instant: bool) -> void:
+	awaken_opened = true
+	game.awaken_hold = false
+	game.scenery.set_eye_open(game.eye_open_frac())
+	game.scenery.eye_stage_up(game.EYE_STAGES.size())
+	game.scenery.eye_awaken()
+	if not instant:
+		game.flash_rect.color = Color(1.0, 0.95, 0.8, 0.85)
+		var fl := create_tween()
+		fl.tween_property(game.flash_rect, "color:a", 0.0, 2.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		game.shake = 0.3
+		game.sfx.play("awaken", 0.0)
+		game.sfx.play("rare", -6.0, 0.8)
 
 func skip_intro() -> void:
 	if not intro_active:
 		return
+	var was := scene
 	intro_active = false
 	want_intro = false
+	if was == "awaken":
+		if not awaken_opened:
+			_awaken_open(true)
+		game.scenery.eye_prelude(false)
+		game.cine_fov = 0.0
+		game.reveal_title.modulate.a = 0.0
+		game.reveal_sub.modulate.a = 0.0
+		game.awaken_hold = false
 	var cam: Camera3D = game.cam
 	cam.position = cam_home
 	cam.rotation.x = cam_pitch
@@ -567,7 +661,10 @@ func skip_intro() -> void:
 	hidden_hud.clear()
 	caption.modulate.a = 0.0
 	skip_label.modulate.a = 0.0
-	game._say("Olga: Drill a hole, dear. Catch a fish. Carry it to the Eye.")
+	if was == "intro":
+		game._say("Olga: Drill a hole, dear. Catch a fish. Carry it to the Eye.")
+	else:
+		game._say("Olga: %s\nNew: %s" % [game.EYE_LINES[game.EYE_STAGES.size() - 1], game.EYE_BOONS[game.EYE_STAGES.size() - 1]])
 
 # ---------- save ----------
 func to_dict() -> Dictionary:

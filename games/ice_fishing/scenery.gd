@@ -271,6 +271,12 @@ func set_eye_stage(st: int) -> void:
 func eye_stage_up(st: int) -> void:
 	eye.stage_up(st)
 
+func eye_prelude(on: bool) -> void:
+	eye.prelude(on)
+
+func eye_awaken() -> void:
+	eye.awaken()
+
 func eye_gulp(power := 1.0) -> void:
 	eye.gulp(power)
 

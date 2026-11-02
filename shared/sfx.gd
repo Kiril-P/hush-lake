@@ -29,6 +29,10 @@ func _ready() -> void:
 	streams["plop"] = _wav(_tone(420.0, 160.0, 0.16, 18.0, 0.6))
 	streams["hook"] = _wav(_mix([_noise(0.16, 0.5, 20.0, 0.45), _tone(500.0, 1100.0, 0.1, 22.0, 0.35)]))
 	streams["reel"] = _wav(_noise(0.04, 0.8, 70.0, 0.55))
+	streams["rumble"] = _wav(_mix([_noise(3.4, 0.012, 0.25, 0.55), _tone(48.0, 38.0, 3.4, 0.3, 0.4)]))
+	streams["swell"] = _wav(_swell(110.0, 330.0, 3.5, 0.4))
+	streams["awaken"] = _wav(_mix([_tone(110.0, 110.0, 3.2, 1.0, 0.32), _tone(220.0, 220.0, 3.0, 1.2, 0.26), _tone(330.0, 330.0, 2.8, 1.4, 0.2),
+		_tone(440.0, 440.0, 2.6, 1.6, 0.17), _tone(660.0, 660.0, 2.2, 2.0, 0.12), _tone(1320.0, 1320.0, 1.6, 3.0, 0.08), _noise(0.7, 0.25, 4.0, 0.45)]))
 	streams["wind"] = _wav(_wind(6.0), true)
 	streams["pad"] = _wav(_pad(8.0), true)
 
@@ -95,6 +99,19 @@ func _noise(dur: float, k: float, decay: float, vol: float) -> PackedFloat32Arra
 		var t := float(i) / RATE
 		y += (randf_range(-1.0, 1.0) - y) * k
 		out[i] = y * exp(-decay * t) * vol * 3.0
+	return out
+
+## A tone that grows from nothing: tension before something happens.
+func _swell(f0: float, f1: float, dur: float, vol: float) -> PackedFloat32Array:
+	var n := int(dur * RATE)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		var k := t / dur
+		phase += TAU * lerpf(f0, f1, k * k) / RATE
+		out[i] = (sin(phase) + 0.5 * sin(phase * 1.5)) * k * k * vol * minf(1.0, (dur - t) / 0.05)
 	return out
 
 func _mix(parts: Array) -> PackedFloat32Array:

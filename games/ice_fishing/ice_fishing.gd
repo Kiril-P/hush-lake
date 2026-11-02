@@ -265,6 +265,8 @@ var reveal_sub: Label
 var reveal_t := 0.0
 var reveal_total := 1.0
 var reveal_fov := 0.0
+var cine_fov := 0.0           # set by the guide during cutscenes
+var awaken_hold := false      # the Eye stays at stage 4 visually until the awakening cutscene opens it
 var card_panel: PanelContainer
 var card_rarity: Label
 var card_name: Label
@@ -1373,8 +1375,8 @@ func _refresh() -> void:
 		hotbar_panels[i].add_theme_stylebox_override("panel", Style.slot(i == tool, not _tool_unlocked(i)))
 	if scenery:
 		scenery.set_eye_glow(float(model.cleared_count()) / model.sectors.size() * 1.4)
-		scenery.set_eye_open(eye_open_frac())
-		scenery.set_eye_stage(eye_seen_stage)
+		scenery.set_eye_open(minf(eye_open_frac(), 0.8) if awaken_hold else eye_open_frac())
+		scenery.set_eye_stage(eye_seen_stage - 1 if awaken_hold else eye_seen_stage)
 		scenery.set_crane(GameState.level("conveyor") >= 2)
 	if journal_panel.visible:
 		_update_journal()
@@ -1667,6 +1669,7 @@ func _process(delta: float) -> void:
 	if guide.intro_active:
 		prompt_label.text = ""
 		msg_label.text = ""
+		_animate(delta)
 		return
 	var pp3: Vector3 = $Player.global_position
 	scenery.set_eye_offering(captured and not carry.is_empty() and Vector2(pp3.x, pp3.z).length() - EYE_R <= RANGE_EYE + 4.0, pp3)
@@ -1698,7 +1701,7 @@ func _animate(delta: float) -> void:
 			cam.rotation.x = lerpf(cam.rotation.x, deg_to_rad(-12.0), minf(1.0, delta * 2.0))
 	else:
 		reveal_fov = 0.0
-	cam.fov = BASE_FOV + fov_kick + ride_fov + reveal_fov
+	cam.fov = BASE_FOV + fov_kick + ride_fov + reveal_fov + cine_fov
 	tool_kick = move_toward(tool_kick, 0.0, delta * 3.0)
 	var any_cast := false
 	for h in holes:
@@ -1741,7 +1744,7 @@ func _animate(delta: float) -> void:
 	for id in sector_labels:
 		var sp: Vector3 = sector_labels[id].pos
 		var dist := Vector2(sp.x - pp.x, sp.z - pp.z).length()
-		sector_labels[id].label.visible = reveal_t <= 0.0 and dist < (62.0 if model.sectors[id].unlocked else 22.0)
+		sector_labels[id].label.visible = reveal_t <= 0.0 and not guide.intro_active and dist < (62.0 if model.sectors[id].unlocked else 22.0)
 
 func _walk(delta: float) -> void:
 	if guide.intro_active:
@@ -2183,12 +2186,20 @@ func _eye_stage_up(st: int) -> void:
 	_log("EYE stage %d" % st)
 	sfx.play("rare")
 	shake = maxf(shake, 0.1)
-	_stage_reveal(st)
-	_say("Olga: %s\nNew: %s" % [EYE_LINES[st - 1], EYE_BOONS[st - 1]])
-	if st >= EYE_STAGES.size() and stats.awakened == 0:
+	var first_awake: bool = st >= EYE_STAGES.size() and stats.awakened == 0
+	if first_awake:
 		stats.awakened = 1
 		GameState.meta.pearls = _meta_int("pearls") + AWAKEN_PEARLS
 		_log("EYE AWAKE")
+	if first_awake and not GameState.meta.get("awaken_seen", false):
+		awaken_hold = true
+		if guide.play_awakening():
+			GameState.meta["awaken_seen"] = true
+			_refresh()
+			return
+		awaken_hold = false
+	_stage_reveal(st)
+	_say("Olga: %s\nNew: %s" % [EYE_LINES[st - 1], EYE_BOONS[st - 1]])
 	scenery.set_eye_open(eye_open_frac())
 	scenery.eye_stage_up(st)
 	_refresh()
@@ -3027,7 +3038,7 @@ func _new_game() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if guide.intro_active:
-		if guide.intro_t > 1.0 and ((event is InputEventMouseButton and event.pressed) or (event is InputEventKey and event.pressed and event.keycode in [KEY_SPACE, KEY_ENTER, KEY_E])):
+		if guide.intro_t > guide.skip_after and ((event is InputEventMouseButton and event.pressed) or (event is InputEventKey and event.pressed and event.keycode in [KEY_SPACE, KEY_ENTER, KEY_E])):
 			guide.skip_intro()
 		return
 	if event is InputEventKey and event.pressed and not event.echo:

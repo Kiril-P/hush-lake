@@ -151,5 +151,34 @@ func _ready() -> void:
 	gd.skip_intro()
 	check("skip ends the intro and restores the camera", not gd.intro_active and g.cam.position.length() < 0.01 and absf(g.cam.rotation.y) < 0.001)
 	check("walking works again", gd.intro_t == t0)
+	# --- the awakening cutscene
+	check("the cutscene is skipped in test slots", not gd.play_awakening())
+	var eye = g.scenery.eye
+	g.awaken_hold = true
+	check("the cutscene plays when forced", gd.play_awakening(true) and gd.intro_active and gd.scene == "awaken")
+	gd.intro_t = 3.0
+	await get_tree().create_timer(0.5).timeout
+	check("before the open the Eye holds its breath", eye.hush > 0.3 and not gd.awaken_opened)
+	check("the camera has pulled up and back", g.cam.position.y > 2.0)
+	check("the stage-5 crystals are not shown yet", not eye.crystals[4][0].visible)
+	gd.intro_t = gd.AWAKEN_OPEN + 0.05
+	await get_tree().create_timer(0.4).timeout
+	check("the Eye opens: crystals appear, hold released", gd.awaken_opened and eye.crystals[4][0].visible and not g.awaken_hold)
+	check("the flash and shake fire", g.flash_rect.color.a > 0.3 and g.shake > 0.05)
+	await get_tree().create_timer(1.5).timeout
+	check("the lids are open again", eye.hush == 0.0)
+	gd.intro_t = gd.AWAKEN_TITLE + 0.1
+	await get_tree().create_timer(0.3).timeout
+	check("the title appears near the end", g.reveal_title.text == "THE EYE IS AWAKE")
+	gd.skip_intro()
+	check("skipping restores control", not gd.intro_active and g.cam.position.length() < 0.01 and g.cine_fov == 0.0 and g.reveal_title.modulate.a == 0.0)
+	# skipping before the open still ends in the awake state
+	eye.set_stage(4)
+	g.awaken_hold = true
+	gd.play_awakening(true)
+	await get_tree().create_timer(0.2).timeout
+	gd.skip_intro()
+	await get_tree().create_timer(0.3).timeout
+	check("an early skip still wakes the Eye", eye.crystals[4][0].visible and not g.awaken_hold and eye.hush == 0.0)
 	print("GUIDE %s (%d failures)" % ["PASS" if fails == 0 else "FAIL", fails])
 	get_tree().quit(1 if fails > 0 else 0)
