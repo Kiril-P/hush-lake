@@ -26,6 +26,7 @@ const SHOP_SPOTS := {
 	"wide":     [168.0, 44.0],
 	"conveyor": [-140.0, 50.0],
 	"snowmobile": [-14.0, 36.0],
+	"kick":     [21.0, 24.0],
 }
 
 var noise := FastNoiseLite.new()
@@ -937,6 +938,12 @@ func decorate_stall(s: Node3D, id: String) -> void:
 				_box(s, Vector3(3.7, gy + 0.12, sz), Vector3(3.2, 0.08, 0.2), iron)
 			_box(s, Vector3(5.0, gy + 0.55, -0.8), Vector3(0.1, 0.18, 0.4), _mat(Color(1.0, 0.92, 0.6), 3.0))
 			_box(s, Vector3(1.0, gy + 0.3, -0.8), Vector3(1.6, 0.5, 1.0), wood)   # the sled behind it
+		"kick":
+			for k in 3:   # a rack of shove boards and a heavy boot to try
+				_box(s, Vector3(3.0 + k * 0.5, gy + 0.6, -0.6), Vector3(0.12, 1.2, 0.9), wood)
+			_box(s, Vector3(3.5, gy + 1.25, -0.6), Vector3(1.4, 0.08, 1.0), iron)
+			_box(s, Vector3(-3.2, gy + 0.25, -0.5), Vector3(0.9, 0.5, 0.4), dark)
+			_box(s, Vector3(-3.2, gy + 0.55, -0.6), Vector3(0.5, 0.5, 0.3), dark)
 		"conveyor":
 			var gear := CylinderMesh.new()
 			gear.top_radius = 1.3

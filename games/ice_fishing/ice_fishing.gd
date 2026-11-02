@@ -18,6 +18,7 @@ const SfxScript := preload("res://shared/sfx.gd")
 const LakeModelScript := preload("res://games/ice_fishing/lake_model.gd")
 const LakeMapScript := preload("res://games/ice_fishing/lake_map.gd")
 const GuideScript := preload("res://games/ice_fishing/guide.gd")
+const YardScript := preload("res://games/ice_fishing/fish_yard.gd")
 
 const TILE := 7.0            # hex radius of a fish cell. Cells are invisible now: the lake is open ice
 const EYE_R := 10.0          # the Eye at the centre of the lake (see scenery.gd)
@@ -37,6 +38,11 @@ const SORTER_MULT := 1.6                    # a sorter: fish worth 5+ get x1.6
 const DEPOT_MULT := 1.05                    # a depot's sled run pays a little less than hand-feeding the Eye
 const BUILD_ITEMS := ["Cannery", "Sorter", "Depot", "Ice-Breaker"]
 const FEED_NOTES := [0, 2, 4, 7, 9, 12, 14, 16, 19, 21]   # semitones: a hand-fed streak climbs a pentatonic scale
+const KICK_MIN := 7.0                                    # a tap kick sends a fish ~8 m over the ice
+const KICK_BASE_MAX := 16.0                               # a fully charged kick (more with Kick Power)
+const KICK_CHARGE_TIME := 0.9
+const KICK_REACH := 3.6
+const PICKUP_RADIUS := 3.8
 const DIVE_MAX := 16                                      # belt fish diving into the funnel at once (visual only)
 const RIG_INTERVAL := 7.0
 const RIG_BASE := 900.0
@@ -111,6 +117,7 @@ const UPGRADES := {
 	"sonar":    {"name": "Sonar",       "base": 40.0,  "growth": 2.0,  "max": 3, "desc": "see the fish under the ice"},
 	"wide":     {"name": "Wide Drill",  "base": 60.0,  "growth": 2.2,  "max": 3, "desc": "drilling opens neighbours"},
 	"snowmobile": {"name": "Snowmobile", "base": 90.0, "growth": 2.6, "max": 3, "desc": "V to ride: faster. Lv3 tows a sled (+10 carry)"},
+	"kick":     {"name": "Kick Power", "base": 20.0,  "growth": 1.8,  "max": 5, "start": true, "desc": "kicks send fish farther"},
 	"conveyor": {"name": "Belt Motor",  "base": 140.0, "growth": 2.3,  "max": 4, "desc": "belts run faster, +15% value"},
 }
 
@@ -313,6 +320,10 @@ var eye_label: Label
 var eye_next_label: Label
 var start_panel: PanelContainer
 var guide: Guide
+var yard: FishYard
+var kick_charge := -1.0       # right mouse held: 0..1, or -1 when not charging
+var kicks := 0
+var player_prev := Vector3.ZERO
 var work_bar: ProgressBar
 
 func _ready() -> void:
@@ -355,6 +366,13 @@ func _ready() -> void:
 	var fresh_lake := GameState.extra.is_empty()
 	model.generate(randi(), String(GameState.meta.get("next_mod", "")) if fresh_lake else "", _meta_int("lakes") if fresh_lake else 0)
 	_build_world()
+	yard = YardScript.new()
+	add_child(yard)
+	yard.obstacles = scenery.obstacles
+	yard.eye_r = EYE_R
+	yard.pupil_r = PUPIL_R
+	yard.swallowed.connect(_on_fish_swallowed)
+	yard.landed.connect(func(_f, impact): sfx.play("plop", -10.0 + minf(impact, 8.0) * 0.5, randf_range(0.8, 1.2)))
 	_build_ui()
 	for c in model.tile_sector:
 		_make_tile(c)
@@ -978,7 +996,7 @@ func _build_ui() -> void:
 	title.text = "HUSH LAKE"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	start_label = _plain(sbox, 20)
-	start_label.text = "Click to play\n\nDrill a hole (1), fish it (2), carry the catch to the Eye\nLost? Press H and Olga points the way\n\nWASD walk   V snowmobile   Tab journal   R refreeze\nM mute   Esc free mouse   (N while paused: start over)"
+	start_label.text = "Click to play\n\nDrill a hole (1), fish it (2). Your catch drops onto the ice: push it into the Eye\nWalk into fish, or hold right mouse and let go to kick them. E picks them up.\nLost? Press H and Olga points the way\n\nWASD walk   V snowmobile   Tab journal   R refreeze\nM mute   Esc free mouse   (N while paused: start over)"
 	start_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	start_panel = _panel(ui, sbox)
 	start_panel.set_anchors_preset(Control.PRESET_CENTER)
@@ -1665,6 +1683,9 @@ func _process(delta: float) -> void:
 		prompt_label.text = "" if raw == "ice" else "Too far - walk closer"
 	else:
 		prompt_label.text = _prompt_for(a)
+	_tick_yard(delta, captured)
+	if captured and a == "" and yard.near($Player.global_position, PICKUP_RADIUS + 1.0) > 0 and not guide.intro_active:
+		prompt_label.text = _yard_hint()
 	guide.tick(delta, captured)
 	if guide.intro_active:
 		prompt_label.text = ""
@@ -1674,6 +1695,9 @@ func _process(delta: float) -> void:
 	var pp3: Vector3 = $Player.global_position
 	scenery.set_eye_offering(captured and not carry.is_empty() and Vector2(pp3.x, pp3.z).length() - EYE_R <= RANGE_EYE + 4.0, pp3)
 	_update_hold(a, delta)
+	if kick_charge >= 0.0:
+		work_bar.visible = true
+		work_bar.value = kick_charge
 	view.position.y = -0.4 + sin(Time.get_ticks_msec() * 0.002) * 0.005
 	_animate(delta)
 
@@ -1745,6 +1769,81 @@ func _animate(delta: float) -> void:
 		var sp: Vector3 = sector_labels[id].pos
 		var dist := Vector2(sp.x - pp.x, sp.z - pp.z).length()
 		sector_labels[id].label.visible = reveal_t <= 0.0 and not guide.intro_active and dist < (62.0 if model.sectors[id].unlocked else 22.0)
+
+# ---------- fish on the ice ----------
+func no_kicks_yet() -> bool:
+	return kicks == 0
+
+func _kick_max() -> float:
+	return KICK_BASE_MAX + 3.0 * GameState.level("kick")
+
+func _yard_hint() -> String:
+	return "Walk into fish to push them   Right mouse: kick (hold = harder)   E: pick up"
+
+func _tick_yard(delta: float, captured: bool) -> void:
+	var pl: Node3D = $Player
+	var ppos := pl.global_position
+	yard.player_speed = Vector2(ppos.x - player_prev.x, ppos.z - player_prev.z).length() / maxf(delta, 0.0001) if player_prev != Vector3.ZERO else 0.0
+	yard.player_speed = minf(yard.player_speed, 14.0)
+	player_prev = ppos
+	yard.pull = 3.4 + 0.9 * eye_stage()
+	yard.step(delta, ppos)
+	if kick_charge >= 0.0:
+		if captured and not guide.intro_active:
+			kick_charge = minf(kick_charge + delta / KICK_CHARGE_TIME, 1.0)
+			tool_kick = -0.35 * kick_charge
+		else:
+			kick_charge = -1.0
+
+func _start_kick() -> void:
+	kick_charge = 0.0
+
+## Release the right mouse button: everything in front of your boots flies off the way you are facing.
+func _release_kick() -> void:
+	if kick_charge < 0.0:
+		return
+	var power := lerpf(KICK_MIN, _kick_max(), kick_charge)
+	kick_charge = -1.0
+	var pl: Node3D = $Player
+	var fwd := -pl.global_basis.z
+	fwd.y = 0.0
+	fwd = fwd.normalized()
+	var hit := yard.kick(pl.global_position, fwd, power, KICK_REACH)
+	_kick_tool(1.4)
+	view_pop = 0.5
+	if hit > 0:
+		kicks += 1
+		sfx.play("cast", -3.0, 0.7 + power * 0.03)
+		sfx.play("plop", -6.0, 0.7)
+		shake = maxf(shake, 0.01 + 0.002 * power)
+		fov_kick = maxf(fov_kick, 2.0)
+	else:
+		sfx.play("tick", -8.0, 0.6)
+
+## E: scoop the loose fish around your feet into your bucket (as many as it holds).
+func _pick_up_fish() -> void:
+	var pp: Vector3 = $Player.global_position
+	if yard.near(pp, PICKUP_RADIUS) == 0:
+		_say("No fish within reach.")
+		return
+	if free_space() <= 0:
+		_say("Your bucket is full - feed the Eye (click it) or buy a bigger bucket.")
+		sfx.play("deny")
+		return
+	var got := yard.collect(pp, PICKUP_RADIUS, free_space())
+	for f in got:
+		_add_carry(f)
+	sfx.play("plop", -2.0, 1.4)
+	view_pop = 1.0
+	_refresh_view()
+	_refresh()
+
+## A loose fish crossed into the pupil: the Eye eats it (pays now) and it spirals down the funnel.
+func _on_fish_swallowed(f: Dictionary, holder: Node3D, pos: Vector3) -> void:
+	_feed_eye(f, EYE_MULT, true)
+	var tw := create_tween()
+	_spiral_into_eye(tw, holder, [pos, pos], 0.5)
+	tw.tween_callback(holder.queue_free)
 
 func _walk(delta: float) -> void:
 	if guide.intro_active:
@@ -1877,6 +1976,9 @@ func _line_anchor() -> Vector3:
 
 ## Click on a hole with the rod: the float arcs out from the rod tip and lands with a plop.
 func _cast(t: Dictionary) -> void:
+	for h in holes:  # one line at a time: casting a new one reels the old one in
+		if h != t and h.state == "hole" and h.cast in [1, 2]:
+			_end_cast(h)
 	t.cast = 1
 	t.timer = wait_time(t)
 	t.nib = []
@@ -1937,7 +2039,7 @@ func _fight_intensity(f: Dictionary) -> float:
 
 ## Click during the bite: the fish is hooked and the fight starts. What you hooked decides how long it lasts.
 func _hook(t: Dictionary) -> void:
-	var n := mini(lines(), free_space())
+	var n := lines()
 	var got := []
 	for i in n:
 		var f := _draw_fish(t)
@@ -1946,7 +2048,7 @@ func _hook(t: Dictionary) -> void:
 		got.append(f)
 	if got.is_empty():
 		_end_cast(t)
-		_say("Nothing left to catch here." if n > 0 else "Your hands were full - it got away!")
+		_say("Nothing left to catch here.")
 		_after_draw(t)
 		_refresh()
 		return
@@ -2580,6 +2682,13 @@ func _aim() -> String:
 	var a := _aim_raw()
 	return a if _in_range(a) else ""
 
+## One line at a time: is another hole already fishing?
+func _other_line(t: Dictionary) -> bool:
+	for h in holes:
+		if h != t and h.state == "hole" and h.cast > 0:
+			return true
+	return false
+
 func _hole_of(a: String) -> Dictionary:
 	if not a.begins_with("hole:"):
 		return {}
@@ -2607,7 +2716,7 @@ func _tile_action_text(t: Dictionary) -> String:
 				if tool == 3 and _tool_unlocked(3): return "Click: build Smoker (%d)" % smoker_cost()
 				if tool == 4 and _tool_unlocked(4): return "Click: build Gut Table (%d)" % table_cost()
 				return "Fished out (build a Smoker/Table here with 4/5)"
-			if tool == 1: return "Click: cast line" if free_space() > 0 else "Hands full - feed the Eye first"
+			if tool == 1: return "Click: cast line" if not _other_line(t) else "Click: cast here (reels in your other line)"
 			if tool == 2: return "Click: build Auto-Rod (%d)" % auto_cost()
 			if tool == 5: return "Build an Auto-Rod here first (3)"
 			return "Hole (2: Rod)"
@@ -2652,7 +2761,7 @@ func _prompt_for(a: String) -> String:
 		if carry.is_empty():
 			if eye_stage() >= TITHE_MIN_STAGE:
 				return "Click: tithe %d coins to the Eye  (Lv %d, +%d%% value)" % [tithe_cost(), stats.tithe, int(TITHE_BONUS * 100.0 * stats.tithe)]
-			return "The Eye (carry fish here, or run belts into it)"
+			return "The Eye: push fish into it (or click with a full bucket)"
 		return "Click: feed %d fish to the Eye for %d coins" % [carry.size(), floor(carry_worth() * EYE_MULT)]
 	if a.begins_with("depot:"):
 		return "Click: send %d fish to the Eye by sled" % carry.size() if not carry.is_empty() else "Depot (carry fish here: a sled runs them to the Eye)"
@@ -2912,7 +3021,7 @@ func _on_about_to_save() -> void:
 			"so": t.belt != null and t.belt.get("sorter", false)})
 	var p: Node3D = $Player
 	GameState.extra = {"holes": hl, "stats": stats, "goals": goal_done, "unlocked": unlocked, "journal": journal, "records": records, "tips": guide.to_dict(),
-		"carry": carry.map(_fish_to), "tool": tool, "pos": [p.position.x, p.position.z],
+		"carry": carry.map(_fish_to), "loose": yard.fish.map(func(e): return {"f": _fish_to(e.f), "p": [e.pos.x, e.pos.z]}), "tool": tool, "pos": [p.position.x, p.position.z],
 		"yaw": p.rotation.y, "pitch": cam.rotation.x,
 		"day": day_t, "time": play_time,
 		"depots": depots.map(func(d): return [d.pos.x, d.pos.z]), "rigs": rigs.map(func(rg): return [rg.pos.x, rg.pos.z]),
@@ -2937,6 +3046,8 @@ func _restore(d: Dictionary) -> bool:
 		journal[k] = int(d.journal[k])
 	for fd in d.get("carry", []):
 		carry.append(_fish_from(fd))
+	for ld in d.get("loose", []):
+		yard.spawn(_fish_from(ld.f), Vector3(ld.p[0], FishYard.GROUND, ld.p[1]), Vector3.ZERO)
 	for hd in d.get("holes", []):
 		var t := _make_hole(Vector3(hd.p[0], 0.0, hd.p[1]), false)
 		if t.is_empty():
@@ -3074,6 +3185,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.keycode == KEY_V:
 			_toggle_ride()
 			return
+		if event.keycode == KEY_E:
+			_pick_up_fish()
+			return
 		if event.keycode == KEY_Q and tool == 6:
 			build_item = (build_item + 1) % BUILD_ITEMS.size()
 			_say("Build: %s (%d coins)" % [BUILD_ITEMS[build_item], _build_cost(build_item)])
@@ -3092,6 +3206,11 @@ func _unhandled_input(event: InputEvent) -> void:
 				_refresh()
 			else:
 				_say("Locked - complete goals to unlock.")
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		if event.pressed:
+			_start_kick()
+		else:
+			_release_kick()
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT \
 			and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED \
 			and not refreeze_panel.visible:
@@ -3174,9 +3293,10 @@ func _click(a: String) -> void:
 				if model.tile_left(t.c) == 0:
 					_say("This patch is fished out.")
 					return
-				if free_space() <= 0:
-					_say("Hands full - feed the Eye first!")
-					return
+				for h in holes:
+					if h != t and h.state == "hole" and h.cast == 3:
+						_say("Finish landing this fish first.")
+						return
 				_cast(t)
 			elif tool == 2 and _tool_unlocked(2):
 				if _spend(auto_cost()):
@@ -3279,7 +3399,6 @@ func _catch(t: Dictionary) -> void:
 		if f.get("len", 0.0) > records.get(f.name, 0.0):
 			new_record = new_record or records.has(f.name)
 			records[f.name] = f.len
-		_add_carry(f)
 		if best.is_empty() or f.base > best.base:
 			best = f
 	_launch_catch(t, got, best)
@@ -3305,33 +3424,19 @@ func _launch_catch(t: Dictionary, got: Array, best: Dictionary) -> void:
 		FishingFX.beam(self, hole_pos, best.color, 5.0 + inten * 2.0)
 		FishingFX.ripple(t.node, Vector3(0, 0.1, 0), 4.5, best.color, 1.4, 1.0)
 		_burst(hole_pos + Vector3(0, 0.6, 0), best.color, 16, 4.5, 1.0, 0.07)
+	var to_player: Vector3 = $Player.global_position - hole_pos
+	to_player.y = 0.0
+	to_player = to_player.normalized() if to_player.length() > 0.1 else Vector3.RIGHT
 	for i in got.size():
 		var f: Dictionary = got[i]
-		var holder := Node3D.new()
-		add_child(holder)
-		var fm: FishNode = _fish_mesh(f, holder, 2.4) as FishNode
-		fm.amp = 3.0
-		fm.rate = 14.0
-		holder.global_position = hole_pos + Vector3(0, 0.2, 0)
-		var last := i == got.size() - 1
-		var arc := 2.6 + inten * 0.5
-		var spin := TAU * (1.5 + 0.5 * i) * (1.0 if i % 2 == 0 else -1.0)
-		var tw := create_tween()
-		tw.tween_interval(0.13 * i)
-		tw.tween_method(func(k: float):
-			var tgt := _hand_point()
-			var from := hole_pos + Vector3(0, 0.2, 0)
-			holder.global_position = from.lerp(tgt, k) + Vector3(0, sin(k * PI) * arc, 0)
-			var dir := (tgt - from) * Vector3(1, 0, 1)
-			holder.rotation = Vector3(k * spin, atan2(-dir.z, dir.x), sin(k * PI) * 0.7)
-			fm.amp = lerpf(3.0, 0.8, k)
-			holder.scale = Vector3.ONE * lerpf(1.0, 0.55, k * k), 0.0, 1.0, 0.7).set_trans(Tween.TRANS_LINEAR)
-		tw.tween_callback(func():
-			holder.queue_free()
-			sfx.play("plop", -4.0, randf_range(1.0, 1.3))
-			view_pop = 1.0
-			if last:
-				_refresh_view())
+		# out of the hole in an arc, toward you (a little wild), then it falls, bounces and slides
+		var dir := to_player.rotated(Vector3.UP, randf_range(-0.5, 0.5) + 0.35 * (i % 3 - 1))
+		var up := 6.0 + inten * 0.6
+		var out := randf_range(2.2, 3.6) + 0.5 * i
+		var e := yard.spawn(f, hole_pos + Vector3(0, 0.3, 0), dir * out + Vector3(0, up, 0))
+		e.spin = randf_range(-12.0, 12.0)
+	sfx.play("plop", -4.0, randf_range(1.0, 1.3))
+	view_pop = 1.0
 
 func _rarity(name: String) -> Array:
 	var v := _species_value(name)

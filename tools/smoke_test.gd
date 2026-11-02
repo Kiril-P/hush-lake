@@ -115,14 +115,16 @@ func _ready() -> void:
 	g._click("hole:%d" % t.idx)
 	check("clicking the bite hooks the fish and starts the fight", t.cast == 3 and t.hooked.size() == 1)
 	g._click("hole:%d" % t.idx)
-	check("clicking mid-fight does nothing", t.cast == 3 and g.carry.is_empty())
+	check("clicking mid-fight does nothing", t.cast == 3 and g.carry.is_empty() and g.yard.count() == 0)
 	t.fight = 0.0
 	g._tick_hole(t, 0.1)
-	check("catch fills hands", g.carry.size() == 1 and t.cast == 0)
-	check("the catch has a length and a record", g.carry[0].len > 0.0 and g.records.has(g.carry[0].name))
+	check("the catch drops onto the ice as a real fish", g.yard.count() == 1 and g.carry.is_empty() and t.cast == 0)
+	g.carry.append_array(g.yard.collect(Vector3.ZERO, 9999.0, 1))   # (the physical side has its own test: tools/run_yard.sh)
+	check("the catch has a length and a record", g.carry.size() == 1 and g.carry[0].len > 0.0 and g.records.has(g.carry[0].name))
 	check("catch removes a fish from the lake", g.model.tile_left(t.c) == left_before - 1)
 	g._click("hole:%d" % t.idx)
-	check("cannot cast with full hands", t.cast == 0)
+	check("casting needs no free hands: the catch lies on the ice", t.cast == 1)
+	g._end_cast(t)
 
 	# --- feed the Eye by hand: counts toward its stages
 	var eye_worth: float = g.carry[0].base * g.carry[0].mult * g.sale_mult() * g.EYE_MULT

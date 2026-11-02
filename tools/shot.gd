@@ -58,6 +58,30 @@ func _ready() -> void:
 			await get_tree().process_frame
 		get_viewport().get_texture().get_image().save_png("res://renders/shot_guide_arrow.png")
 		print("saved guide")
+	# fish on the ice: a catch dropping out of a hole, a pile near the Eye, and a kick
+	if only == "yard":
+		var py: Node3D = g.get_node("Player")
+		py.position = Vector3(-26.0, 1.7, 22.0)
+		py.rotation.y = deg_to_rad(-40.0)
+		g.cam.rotation.x = deg_to_rad(-30.0)
+		g.day_t = 0.0
+		g.scenery.set_time(0.0)
+		var fw := -py.global_basis.z
+		var rt := py.global_basis.x
+		for i in 7:
+			var sp: Dictionary = g._make_fish(g.SPECIES[i % 4])
+			var at := py.position + fw * (3.0 + (i % 3) * 0.9) + rt * (-1.6 + i * 0.5)
+			g.yard.spawn(sp, Vector3(at.x, g.yard.GROUND, at.z), Vector3.ZERO)
+		for step in [["a", 0.5], ["b", 1.2]]:
+			await get_tree().create_timer(step[1]).timeout
+			get_viewport().get_texture().get_image().save_png("res://renders/shot_yard_%s.png" % step[0])
+			print("saved yard ", step[0])
+		g.kick_charge = 1.0
+		g._release_kick()
+		for step in [["c", 0.5], ["d", 1.0]]:
+			await get_tree().create_timer(step[1]).timeout
+			get_viewport().get_texture().get_image().save_png("res://renders/shot_yard_%s.png" % step[0])
+			print("saved yard ", step[0])
 	# the hand-off: a bucket of fish thrown at the Eye one by one, a belt fish diving, then a stage reveal
 	if only == "handoff":
 		var ph: Node3D = g.get_node("Player")

@@ -85,3 +85,14 @@
 - The Eye is visually held at stage 4 until the open (`awaken_hold`), so the crystals and lids do not spoil the moment. An early skip still ends in the correct awake state.
 - Fixed on the way: the intro early-return in `_process` skipped `_animate` (shake, FOV, sky, Eye look); it now calls it.
 - Tests: `tools/run_guide.sh` covers prelude, camera, held crystals, the open, flash/shake, title, skip and early skip. Renders: `SHOT_ONLY=awaken tools/shot.sh`.
+
+## Fish are real objects (fish_yard.gd) and one line at a time
+Inspired by Project P.I.T.T. (physics bodies you shove around with tools; logistics is the work, each tool removes some of it). Its internals are not public, so this is our own design.
+- **One line at a time:** you can only have one rod line out. Casting at another hole reels the first in (not during a fight). Many holes at once now only comes from automation (Auto-Rods, rigs), which makes machines worth buying. The "Extra Line" upgrade (+1 fish per bite) is unchanged.
+- **A catch drops onto the ice** instead of landing in your hands: it pops out of the hole in an arc toward you, falls, bounces, lies on its side and slides (ice friction = constant drag + drag growing with speed). Small hand-rolled physics in `fish_yard.gd`, not RigidBody3D: predictable, cheap for a few dozen discs, and no collision-layer fights with the aim ray. Fish-vs-fish shoving, camp walls and the lake edge are handled; the player is a solid disc.
+- **Pushing:** walk into fish (they slide ahead of you), or **right mouse: kick** (tap = 7 m/s, hold up to 0.9 s for 16 m/s, 3 m/s more per level of the new **Kick Power** shop upgrade; kicks the cone in front of you, ~3.6 m reach). **E** scoops loose fish into the bucket (capacity from the Bucket upgrade), so smokers, gut tables, depots and hand-feeding still work.
+- **The Eye pulls close fish in** (suction grows with its stage) and swallows anything entering the pupil: same payout, streak and gulp feel as hand-feeding, and the actual fish spirals down the funnel.
+- Cap 60 loose fish: the oldest rolls into the Eye so the ice never clogs. Loose fish are saved with their positions.
+- Guide: new steps `push0`/`push` target the nearest loose fish; one-time tip for the kick. Bucket now means "pick up more at once", not "cast gating": casting never needs free hands.
+- Tests: `tools/run_yard.sh` (one line, fall/land/slide, glide distance, walk-push, kick, charge, Kick Power, bumping, Eye pull and swallow, walls, cap, E pickup, guide step, save). Renders: `SHOT_ONLY=yard tools/shot.sh`.
+- Not done yet (natural next tools, as in P.I.T.T.): a broom/scoop to sweep a wide cone, fans or magnets as placed pullers, sloped ice channels. Belts and rig fish are still not physical.

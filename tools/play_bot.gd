@@ -87,10 +87,13 @@ func _ready() -> void:
 	await frames(3)
 	check("clicking on the bite hooks it", h.cast == 3)
 	var fought := 0.0
-	while g.carry.is_empty() and fought < 4.0:
+	while g.yard.count() == 0 and fought < 4.0:
 		await get_tree().create_timer(0.1).timeout
 		fought += 0.1
-	check("the fish lands in your hands after the fight", g.carry.size() == 1)
+	check("the fish drops onto the ice after the fight", g.yard.count() == 1 and g.carry.is_empty())
+	await get_tree().create_timer(1.5).timeout
+	g.carry.append_array(g.yard.collect(Vector3.ZERO, 9999.0, 1))
+	check("(bot scoops it up for the hand-feed check)", g.carry.size() == 1)
 
 	# 3. carry it to the Eye and click on it
 	aim_at(Vector3(0, 0.2, 0))

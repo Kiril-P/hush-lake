@@ -53,7 +53,7 @@ const GENERIC_HINTS := {
 	"rigs": "Press 7, press Q until it says Ice-Breaker, then click open ice.",
 	"tithe": "With empty hands, click the Eye to offer it coins.",
 	"eye_stage": "Feed the Eye. Rigs and tithes count too.",
-	"eye_fed": "Feed the Eye. Belts do it for you.",
+	"eye_fed": "Push fish into the Eye. Belts do it for you.",
 	"earned": "Keep the fish moving into the Eye.",
 }
 
@@ -289,6 +289,9 @@ func _nearest_hole(state: String) -> Variant:
 
 func _resolve(where: String) -> Variant:
 	match where:
+		"fish":
+			var fp: Variant = game.yard.nearest(_player_pos())
+			return Vector3(fp.x, 0.0, fp.z) if fp != null else null
 		"eye":
 			var p: Vector3 = game.scenery.eye_landing(_player_pos())
 			return Vector3(p.x, 0.0, p.z)
@@ -319,6 +322,10 @@ func current() -> Dictionary:
 	var carrying: bool = not g.carry.is_empty()
 	if _hole_with_cast(2):
 		return _step("bite", "It's biting!", "Click now!", _resolve("hole"))
+	if g.yard.count() > 0 and is_early() and not carrying:
+		if s.eye_fed == 0:
+			return _step("push0", "Push the fish into the Eye", "Walk into it, or hold right mouse and let go to kick it. The Eye pulls close fish in. (E picks it up.)", _resolve("fish"))
+		return _step("push", "Push it into the Eye", "Walk into it or kick it (hold right mouse). Every fish is coins.", _resolve("fish"))
 	if carrying and g.free_space() <= 0 and not is_early():  # (early on, the carry steps say it better)
 		return _step("full", "Your hands are full", "Carry it to the Eye: walk up to the glowing rim and click.", _resolve("eye"))
 	if is_early():
@@ -475,6 +482,8 @@ func _candidate_tips() -> Array:
 	for i in range(2, game.TOOLS.size()):
 		if game._tool_unlocked(i):
 			out.append(["tool%d" % i, "New tool: %s. Press %d to use it." % [game.TOOLS[i], i + 1]])
+	if game.yard.count() >= 2 and game.no_kicks_yet():
+		out.append(["kick", "Hold right mouse and let go to kick fish across the ice. The harder you hold, the farther they fly."])
 	for id in game.UPGRADES:
 		if id == "bucket" or not game.unlocked.get(id, false):
 			continue

@@ -47,7 +47,11 @@ func _ready() -> void:
 	t.fight = 0.0
 	g._tick_hole(t, 0.1)
 	await get_tree().create_timer(2.0).timeout
-	check("step 6: carry to the Eye", step(g) == "carry0")
+	check("step 6: push the fish into the Eye", step(g) == "push0" and gd.current().where != null)
+	var fw: Vector3 = gd.current().where
+	check("the marker is on the fish that lies on the ice", Vector2(fw.x - t.pos.x, fw.z - t.pos.z).length() < 12.0)
+	g.carry.append_array(g.yard.collect(Vector3.ZERO, 9999.0, 1))   # scoop it up (E)
+	check("step 6b: carried fish go to the Eye by hand", step(g) == "carry0")
 	var w: Variant = gd.current().where
 	check("eye target is on the pupil", w != null and absf(Vector2(w.x, w.z).length() - 4.0) < 2.5)
 	# feeding the Eye
