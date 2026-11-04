@@ -218,6 +218,7 @@ var model
 var sector_labels := {}
 var lantern_idx := {}
 var shadow_mat: StandardMaterial3D
+var shoal_mesh: ArrayMesh
 var lake_label: Label
 var map_ctrl: Control
 var ending_panel: PanelContainer
@@ -390,6 +391,7 @@ func _ready() -> void:
 	cam.add_child(tool_view)
 	kick_boot = ToolModels.boot(cam)
 	kick_boot.position = BOOT_REST
+	_no_shadows(kick_boot)
 	kick_boot.scale = Vector3.ONE * 0.55
 	kick_boot.rotation_degrees = BOOT_ROT
 	model = LakeModelScript.new()
@@ -561,7 +563,7 @@ func _build_world() -> void:
 		l.autowrap_mode = TextServer.AUTOWRAP_OFF   # a title never wraps into the price row
 		l.outline_size = 10
 		l.line_spacing = -2.0
-		l.position = Vector3(0, 0.42, 0.1)
+		l.position = Vector3(0, 0.42, 0.14)
 		s.add_child(l)
 		sign_labels[id] = l
 		var ld := Label3D.new()   # the small print
@@ -572,7 +574,7 @@ func _build_world() -> void:
 		ld.outline_size = 8
 		ld.modulate = Color(0.85, 0.88, 0.96)
 		ld.line_spacing = -4.0
-		ld.position = Vector3(0, -0.56, 0.1)
+		ld.position = Vector3(0, -0.56, 0.14)
 		s.add_child(ld)
 		sign_descs[id] = ld
 		scenery.decorate_stall(s, id)
@@ -617,15 +619,24 @@ func _make_shadows(t: Dictionary) -> void:
 		shadow_mat.albedo_color = Color(0.05, 0.16, 0.34, 0.55)
 		shadow_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		shadow_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		shadow_mat.cull_mode = BaseMaterial3D.CULL_DISABLED   # (the silhouette is flat and seen from above or below)
+	if shoal_mesh == null:   # a flat fish silhouette (body and forked tail): the shoal under the ice used to be shapeless dark blobs
+		var pts := [Vector2(0.5, 0.0), Vector2(0.3, 0.14), Vector2(0.0, 0.19), Vector2(-0.25, 0.12), Vector2(-0.38, 0.04), Vector2(-0.56, 0.17),
+			Vector2(-0.48, 0.0), Vector2(-0.56, -0.17), Vector2(-0.38, -0.04), Vector2(-0.25, -0.12), Vector2(0.0, -0.19), Vector2(0.3, -0.14)]
+		var st := SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		for k in pts.size():
+			var q0: Vector2 = pts[k]
+			var q1: Vector2 = pts[(k + 1) % pts.size()]
+			for v in [Vector3.ZERO, Vector3(q1.x, 0, q1.y), Vector3(q0.x, 0, q0.y)]:
+				st.set_normal(Vector3.UP)
+				st.add_vertex(v)
+		shoal_mesh = st.commit()
 	for i in 8:
 		var m := MeshInstance3D.new()
-		var sp := SphereMesh.new()
-		sp.radius = 0.5
-		sp.height = 1.0
-		sp.radial_segments = 8
-		sp.rings = 4
-		m.mesh = sp
-		m.scale = Vector3(1.3, 0.03, 0.48)
+		m.mesh = shoal_mesh
+		m.scale = Vector3(1.5, 1.0, 1.5)
+		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		m.material_override = shadow_mat
 		m.position = Vector3(0, 0.065, 0)
 		t.node.add_child(m)
@@ -1658,6 +1669,14 @@ func _refresh_view() -> void:
 		(f as FishNode).amp = 0.9
 		f.rotation = Vector3(0.3, 0.6, 0.2)
 	view.rotation = Vector3(0.1, 0.3, 0.0)
+	_no_shadows(view)
+
+## Things held in front of the camera must not cast shadows: they showed up as dark polygons on the ice that belong to no object.
+func _no_shadows(n: Node) -> void:
+	if n is GeometryInstance3D:
+		(n as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	for c in n.get_children():
+		_no_shadows(c)
 
 func _add_carry(f: Dictionary) -> void:
 	carry.append(f)
@@ -1697,6 +1716,7 @@ func _sync_tool_view() -> void:
 			ToolModels.builder(tool_body, accents[clampi(tool - 2, 0, accents.size() - 1)])
 	tool_body.rotation.x = tool_base_x
 	tool_body.rotation.z = tool_base_z
+	_no_shadows(tool_body)
 
 ## First-person snowmobile: hood, windshield, handlebars and gloves at the bottom of the screen.
 func _build_ride_view() -> void:
@@ -1896,6 +1916,8 @@ func _process(delta: float) -> void:
 	var a := raw if _in_range(raw) else ""
 	if not captured:
 		prompt_label.text = ""
+	elif journal_panel.visible or refreeze_panel.visible:
+		prompt_label.text = ""   # (the tithe prompt used to print across the journal)
 	elif raw != "" and a == "":
 		prompt_label.text = "" if raw == "ice" else "Too far - walk closer"
 	else:
@@ -2447,6 +2469,8 @@ func _hook(t: Dictionary) -> void:
 	for f in got:
 		inten = maxf(inten, _fight_intensity(f))
 	t.hooked = got
+	msg_label.text = ""   # a leftover "Cast a line" must not sit on the screen during the fight
+	msg_time = 0.0
 	t.cast = 3
 	t.fight_i = inten
 	t.fight_total = 0.5 + 0.3 * inten + (0.4 if inten >= 2.0 else 0.0)
