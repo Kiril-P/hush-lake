@@ -247,9 +247,9 @@ void fragment() {
 	vec2 gc = floor(gp);
 	float h = hash(gc);
 	float tw = smoothstep(0.9, 1.0, sin(TIME * (1.5 + 2.0 * h) + h * 40.0) * 0.5 + 0.5);
-	float spot = smoothstep(0.28, 0.0, length(fract(gp) - 0.5)) * step(0.93, h);
+	float spot = smoothstep(0.14, 0.0, length(fract(gp) - 0.5)) * step(0.955, h);
 	float near = 1.0 - smoothstep(6.0, 34.0, length(VERTEX));
-	EMISSION += vec3(0.9, 0.97, 1.0) * spot * tw * near * glint_amount;
+	EMISSION += vec3(0.8, 0.95, 1.0) * spot * tw * near * glint_amount * 0.8;
 }
 """
 var ice_mat: ShaderMaterial

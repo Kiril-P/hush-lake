@@ -824,19 +824,8 @@ func _build_auto(t: Dictionary, count := true) -> void:
 	t.node.add_child(t.extra)
 	t.extra.scale = Vector3.ONE * 1.5
 	_update_shadows(t)
-	# drill tower: four legs, braces, a pumping arm and a lamp
-	for sx in [-1, 1]:
-		for sz in [-1, 1]:
-			_box(t.extra, Vector3(0.14 * sx, 0.6, 0.14 * sz), Vector3(0.05, 1.2, 0.05), Color(0.25, 0.25, 0.3))
-	for y in [0.35, 0.8]:
-		_box(t.extra, Vector3(0, y, 0), Vector3(0.36, 0.03, 0.36), Color(0.3, 0.3, 0.35))
-	_box(t.extra, Vector3(0.0, 1.3, 0.0), Vector3(0.34, 0.26, 0.34), Color(0.9, 0.7, 0.3), "", 0.7)
-	var arm := Node3D.new()
-	arm.position = Vector3(0, 1.0, 0)
-	t.extra.add_child(arm)
-	_box(arm, Vector3(0.0, 0.0, 0.0), Vector3(0.7, 0.05, 0.05), Color(0.35, 0.35, 0.4))
-	t.arm = arm
-	_box(t.extra, Vector3(0.55, 0.12, 0.0), Vector3(0.45, 0.24, 0.35), Color(0.4, 0.28, 0.18))  # stash crate
+	var parts: Dictionary = MachineModels.auto_rod(t.extra)   # a little drill derrick with a pumping beam and a stash crate
+	t.arm = parts.arm
 	t.tag = _label3d(t.node, Vector3(0, 3.0, 0), "", 0.012)
 
 func _build_smoker(t: Dictionary) -> void:
@@ -844,8 +833,8 @@ func _build_smoker(t: Dictionary) -> void:
 	t.extra = Node3D.new()
 	t.node.add_child(t.extra)
 	t.extra.scale = Vector3.ONE * 1.5
-	_box(t.extra, Vector3(0, 0.55, 0), Vector3(0.9, 1.1, 0.9), Color(0.35, 0.22, 0.15))
-	_box(t.extra, Vector3(0.25, 1.3, 0.25), Vector3(0.22, 0.6, 0.22), Color(0.25, 0.25, 0.28))
+	var sp: Dictionary = MachineModels.smoker(t.extra)
+	t.smoke_fx = sp.smoke
 	t.tag = _label3d(t.node, Vector3(0, 3.0, 0), "Smoker", 0.012)
 
 func _build_table(t: Dictionary) -> void:
@@ -853,9 +842,7 @@ func _build_table(t: Dictionary) -> void:
 	t.extra = Node3D.new()
 	t.node.add_child(t.extra)
 	t.extra.scale = Vector3.ONE * 1.5
-	_box(t.extra, Vector3(0, 0.4, 0), Vector3(1.0, 0.8, 0.7), Color(0.42, 0.28, 0.18))
-	_box(t.extra, Vector3(0, 0.82, 0), Vector3(0.8, 0.05, 0.5), Color(0.9, 0.88, 0.8))
-	_box(t.extra, Vector3(0.2, 0.9, 0.1), Vector3(0.3, 0.03, 0.06), Color(0.8, 0.85, 0.9))
+	MachineModels.gut_table(t.extra)
 	t.tag = _label3d(t.node, Vector3(0, 2.6, 0), "Gut Table", 0.012)
 
 # ---------- UI ----------
@@ -2045,6 +2032,8 @@ func _tick_hole(t: Dictionary, delta: float) -> void:
 			else:
 				t.tag.text = "%d / %d" % [t.stash.size(), STASH_MAX]
 		"smoker":
+			if t.has("smoke_fx") and is_instance_valid(t.smoke_fx):
+				t.smoke_fx.emitting = not t.slot.is_empty() and t.smoke_t > 0.0
 			if not t.slot.is_empty() and t.smoke_t > 0.0:
 				t.smoke_t -= delta
 				t.tag.text = "Smoking... %ds" % ceil(t.smoke_t)
@@ -2546,17 +2535,7 @@ func _build_belt(t: Dictionary, pay := true) -> void:
 	add_child(node)
 	var mid := (a + b) * 0.5
 	node.look_at_from_position(Vector3(mid.x, 0.55, mid.z), Vector3(b.x, 0.55, b.z), Vector3.UP)
-	var wood := Color(0.42, 0.3, 0.18)
-	_box(node, Vector3.ZERO, Vector3(1.1, 0.14, blen), Color(0.2, 0.2, 0.26))
-	_box(node, Vector3(0, 0.08, 0), Vector3(0.8, 0.04, blen), Color(0.1, 0.1, 0.14))
-	for sx in [-0.6, 0.6]:
-		_box(node, Vector3(sx, 0.2, 0), Vector3(0.08, 0.22, blen), wood)
-	var n := maxi(int(blen / 5.0), 1)
-	for i in n + 1:
-		var z := -blen * 0.5 + i * (blen / n)
-		_box(node, Vector3(0, -0.32, z), Vector3(0.16, 0.7, 0.16), wood)
-		if i % 2 == 0:
-			_box(node, Vector3(0.68, 0.5, z), Vector3(0.18, 0.28, 0.18), Color(1.0, 0.72, 0.3), "", 1.6)
+	MachineModels.belt(node, blen, _belt_speed())
 	var belt := {"hole": t, "a": a, "b": b, "len": blen, "dir": dir, "node": node, "cost": cost}
 	belts.append(belt)
 	t.belt = belt
@@ -2611,18 +2590,12 @@ func _build_machine_visual(belt: Dictionary, kind: String) -> void:
 	node.add_child(m)
 	m.position = Vector3(0, 0, mid_z)
 	if kind == "cannery":
-		_box(m, Vector3(0, 1.3, 0), Vector3(2.6, 1.6, 2.8), Color(0.62, 0.28, 0.18))
-		_box(m, Vector3(0, 2.3, 0), Vector3(2.8, 0.2, 3.0), Color(0.88, 0.86, 0.98))
-		_box(m, Vector3(0.9, 3.0, 0.8), Vector3(0.5, 1.4, 0.5), Color(0.25, 0.25, 0.3))
-		_box(m, Vector3(0, 1.5, 1.42), Vector3(1.6, 0.9, 0.06), Color(1.0, 0.75, 0.35), "", 1.6)
-		var l := _label3d(m, Vector3(0, 3.2, 0), "CANNERY x1.5", 0.012)
+		MachineModels.cannery(m)
+		var l := _label3d(m, Vector3(0, 4.7, 0), "CANNERY x1.5", 0.012)
 		l.modulate = Color(1.0, 0.9, 0.7)
 	else:
-		for sx in [-1.5, 1.5]:
-			_box(m, Vector3(sx, 1.4, 0), Vector3(0.3, 2.8, 0.3), Color(0.25, 0.3, 0.45))
-		_box(m, Vector3(0, 2.8, 0), Vector3(3.3, 0.3, 0.3), Color(0.25, 0.3, 0.45))
-		_box(m, Vector3(0, 2.55, 0), Vector3(0.7, 0.28, 0.4), Color(0.4, 1.0, 0.7), "", 2.2)
-		var l2 := _label3d(m, Vector3(0, 3.5, 0), "SORTER x1.6 (5+)", 0.012)
+		MachineModels.sorter(m)
+		var l2 := _label3d(m, Vector3(0, 3.7, 0), "SORTER x1.6 (5+)", 0.012)
 		l2.modulate = Color(0.7, 1.0, 0.85)
 
 func _install_machine(t: Dictionary, kind: String, pay := true) -> void:
@@ -2649,15 +2622,10 @@ func _build_depot(pos: Vector3, pay := true) -> void:
 	node.position = Vector3(pos.x, 0.0, pos.z)
 	add_child(node)
 	var d := {"pos": node.position, "node": node, "idx": depots.size()}
-	var wood := Color(0.42, 0.28, 0.18)
-	_box(node, Vector3(0, 0.6, 0), Vector3(2.8, 1.2, 1.8), wood, "depot:%d" % d.idx)
-	_box(node, Vector3(0, 1.3, 0), Vector3(3.0, 0.16, 2.0), Color(0.88, 0.86, 0.98))
-	_box(node, Vector3(1.0, 1.55, 0.6), Vector3(0.9, 0.7, 0.8), Color(0.55, 0.38, 0.24))
-	_box(node, Vector3(-1.0, 1.5, -0.5), Vector3(0.8, 0.6, 0.8), Color(0.5, 0.34, 0.22))
-	_box(node, Vector3(1.6, 1.9, -0.9), Vector3(0.2, 0.34, 0.2), Color(1.0, 0.72, 0.3), "", 1.6)
-	_box(node, Vector3(1.6, 0.9, -0.9), Vector3(0.1, 1.8, 0.1), Color(0.2, 0.17, 0.2))
-	_box(node, Vector3(0, 0.04, 2.0), Vector3(2.4, 0.08, 1.6), Color(0.88, 0.88, 0.98))   # sled landing
-	var l := _label3d(node, Vector3(0, 3.0, 0), "DEPOT", 0.014)
+	var hit := _box(node, Vector3(0, 0.6, 0), Vector3(2.8, 1.2, 1.8), Color.WHITE, "depot:%d" % d.idx)   # the click target (the model is MachineModels.depot)
+	hit.visible = false
+	MachineModels.depot(node)
+	var l := _label3d(node, Vector3(0, 3.6, 0), "DEPOT", 0.014)
 	l.modulate = Color(1.0, 0.9, 0.7)
 	depots.append(d)
 	scenery.obstacles.append(Vector3(pos.x, pos.z, 2.2))
@@ -2702,21 +2670,10 @@ func _build_rig(pos: Vector3, pay := true) -> void:
 	var b := dir * (PUPIL_R + 0.4)
 	var rig := {"pos": node.position, "node": node, "idx": idx, "t": RIG_INTERVAL, "tag": null,
 		"belt": {"a": a, "b": b, "len": a.distance_to(b), "dir": dir}}
-	var hull := Color(0.22, 0.26, 0.34)
-	var red := Color(0.75, 0.25, 0.22)
-	_box(node, Vector3(0, 0.7, 0), Vector3(5.6, 1.5, 11.0), hull, "rig:%d" % idx)
-	_box(node, Vector3(0, 1.5, 0), Vector3(5.8, 0.18, 11.2), red)
-	_box(node, Vector3(0, 2.8, 2.2), Vector3(3.6, 2.4, 3.6), Color(0.88, 0.84, 0.78))
-	_box(node, Vector3(0, 3.2, 4.04), Vector3(3.0, 0.9, 0.06), Color(1.0, 0.78, 0.35), "", 1.8)
-	_box(node, Vector3(0, 4.2, 2.2), Vector3(3.9, 0.22, 3.9), red)
-	_box(node, Vector3(1.2, 5.4, 0.9), Vector3(0.9, 2.6, 0.9), Color(0.2, 0.2, 0.26))
-	_box(node, Vector3(0, 4.0, -2.2), Vector3(0.4, 5.2, 0.4), Color(0.3, 0.3, 0.36))
-	var arm := _box(node, Vector3(0, 6.5, -3.6), Vector3(0.3, 0.3, 6.0), Color(0.7, 0.35, 0.18))
-	arm.rotation.x = 0.12
-	_box(node, Vector3(0, 4.2, -6.4), Vector3(0.9, 1.2, 0.9), Color(1.0, 0.8, 0.3), "", 1.2)
-	for sx in [-2.9, 2.9]:
-		for sz in [-4.0, 0.0, 4.0]:
-			_box(node, Vector3(sx, 1.9, sz), Vector3(0.2, 0.34, 0.2), Color(1.0, 0.72, 0.3), "", 1.8)
+	var hit := _box(node, Vector3(0, 0.7, 0), Vector3(5.6, 1.5, 11.0), Color.WHITE, "rig:%d" % idx)   # the click target
+	hit.visible = false
+	var rp: Dictionary = MachineModels.rig(node)
+	rig.beacon = rp.beacon
 	rig.tag = _label3d(node, Vector3(0, 8.4, 0), "ICE-BREAKER", 0.016)
 	rig.tag.modulate = Color(0.9, 0.95, 1.0)
 	rigs.append(rig)
@@ -2772,6 +2729,8 @@ func _pick_up_rig(rg: Dictionary) -> void:
 
 func _tick_rigs(delta: float) -> void:
 	for rg in rigs:
+		if rg.has("beacon") and is_instance_valid(rg.beacon):
+			rg.beacon.rotation.y += delta * 3.2   # the amber beacon turns while the rig stands
 		rg.t -= delta
 		if rg.t > 0.0:
 			continue

@@ -209,6 +209,59 @@ func _ready() -> void:
 				await get_tree().process_frame
 			get_viewport().get_texture().get_image().save_png("res://renders/shot_%s.png" % v3[0])
 			print("saved ", v3[0])
+	# every machine up close, in daylight
+	if only == "machines2":
+		GameState.currency = 99999.0
+		g.unlocked["t_auto"] = true
+		g.unlocked["t_belt"] = true
+		g.unlocked["t_build"] = true
+		g.unlocked["t_smoker"] = true
+		g.unlocked["t_table"] = true
+		for id in g.model.sectors:
+			g.model.sectors[id].unlocked = true
+		var m1: Dictionary = g._make_hole(Vector3(30, 0, 8))
+		g._build_auto(m1)
+		g._build_belt(m1, false)
+		g._install_machine(m1, "cannery", false)
+		var m2: Dictionary = g._make_hole(Vector3(30, 0, -16))
+		g._build_auto(m2)
+		g._build_belt(m2, false)
+		g._install_machine(m2, "sorter", false)
+		var m3: Dictionary = g._make_hole(Vector3(26, 0, 26))
+		g._build_smoker(m3)
+		var m4: Dictionary = g._make_hole(Vector3(33, 0, 26))
+		g._build_table(m4)
+		var m5: Dictionary = g._make_hole(Vector3(40, 0, 17))
+		g._build_auto(m5)
+		g._build_depot(Vector3(20, 0, 34), false)
+		g._build_rig(Vector3(-5, 0, -42), false)
+		var rngm := RandomNumberGenerator.new()
+		rngm.seed = 4
+		for hh in [m1, m2]:
+			for k in 8:
+				g._belt_spawn(hh, g._make_fish(g.SPECIES[rngm.randi() % 4]))
+				g.belt_fish[g.belt_fish.size() - 1].d = rngm.randf() * hh.belt.len
+		m3.slot = [g._make_fish(g.SPECIES[0])]
+		m3.smoke_t = 5.0
+		g.stats.eye_fed = 300
+		g.eye_seen_stage = g.eye_stage()
+		g.scenery.set_eye_open(g.eye_open_frac())
+		g._refresh()
+		var pm: Node3D = g.get_node("Player")
+		g.goal_done.fill(true)   # (no goal banners over the pictures)
+		for v4 in [["m_belt", Vector3(26, 1.7, 22), Vector3(18, 1.0, 5)], ["m_sorter", Vector3(26, 1.7, -22), Vector3(18, 1.4, -9.6)], ["m_smoker", Vector3(20, 1.7, 36), Vector3(26, 0.8, 26)],
+				["m_table", Vector3(40, 1.7, 34), Vector3(33, 0.6, 26)], ["m_depot", Vector3(8, 1.7, 44), Vector3(20, 1.0, 34)], ["m_rig", Vector3(14, 1.7, -30), Vector3(-5, 2.0, -42)], ["m_auto", Vector3(46, 1.7, 26), Vector3(40, 1.0, 17)]]:
+			pm.position = v4[1]
+			var dv: Vector3 = v4[2] - v4[1]
+			pm.rotation.y = atan2(-dv.x, -dv.z)
+			g.cam.rotation.x = atan2(dv.y, Vector2(dv.x, dv.z).length())
+			g.day_t = 0.0
+			g.scenery.set_time(0.0)
+			g._update_belt_fish(0.0)
+			for i in 8:
+				await get_tree().process_frame
+			get_viewport().get_texture().get_image().save_png("res://renders/shot_%s.png" % v4[0])
+			print("saved ", v4[0])
 	# the tools in hand, big: auger tiers, rod tiers, builder kit
 	if only == "tools":
 		var pt: Node3D = g.get_node("Player")

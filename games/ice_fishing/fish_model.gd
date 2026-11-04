@@ -174,6 +174,7 @@ static func _dorsal_points(kind: String, spec: Dictionary) -> Array:
 static func _mat(shine: float, translucent := false) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	m.vertex_color_use_as_albedo = true
+	m.vertex_color_is_srgb = true   # the species colours are picked as screen colours: without this fins and bellies wash out pale
 	m.roughness = 0.32
 	m.metallic = 0.25
 	m.metallic_specular = 0.7
@@ -185,8 +186,10 @@ static func _mat(shine: float, translucent := false) -> StandardMaterial3D:
 	if translucent:
 		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		m.metallic = 0.0
-		m.roughness = 0.7
-		m.albedo_color = Color(1, 1, 1, 0.92)
+		m.metallic_specular = 0.15
+		m.roughness = 0.95
+		m.emission_energy_multiplier *= 0.25   # glowing bodies, but fins must keep their colour (bright emission tonemaps to white)
+		m.albedo_color = Color(0.78, 0.82, 0.84, 0.93)   # fins are a little darker than the body: thin membranes catch less light
 	return m
 
 static func _build_fish(root: FishNode, species: String, spec: Dictionary) -> void:
