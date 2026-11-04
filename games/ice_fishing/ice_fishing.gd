@@ -312,6 +312,7 @@ var goals_label: Label
 var start_label: Label
 var journal_panel: PanelContainer
 var journal_label: Label
+var journal_grid: GridContainer
 var hotbar: Array[Label] = []
 var hotbar_panels: Array[PanelContainer] = []
 var hotbar_icons: Array = []
@@ -866,6 +867,14 @@ func _panel(parent: Node, container: Container) -> PanelContainer:
 	parent.add_child(p)
 	return p
 
+## A card that sits in the middle of the screen, however tall it grows (a CenterContainer does the centring).
+func _center_panel(parent: Node, container: Container) -> PanelContainer:
+	var cc := CenterContainer.new()
+	cc.set_anchors_preset(Control.PRESET_FULL_RECT)
+	cc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(cc)
+	return _panel(cc, container)
+
 func _plain(parent: Node, font_size: int, color := Style.CREAM) -> Label:
 	var l := Label.new()
 	l.add_theme_font_size_override("font_size", font_size)
@@ -1015,13 +1024,21 @@ void fragment() {
 		hl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		hotbar.append(hl)
 	journal_label = Label.new()
-	journal_label.add_theme_font_size_override("font_size", 20)
+	journal_label.add_theme_font_size_override("font_size", 24)
 	var jbox := VBoxContainer.new()
+	jbox.add_theme_constant_override("separation", 8)
 	jbox.add_child(journal_label)
-	journal_panel = _panel(ui, jbox)
-	journal_panel.set_anchors_preset(Control.PRESET_CENTER)
-	journal_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	journal_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	journal_grid = GridContainer.new()
+	journal_grid.columns = 5
+	journal_grid.add_theme_constant_override("h_separation", 18)
+	journal_grid.add_theme_constant_override("v_separation", 6)
+	jbox.add_child(journal_grid)
+	var jhint := Label.new()
+	jhint.text = "Tab to close"
+	jhint.add_theme_font_size_override("font_size", 14)
+	jhint.add_theme_color_override("font_color", Style.MUTED)
+	jbox.add_child(jhint)
+	journal_panel = _center_panel(ui, jbox)
 	journal_panel.visible = false
 	# title card shown whenever the mouse is free
 	var sbox := VBoxContainer.new()
@@ -1053,19 +1070,13 @@ void fragment() {
 	elabel.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	elabel.add_theme_font_size_override("font_size", 28)
 	ebox.add_child(elabel)
-	ending_panel = _panel(ui, ebox)
-	ending_panel.set_anchors_preset(Control.PRESET_CENTER)
-	ending_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	ending_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	ending_panel = _center_panel(ui, ebox)
 	ending_panel.visible = false
 	refreeze_label = Label.new()
 	refreeze_label.add_theme_font_size_override("font_size", 21)
 	var rbox := VBoxContainer.new()
 	rbox.add_child(refreeze_label)
-	refreeze_panel = _panel(ui, rbox)
-	refreeze_panel.set_anchors_preset(Control.PRESET_CENTER)
-	refreeze_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	refreeze_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
+	refreeze_panel = _center_panel(ui, rbox)
 	refreeze_panel.visible = false
 	var cbox := VBoxContainer.new()
 	cbox.add_theme_constant_override("separation", 0)
@@ -1517,14 +1528,28 @@ func _refresh() -> void:
 	_sync_tool_view()
 
 func _update_journal() -> void:
-	var out := ["JOURNAL  (%d / %d found)\n" % [journal.size(), SPECIES.size()]]
-	for s in SPECIES:
-		if journal.has(s.name):
-			out.append("%s   x%d   best %.1f cm   (%d coins base)" % [s.name, journal[s.name], records.get(s.name, 0.0), s.value])
-		else:
-			out.append("???")
-	out.append("\nTab to close")
-	journal_label.text = "\n".join(out)
+	journal_label.text = "FIELD JOURNAL    %d / %d found" % [journal.size(), SPECIES.size()]
+	journal_label.add_theme_color_override("font_color", Style.AMBER)
+	for c in journal_grid.get_children():
+		c.queue_free()
+	for h in ["", "Species", "Caught", "Best", "Base"]:
+		var hl := _plain(journal_grid, 14, Style.MUTED)
+		hl.text = h
+	for sp in SPECIES:
+		var found := journal.has(sp.name)
+		var sw := _dot(journal_grid, sp.color if found else Color(0.3, 0.33, 0.45), 16)
+		sw.custom_minimum_size = Vector2(16, 16)
+		var rar: Array = _rarity(sp.name)
+		var nl := _plain(journal_grid, 19, rar[1] if found else Style.MUTED)
+		nl.text = sp.name if found else "???"
+		var cl := _plain(journal_grid, 18, Style.CREAM if found else Style.MUTED)
+		cl.text = "x%d" % journal[sp.name] if found else ""
+		var bl := _plain(journal_grid, 18, Style.CREAM if found else Style.MUTED)
+		bl.text = "%.1f cm" % records.get(sp.name, 0.0) if found else ""
+		var vl := _plain(journal_grid, 18, Style.AMBER if found else Style.MUTED)
+		vl.text = "%d" % sp.value if found else ""
+	var foot := _plain(journal_grid, 14, Style.MUTED)
+	foot.text = ""
 
 func _refresh_view() -> void:
 	for c in view.get_children():

@@ -153,24 +153,31 @@ static func smoker(root: Node3D) -> Dictionary:
 	snow_cap(root, Vector3(0, 1.17, 0), Vector3(0.8, 0.07, 0.86))
 	post(root, Vector3(0.25, 1.35, -0.15), 0.07, 0.6, STEEL_DARK, 0.5)   # chimney
 	post(root, Vector3(0.25, 1.68, -0.15), 0.1, 0.05, STEEL_LIGHT, 0.5)
+	var smoke := _smoke_emitter(Vector3(0.25, 1.75, -0.15), 0.12, 0.4)
+	smoke.emitting = false
+	root.add_child(smoke)
+	return {"smoke": smoke}
+
+## A slow plume of grey smoke / steam, one shared look.
+static func _smoke_emitter(pos: Vector3, size: float, rise: float) -> CPUParticles3D:
 	var smoke := CPUParticles3D.new()
-	smoke.position = Vector3(0.25, 1.75, -0.15)
+	smoke.position = pos
 	smoke.amount = 14
-	smoke.lifetime = 2.2
+	smoke.lifetime = 2.4
 	smoke.direction = Vector3.UP
 	smoke.spread = 12.0
-	smoke.initial_velocity_min = 0.3
-	smoke.initial_velocity_max = 0.6
-	smoke.gravity = Vector3(0.1, 0.15, 0)
+	smoke.initial_velocity_min = rise * 0.7
+	smoke.initial_velocity_max = rise * 1.4
+	smoke.gravity = Vector3(0.12, 0.15, 0)
 	smoke.scale_amount_min = 0.5
-	smoke.scale_amount_max = 1.4
+	smoke.scale_amount_max = 1.5
 	var ramp := Gradient.new()
 	ramp.offsets = PackedFloat32Array([0.0, 0.3, 1.0])
 	ramp.colors = PackedColorArray([Color(0.8, 0.8, 0.85, 0.0), Color(0.85, 0.85, 0.9, 0.55), Color(0.9, 0.9, 0.95, 0.0)])
 	smoke.color_ramp = ramp
 	var sm := SphereMesh.new()
-	sm.radius = 0.12
-	sm.height = 0.24
+	sm.radius = size
+	sm.height = size * 2.0
 	sm.radial_segments = 6
 	sm.rings = 3
 	smoke.mesh = sm
@@ -179,9 +186,7 @@ static func smoker(root: Node3D) -> Dictionary:
 	smat.vertex_color_use_as_albedo = true
 	smat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	smoke.material_override = smat
-	smoke.emitting = false
-	root.add_child(smoke)
-	return {"smoke": smoke}
+	return smoke
 
 ## Gut table: a trestle table with a pale cutting board, a knife, a bucket of scraps and a lamp on a pole.
 static func gut_table(root: Node3D) -> void:
@@ -239,6 +244,9 @@ static func cannery(m: Node3D) -> void:
 	snow_cap(m, Vector3(0, 2.42, 0), Vector3(3.0, 0.2, 3.2))
 	post(m, Vector3(0.9, 3.0, 0.8), 0.28, 1.6, STEEL_DARK, 0.4)
 	post(m, Vector3(0.9, 3.85, 0.8), 0.34, 0.14, AMBER.darkened(0.2), 0.3, 0.3)
+	var puff := _smoke_emitter(Vector3(0.9, 4.0, 0.8), 0.3, 0.5)   # the works breathes out a little steam
+	m.add_child(puff)
+	puff.emitting = true
 	snow_cap(m, Vector3(0.9, 3.95, 0.8), Vector3(0.7, 0.14, 0.7))
 	for sz in [-1.46, 1.46]:   # the tunnel mouths the belt runs through
 		box(m, Vector3(0, 0.95, sz), Vector3(1.3, 1.1, 0.12), STEEL_DARK)
@@ -260,7 +268,10 @@ static func sorter(m: Node3D) -> void:
 	box(m, Vector3(0, 2.62, 0), Vector3(3.4, 0.05, 0.42), TEAL_LIGHT, 0.5)
 	box(m, Vector3(0, 2.38, 0), Vector3(0.9, 0.42, 0.6), STEEL_DARK)   # scanner head
 	box(m, Vector3(0, 2.22, 0.31), Vector3(0.7, 0.1, 0.03), Color(0.4, 1.0, 0.7), 2.4)
-	box(m, Vector3(0, 2.1, 0), Vector3(0.04, 0.3, 0.04), Color(0.4, 1.0, 0.7), 1.2)   # scan beam
+	var scan := box(m, Vector3(0, 2.1, 0), Vector3(0.04, 0.3, 0.04), Color(0.4, 1.0, 0.7), 1.2)   # the scan beam sweeps side to side
+	var sw := scan.create_tween().set_loops()
+	sw.tween_property(scan, "position:x", 0.38, 0.9).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	sw.tween_property(scan, "position:x", -0.38, 0.9).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	for i in 5:   # paddle arms
 		var px := -1.0 + i * 0.5
 		box(m, Vector3(px, 1.95, 0.0), Vector3(0.05, 0.05, 0.8), STEEL_LIGHT, 0.0, 0.4, 0.7)

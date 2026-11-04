@@ -107,8 +107,14 @@ func _ready() -> void:
 		(f as FishNode).amp = 0.4
 		fish.add_child(f)
 		i += 1
+	var og: Dictionary = NpcModels.olga()
+	og.root.position = Vector3(-12, 0, 0)
+	og.root.rotation_degrees.y = 25.0
+	add_child(og.root)
+	og.arm.rotation_degrees.z = 150.0
 	# tools
 	await get_tree().process_frame
+	await _shoot("olga", Vector3(-10.4, 1.5, 3.4), Vector3(-12, 1.1, 0), cam)
 	await _shoot("machines_a", Vector3(-1, 3.2, 8), Vector3(-1, 1.0, 0), cam)
 	await _shoot("machines_b", Vector3(0, 4.5, 24), Vector3(0, 1.8, 12), cam)
 	await _shoot("rig", Vector3(8, 6, 44), Vector3(0, 2.5, 32), cam)

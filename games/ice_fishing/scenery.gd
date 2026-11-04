@@ -33,6 +33,7 @@ var noise := FastNoiseLite.new()
 var detail := FastNoiseLite.new()
 var shore_noise := FastNoiseLite.new()
 var obstacles: Array[Vector3] = []   # (x, z, radius): things the player cannot walk through
+var olga := {}                      # {root, body, head, arm}: see npc_models.gd
 var snow_node: CPUParticles3D
 var lanterns: Array = []             # {mat, light, on}
 var glow_mats: Array = []            # [material, day energy, night energy]
@@ -456,8 +457,15 @@ func _decorate_hut(hut: Node3D) -> void:
 	snow.top_radius = 5.5
 	snow.bottom_radius = 6.2
 	snow.height = 0.2
-	snow.radial_segments = 8
-	_mesh(hut, snow, _mat(Color(0.8, 0.8, 0.96)), Vector3(0, 0.0, 1.2))
+	snow.radial_segments = 16
+	_mesh(hut, snow, _mat(Color(0.84, 0.91, 1.0), 0.0, false), Vector3(0, 0.0, 1.2))
+	# Olga herself, beside her counter
+	var op: Dictionary = NpcModels.olga()
+	olga = op
+	var ol: Node3D = op.root
+	ol.position = Vector3(1.55, 0.0, 3.2)
+	ol.rotation_degrees.y = -20.0
+	hut.add_child(ol)
 	# chimney smoke
 	var smoke := CPUParticles3D.new()
 	smoke.position = Vector3(1.5, 5.6, -1.0)
@@ -792,7 +800,7 @@ func _plaque_at(pos: Vector3, text: String, size := 0.0065) -> void:
 	add_child(node)
 	node.look_at(Vector3(0, node.position.y, 0), Vector3.UP, true)
 	_box(node, Vector3(0, 0.7, 0), Vector3(2.0, 1.4, 0.3), _mat(Color(0.5, 0.48, 0.64)))
-	_box(node, Vector3(0, 1.45, 0), Vector3(2.1, 0.12, 0.38), _mat(Color(0.88, 0.86, 0.98)))
+	_box(node, Vector3(0, 1.45, 0), Vector3(2.1, 0.12, 0.38), _mat(Color(0.88, 0.94, 1.0)))
 	var l := Label3D.new()
 	l.text = text
 	l.font_size = 34
@@ -823,7 +831,7 @@ func _welcome_sign() -> void:
 	for x in [-2.6, 2.6]:
 		_box(node, Vector3(x, 3.5, 0), Vector3(0.34, 7.0, 0.34), wood)
 	_box(node, Vector3(0, 5.5, 0.05), Vector3(6.6, 2.3, 0.2), _mat(Color(0.42, 0.28, 0.2)))
-	_box(node, Vector3(0, 6.75, 0.05), Vector3(6.9, 0.25, 0.55), _mat(Color(0.88, 0.86, 0.98)))
+	_box(node, Vector3(0, 6.75, 0.05), Vector3(6.9, 0.25, 0.55), _mat(Color(0.88, 0.94, 1.0)))
 	var t := Label3D.new()
 	t.text = "HUSH LAKE"
 	t.font_size = 96
@@ -910,7 +918,7 @@ func decorate_stall(s: Node3D, id: String) -> void:
 	# s is the sign board node, facing the lake (+Z toward the centre); its local origin is the board centre
 	var gy := -0.05 - s.position.y            # local y of the ice
 	var wood := _mat(Color(0.3, 0.19, 0.13))
-	var snow := _mat(Color(0.88, 0.86, 0.98))
+	var snow := _mat(Color(0.88, 0.94, 1.0))
 	var lamp := _mat(Color(1.0, 0.72, 0.3), 1.4)
 	glow_mats.append([lamp, 1.4, 3.5])
 	for x in [-2.0, 2.0]:
@@ -925,7 +933,7 @@ func decorate_stall(s: Node3D, id: String) -> void:
 	pad.top_radius = 3.4
 	pad.bottom_radius = 3.6
 	pad.height = 0.12
-	pad.radial_segments = 10
+	pad.radial_segments = 16
 	_mesh(s, pad, snow, Vector3(0, gy + 0.04, 0.5))
 	var dark := _mat(Color(0.16, 0.14, 0.22))
 	var iron := _mat(Color(0.3, 0.3, 0.36))
@@ -1074,6 +1082,27 @@ func set_lantern(i: int, on: bool) -> void:
 	lanterns[i].light.visible = on
 	lanterns[i].light.light_energy = 1.4 if on else 0.0
 
+## Olga: she breathes, her head follows you when you are near, and she waves when you come close.
+func animate_olga(pos: Vector3) -> void:
+	if olga.is_empty():
+		return
+	var root: Node3D = olga.root
+	var body: Node3D = olga.body
+	var head: Node3D = olga.head
+	var arm: Node3D = olga.arm
+	body.scale = Vector3(1.0, 1.0 + sin(_time * 1.7) * 0.012, 1.0)
+	var to := root.to_local(pos)
+	var dist := Vector2(to.x, to.z).length()
+	var want := clampf(atan2(to.x, to.z), -1.0, 1.0) if dist < 24.0 else 0.0
+	head.rotation.y = lerp_angle(head.rotation.y, want, 0.08)
+	head.rotation.x = lerpf(head.rotation.x, 0.0 if dist > 6.0 else -0.1, 0.08)
+	var near := dist < 12.0
+	if near:
+		arm.rotation_degrees.z = lerpf(arm.rotation_degrees.z, 150.0 + sin(_time * 7.0) * 14.0, 0.12)
+	else:
+		arm.rotation_degrees.z = lerpf(arm.rotation_degrees.z, 14.0, 0.1)
+
 func follow(pos: Vector3) -> void:
+	animate_olga(pos)
 	if snow_node:
 		snow_node.global_position = Vector3(pos.x, 14.0, pos.z)

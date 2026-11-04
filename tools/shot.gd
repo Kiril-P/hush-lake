@@ -209,6 +209,51 @@ func _ready() -> void:
 				await get_tree().process_frame
 			get_viewport().get_texture().get_image().save_png("res://renders/shot_%s.png" % v3[0])
 			print("saved ", v3[0])
+	# Olga at her hut, from a few steps away
+	if only == "olga":
+		var po: Node3D = g.get_node("Player")
+		var ol: Node3D = g.scenery.olga.root
+		var target: Vector3 = ol.global_position + Vector3(0, 1.1, 0)
+		var from: Vector3 = target + (Vector3.ZERO - target).normalized() * 7.5
+		po.position = Vector3(from.x, 1.7, from.z)
+		var dv: Vector3 = target - Vector3(from.x, 1.7, from.z)
+		po.rotation.y = atan2(-dv.x, -dv.z)
+		g.cam.rotation.x = atan2(dv.y, Vector2(dv.x, dv.z).length())
+		g.day_t = 0.0
+		g.scenery.set_time(0.0)
+		g.goal_done.fill(true)
+		for i in 40:
+			await get_tree().process_frame
+		get_viewport().get_texture().get_image().save_png("res://renders/shot_olga.png")
+		print("saved olga")
+	# the panels: journal, catch card, refreeze
+	if only == "ui":
+		var pu: Node3D = g.get_node("Player")
+		pu.position = Vector3(-8.2, 1.7, 14.3)
+		pu.rotation.y = deg_to_rad(-30)
+		g.cam.rotation.x = deg_to_rad(-6)
+		g.day_t = 0.0
+		g.scenery.set_time(0.0)
+		g.goal_done.fill(true)
+		g.stats.caught = 120
+		g.stats.eye_fed = 500
+		g.eye_seen_stage = g.eye_stage()
+		for i in g.SPECIES.size():
+			g.journal[g.SPECIES[i].name] = 3 + i * 4
+			g.records[g.SPECIES[i].name] = 20.0 + i * 11.0
+		g._refresh()
+		g.journal_panel.visible = true
+		g._update_journal()
+		for i in 8:
+			await get_tree().process_frame
+		get_viewport().get_texture().get_image().save_png("res://renders/shot_ui_journal.png")
+		g.journal_panel.visible = false
+		var best: Dictionary = g._make_fish(g.SPECIES[3])
+		g._show_card(best, 2, true, true)
+		for i in 20:
+			await get_tree().process_frame
+		get_viewport().get_texture().get_image().save_png("res://renders/shot_ui_card.png")
+		print("saved ui")
 	# every machine up close, in daylight
 	if only == "machines2":
 		GameState.currency = 99999.0
