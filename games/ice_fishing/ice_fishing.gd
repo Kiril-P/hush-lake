@@ -2027,7 +2027,7 @@ func _animate(delta: float) -> void:
 		var dist := Vector2(sp.x - pp.x, sp.z - pp.z).length()
 		var lim: float = 62.0 if model.sectors[id].unlocked else 12.0
 		var lab: Label3D = sector_labels[id].label
-		lab.visible = reveal_t <= 0.0 and not guide.intro_active and dist < lim
+		lab.visible = reveal_t <= 0.0 and not guide.intro_active and dist < lim and not _under_hud(sp + Vector3(0, 0.0, 0))
 		lab.modulate.a = (0.6 if not model.sectors[id].unlocked else 1.0) * (1.0 - smoothstep(lim * 0.55, lim, dist))
 
 # ---------- fish on the ice ----------
@@ -2255,6 +2255,16 @@ func _on_fish_swallowed(f: Dictionary, holder: Node3D, pos: Vector3) -> void:
 	var tw := create_tween()
 	_spiral_into_eye(tw, holder, [pos, pos], 0.5)
 	tw.tween_callback(holder.queue_free)
+
+## Would a world point land under one of the HUD cards? (3D labels ghosted through the NEXT card and the goal cards.)
+func _under_hud(world: Vector3) -> bool:
+	if cam.is_position_behind(world):
+		return false
+	var sp := cam.unproject_position(world)
+	var vp := get_viewport().get_visible_rect().size
+	return Rect2(Vector2(vp.x * 0.5 - 340.0, 0.0), Vector2(680.0, 130.0)).has_point(sp) \
+		or Rect2(Vector2(0.0, 0.0), Vector2(340.0, 230.0)).has_point(sp) \
+		or Rect2(Vector2(vp.x - 340.0, 0.0), Vector2(340.0, 190.0)).has_point(sp)
 
 func _walk(delta: float) -> void:
 	if guide.intro_active:
