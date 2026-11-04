@@ -22,14 +22,15 @@ func fresh(slot: String):
 
 func reload(g, slot: String):
 	GameState.save_game()
+	var keep_extra: Dictionary = GameState.extra.duplicate(true)   # (a deep copy now: the old game must not keep editing what was saved)
+	var keep_meta: Dictionary = GameState.meta.duplicate(true)
+	var keep_up: Dictionary = GameState.upgrades.duplicate(true)
+	var keep_cur: float = GameState.currency
+	g.process_mode = Node.PROCESS_MODE_DISABLED
 	for tw in get_tree().get_processed_tweens():
 		tw.kill()
 	g.queue_free()
 	await get_tree().process_frame
-	var keep_extra: Dictionary = GameState.extra.duplicate(true)
-	var keep_meta: Dictionary = GameState.meta.duplicate(true)
-	var keep_up: Dictionary = GameState.upgrades.duplicate(true)
-	var keep_cur: float = GameState.currency
 	GameState.reset()
 	GameState.save_slot = slot
 	GameState.extra = keep_extra
@@ -72,8 +73,9 @@ func _ready() -> void:
 		worth += f.base * f.mult * g.sale_mult() * g.EYE_MULT
 	g._feed_by_hand()
 	check("thrown fish are tracked until they pay", g.flying.size() == 3 and g.carry.is_empty())
+	var earned_b: float = g.stats.earned
 	g = await reload(g, slot)
-	check("a quit mid-throw: the fish are paid on load, once", g.stats.eye_fed == 3 and GameState.currency >= worth - 0.5 and GameState.currency < worth + 400.0)
+	check("a quit mid-throw: the fish are paid on load, once, at exactly their worth", g.stats.eye_fed == 3 and absf(g.stats.earned - earned_b - worth) < 0.01)
 	check("and nothing is left over", g.flying.is_empty() and g.carry.is_empty())
 
 	# --- offline: crossing the last stage pays the awakening exactly once
@@ -182,6 +184,33 @@ func _ready() -> void:
 	g._unhandled_input(fev)
 	check("letting go releases it", g.kick_charge < 0.0)
 
+	# --- a save with more fish than the ice holds (or an old save) does not replay the Eye's reveal
+	g.yard.clear_all()
+	g.stats.eye_fed = g.eye_stage_at(0) + 1
+	g.eye_seen_stage = g.eye_stage()
+	for i in g.yard.MAX_LOOSE:
+		g.yard.spawn(g._make_fish(g.SPECIES[0]), Vector3(-60 + (i % 10) * 1.3, 0.05, 60 + floorf(i / 10.0) * 1.3), Vector3.ZERO)
+	var th: Dictionary = g.holes[0]
+	g._end_cast(th)
+	th.cast = 3
+	th.hooked = [g._make_fish(g.SPECIES[1])]
+	var fed_b: int = g.stats.eye_fed
+	g._on_about_to_save()
+	g = await reload(g, slot)
+	check("restoring 60 loose fish plus a hooked one: the ice holds 60, the extra is paid, no stage reveal", g.yard.count() == g.yard.MAX_LOOSE and g.stats.eye_fed == fed_b + 1 and g.reveal_t <= 0.0)
+	g.yard.clear_all()
+
+	# --- a depot sled in flight is saved too
+	g.carry.clear()
+	g.carry.append(g._make_fish(g.SPECIES[0]))
+	var dp: Vector3 = Vector3(-17.5, 0.0, 0.0)
+	g._build_depot(dp, false)
+	var fed_d: int = g.stats.eye_fed
+	g._use_depot(g.depots[0])
+	check("a sled run is tracked until it pays", g.flying.size() == 1)
+	g = await reload(g, slot)
+	check("a quit mid-sled: the fish is paid on load, once", g.stats.eye_fed == fed_d + 1 and g.flying.is_empty())
+
 	# --- tithe and reset need confirming
 	g.yard.clear_all()
 	g.stats.eye_fed = g.eye_stage_at(1)
@@ -199,7 +228,13 @@ func _ready() -> void:
 	g._tithe()
 	g.yard.spawn(g._make_fish(g.SPECIES[0]), Vector3(-10, 0.05, 15), Vector3.ZERO)
 	g._tithe()
-	check("with fish lying around the click tells you to push them", g.stats.tithe == tc)
+	check("with fish lying near the Eye the click tells you to push them", g.stats.tithe == tc)
+	g.yard.clear_all()
+	g.yard.spawn(g._make_fish(g.SPECIES[0]), Vector3(45, 0.05, 0), Vector3.ZERO)
+	g.tithe_armed_t = 0.0
+	g._tithe()
+	check("a fish far from the Eye (not headed in) does not block the tithe", g.tithe_armed_t > 0.0)
+	g.tithe_armed_t = 0.0
 	g.yard.clear_all()
 
 	# --- an idle ice-breaker can be lifted and re-placed for free
@@ -239,8 +274,8 @@ func _ready() -> void:
 	g3.model.stock[near_h.c] = {}
 	g3.stats.holes = 2
 	g3.stats.eye_fed = 0
-	var s0: String = g3.guide.current().id
-	check("a fished-out hole is not a place to cast", s0 != "cast" or absf(g3.guide.current().where.z - near_h.pos.z) > 0.1)
+	var cur: Dictionary = g3.guide.current()
+	check("a fished-out hole is not a place to cast: the strip says cast, at the other hole", cur.id == "cast" and absf(cur.where.z - far_h.pos.z) < 0.1)
 	GameState.upgrades["bucket"] = 1
 	g3.unlocked["t_auto"] = true
 	g3.stats.autos = 0

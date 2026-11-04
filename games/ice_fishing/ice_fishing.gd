@@ -1174,6 +1174,10 @@ func _apply_settings() -> void:
 	fov_base = float(sv.get("fov", BASE_FOV))
 	AudioServer.set_bus_volume_db(0, linear_to_db(maxf(float(sv.get("vol", 1.0)), 0.0001)))
 
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
 func _cap() -> bool:
 	return test_capture or Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
 
@@ -2356,7 +2360,7 @@ func _tithe() -> void:
 	if eye_stage() < TITHE_MIN_STAGE:
 		_say("The Eye does not notice coins yet. Feed it fish first.")
 		return
-	if yard.near($Player.global_position, 14.0) > 0:
+	if yard.near_eye(EYE_R + FishYard.PULL_RANGE + 4.0) > 0:
 		_say("Push the fish in first: walk into them, or kick them (hold right mouse).")
 		return
 	if tithe_armed_t <= 0.0:
@@ -2952,7 +2956,7 @@ func _prompt_for(a: String) -> String:
 	if a == "eye":
 		if carry.is_empty():
 			if eye_stage() >= TITHE_MIN_STAGE:
-				if yard.near($Player.global_position, 14.0) > 0:
+				if yard.near_eye(EYE_R + FishYard.PULL_RANGE + 4.0) > 0:
 					return "Push the fish into the Eye (walk into them, or kick)"
 				if tithe_armed_t > 0.0:
 					return "Click again to offer %d coins  (Lv %d, +%d%% value)" % [tithe_cost(), stats.tithe, int(TITHE_BONUS * 100.0 * stats.tithe)]
@@ -3248,6 +3252,7 @@ func _restore(d: Dictionary) -> bool:
 	for k in d.get("stats", {}):
 		stats[k] = d.stats[k]
 	var st_saved := eye_stage()
+	eye_seen_stage = st_saved   # so nothing restored below can look like a new stage
 	var g: Array = d.get("goals", [])
 	for i in mini(g.size(), goal_done.size()):
 		goal_done[i] = g[i]
@@ -3261,6 +3266,9 @@ func _restore(d: Dictionary) -> bool:
 	for fd in d.get("carry", []):
 		carry.append(_fish_from(fd))
 	for ld in d.get("loose", []):
+		if yard.count() >= FishYard.MAX_LOOSE:   # a save can hold more than the ice does (fights, old saves): the rest are paid in full
+			_settle_fish(_fish_from(ld.f), EYE_MULT)
+			continue
 		yard.spawn(_fish_from(ld.f), Vector3(ld.p[0], FishYard.GROUND, ld.p[1]), Vector3.ZERO)
 	for hd in d.get("holes", []):
 		var t := _make_hole(Vector3(hd.p[0], 0.0, hd.p[1]), false)
@@ -3386,9 +3394,12 @@ func _offline(away: float) -> void:
 
 # ---------- input ----------
 func _new_game() -> void:
+	var keep: Dictionary = GameState.meta.get("settings", {})   # your sliders are not progress
 	GameState.autosave = false
 	GameState.delete_save()
 	GameState.reset()
+	if not keep.is_empty():
+		GameState.meta["settings"] = keep
 	get_tree().reload_current_scene()
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -3451,7 +3462,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				_new_game()
 			else:
 				reset_armed_t = 4.0
-				_say("Press N again to delete this run and start over.")
+				_say("Press N again to ERASE ALL progress (pearls and perks too) and start over.")
 			return
 		var k: int = event.keycode - KEY_1
 		if k >= 0 and k < TOOLS.size():

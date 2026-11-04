@@ -40,6 +40,7 @@ func _ready() -> void:
 	add_child(g)
 	await get_tree().process_frame
 	await get_tree().process_frame
+	seed(20251104)
 	g.test_capture = true
 	player = g.get_node("Player")
 	Engine.time_scale = 3.0
@@ -75,7 +76,10 @@ func _progress() -> void:
 		last_msg = m
 		if m.contains("got away") or m.contains("Too early"):
 			rep.missed_bites += 1
-	var sig := "%d %d %d %d %d %d" % [s.holes, s.caught, s.eye_fed, GameState.level("bucket"), s.autos, int(GameState.currency / 5.0)]
+	var lv := 0
+	for k in GameState.upgrades:
+		lv += int(GameState.upgrades[k])
+	var sig := "%d %d %d %d %d" % [s.holes, s.caught, lv, s.autos, s.belts]   # player actions only: passive income must not hide a stall
 	if sig != last_sig:
 		last_sig = sig
 		last_progress = T
@@ -308,7 +312,7 @@ func do_cast() -> void:
 func do_bite() -> void:
 	var t: Dictionary = {}
 	for h in g.holes:
-		if h.state == "hole" and h.cast == 2:
+		if h.state == "hole" and h.cast == 2 and h.mark.visible:   # the "!" marker over the hole is what a player reacts to
 			t = h
 	if t.is_empty():
 		return
@@ -437,11 +441,13 @@ func report() -> void:
 	print("REPORT pushes %d, kicks %d/%d hit, missed bites %d, scan time %.1f s, stalls %d (%.0f s)" % [rep.pushes, rep.kick_hits, rep.kick_tries, rep.missed_bites, rep.scan_time, rep.stalls, rep.stall_time])
 	print("REPORT process time per frame (whole game, headless, scene time not rendered): %.2f ms; fish physics with 60 loose fish: %.3f ms per step" % [fps_ms, yard_ms])
 	# the bound checks: the opening must be quick and nothing may stall for long
-	check("first catch within 90 s", rep.first_catch > 0.0 and rep.first_catch <= 90.0)
-	check("first delivery to the Eye within 120 s", rep.first_feed > 0.0 and rep.first_feed <= 120.0)
-	check("the Bucket is bought within 180 s", rep.bucket > 0.0 and rep.bucket <= 180.0)
-	check("an Auto-Rod is built within 480 s", rep.auto_rod > 0.0 and rep.auto_rod <= 480.0)
+	if rep.pushes == 0 and rep.kick_tries == 0:
+		print("REPORT NOTE: pushing and kicking were NOT exercised in this run (the Eye's pull did all the work); see tools/run_yard.sh for the physics")
+	check("first catch within 30 s", rep.first_catch > 0.0 and rep.first_catch <= 30.0)
+	check("first delivery to the Eye within 45 s", rep.first_feed > 0.0 and rep.first_feed <= 45.0)
+	check("the Bucket is bought within 90 s", rep.bucket > 0.0 and rep.bucket <= 90.0)
+	check("an Auto-Rod is built within 360 s", rep.auto_rod > 0.0 and rep.auto_rod <= 360.0)
 	check("no more than 3 stalls in 10 minutes", rep.stalls <= 3)
-	check("the bot made real progress: 20+ fish fed", g.stats.eye_fed >= 20)
+	check("the bot made real progress: 40+ fish fed", g.stats.eye_fed >= 40)
 	print("FIRST10 %s (%d failures)" % ["PASS" if fails == 0 else "FAIL", fails])
 	get_tree().quit(1 if fails > 0 else 0)
