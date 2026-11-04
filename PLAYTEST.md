@@ -53,3 +53,6 @@ The save is `ice_fishing.save.json` in the same folder.
 
 ## What to judge by hand (nothing else can)
 Play 10-15 minutes with a real mouse and speakers or headphones, then write down: (1) does walking into fish and kicking them feel good, or fiddly? (2) is the kick charge (0.9 s) and range right? (3) are any sounds annoying when repeated (fight reel, drill, footsteps)? is the wind/ice ambience pleasant or distracting? (4) does anything feel janky: camera, tool swap, build pop-in, the snow puffs? (5) is it clear what to do at every moment? (6) where did you get bored? Tools that already cover the measurable side: tools/run_yard.sh, run_safety.sh, run_guide.sh, run_audio.sh, run_smoke.sh, first10.sh, play_bot.sh, perf_render.sh.
+
+## Hands (new): what to try
+Click a fish to grab it; walk with it (does it sway nicely?); click empty ice to drop it; hold right mouse and watch the dotted arc, look up a little for a lob, let go to throw it at the Eye. Try E (stow) and Z (take out). Is grabbing too picky (it needs the crosshair near the fish) or too loose? Does the throw feel powerful or floaty? Is the arc preview clear?

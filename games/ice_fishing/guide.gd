@@ -333,8 +333,8 @@ func current() -> Dictionary:
 		return _step("bite", "It's biting!", "Click now!", _cast_hole_pos(2))
 	if g.yard.count() > 0 and is_early() and not carrying:
 		if s.eye_fed == 0:
-			return _step("push0", "Push the fish into the Eye", "Walk into it, or hold right mouse and let go to kick it. The Eye pulls close fish in. (E picks it up.)", _resolve("fish"))
-		return _step("push", "Push it into the Eye", "Walk into it or kick it (hold right mouse). Every fish is coins.", _resolve("fish"))
+			return _step("push0", "Push the fish into the Eye", "Click the fish to grab it, then hold right mouse and let go to THROW it at the Eye (look a little up for a lob). Or walk into it / kick it.", _resolve("fish"))
+		return _step("push", "Push it into the Eye", "Grab it (click), throw it (hold right mouse, let go) or walk it in. Every fish is coins.", _resolve("fish"))
 	if carrying and g.free_space() <= 0 and not is_early():  # (early on, the carry steps say it better)
 		return _step("full", "Your hands are full", "Carry it to the Eye: walk up to the glowing rim and click.", _resolve("eye"))
 	if is_early():
@@ -536,7 +536,7 @@ func _candidate_tips() -> Array:
 		if game._tool_unlocked(i):
 			out.append(["tool%d" % i, "New tool: %s. Press %d to use it." % [game.TOOLS[i], i + 1]])
 	if game.yard.count() >= 2 and game.no_kicks_yet():
-		out.append(["kick", "Hold right mouse and let go to kick fish across the ice. The harder you hold, the farther they fly."])
+		out.append(["kick", "Click a fish to grab it. Hold right mouse and let go to throw it (or kick it from the ice). The harder you hold, the farther it flies."])
 	for id in game.UPGRADES:
 		if id == "bucket" or not game.unlocked.get(id, false):
 			continue

@@ -13,7 +13,7 @@ var T := 0.0
 var player: Node3D
 var fails := 0
 var rep := {"first_hole": -1.0, "first_cast": -1.0, "first_catch": -1.0, "first_feed": -1.0, "bucket": -1.0, "auto_rod": -1.0, "belt": -1.0,
-	"missed_bites": 0, "kick_tries": 0, "kick_hits": 0, "scan_time": 0.0, "stalls": 0, "stall_time": 0.0, "pushes": 0, "buys": []}
+	"missed_bites": 0, "throws": 0, "throws_in": 0, "grabs": 0, "kick_tries": 0, "kick_hits": 0, "scan_time": 0.0, "stalls": 0, "stall_time": 0.0, "pushes": 0, "buys": []}
 var last_progress := 0.0
 var last_sig := ""
 var stall_open := false
@@ -352,6 +352,17 @@ func do_push() -> void:
 				var d2 := await tick()
 				look_step(e.pos, d2)
 			continue
+		# a fish close at hand and well away from the Eye: grab it (left click) and lob it (hold right mouse, let go)
+		if deye > 12.0 and flat(e.pos).distance_to(flat(player.global_position)) < 4.5 and g.held.is_empty():
+			await look_at_point(e.pos + Vector3(0, 0.15, 0), 0.03, 3.0)
+			if g._aim_fish() != null:
+				mouse(MOUSE_BUTTON_LEFT, true)
+				mouse(MOUSE_BUTTON_LEFT, false)
+				await tick()
+				if not g.held.is_empty():
+					rep.grabs += 1
+					await do_throw_to_eye()
+					continue
 		var dir_eye := (-epos).normalized()
 		var behind := epos - dir_eye * 1.9
 		var pp := flat(player.global_position)
@@ -383,6 +394,38 @@ func do_push() -> void:
 				var d4 := await tick()
 				look_step(Vector3(0, 0.3, 0), d4, false)
 			key_down(KEY_W, false)
+
+## With a fish in hand: face the Eye, pick the look angle that lands the lob on the pupil (a person judges this by eye and by the arc
+## preview; the bot reads the same preview numbers), wind up the right amount, and let go.
+func do_throw_to_eye() -> void:
+	await look_at_point(Vector3(0, 0.3, 0), 0.05, 3.0)
+	var best_pitch := 0.0
+	var best_frac := 0.7
+	var best_err := 1e9
+	for frac in [0.5, 0.65, 0.8, 1.0]:
+		for deg in range(-20, 40, 2):
+			g.cam.rotation.x = deg_to_rad(float(deg))
+			var v: Vector3 = g._throw_velocity(frac)
+			var tt: float = FishYard.flight_time(g._throw_origin(), v)
+			var lp: Vector3 = FishYard.arc_point(g._throw_origin(), v, tt)
+			var err: float = Vector2(lp.x, lp.z).length()
+			if err < best_err - 0.01 or (absf(err - best_err) <= 0.01 and frac < best_frac):
+				best_err = err
+				best_pitch = float(deg)
+				best_frac = frac
+	g.cam.rotation.x = deg_to_rad(best_pitch)
+	mouse(MOUSE_BUTTON_RIGHT, true)
+	var t0 := T
+	while T - t0 < 0.9 * best_frac:   # the real charge time
+		await tick()
+	mouse(MOUSE_BUTTON_RIGHT, false)
+	rep.throws += 1
+	var fed0: int = g.stats.eye_fed
+	var t1 := T
+	while T - t1 < 6.0 and g.stats.eye_fed == fed0:
+		await tick()
+	if g.stats.eye_fed > fed0:
+		rep.throws_in += 1
 
 func do_buy(id: String) -> void:
 	var where: Variant = g.guide._resolve("stall:" + id)
@@ -458,6 +501,7 @@ func report() -> void:
 	print("REPORT first hole %s s, first cast %s s, first catch %s s, first feed %s s" % [rep.first_hole, rep.first_cast, rep.first_catch, rep.first_feed])
 	print("REPORT bucket %s s, auto-rod %s s, belt %s s, purchases %s" % [rep.bucket, rep.auto_rod, rep.belt, rep.buys])
 	print("REPORT fish fed %d, caught %d, coins %d, eye stage %d, holes %d" % [g.stats.eye_fed, g.stats.caught, int(GameState.currency), g.eye_stage(), g.holes.size()])
+	print("REPORT hands: %d grabs, %d throws, %d of them swallowed by the Eye" % [rep.grabs, rep.throws, rep.throws_in])
 	print("REPORT pushes %d, kicks %d/%d hit, missed bites %d, scan time %.1f s, stalls %d (%.0f s)" % [rep.pushes, rep.kick_hits, rep.kick_tries, rep.missed_bites, rep.scan_time, rep.stalls, rep.stall_time])
 	print("REPORT process time per frame (whole game, headless, scene time not rendered): %.2f ms; fish physics with 60 loose fish: %.3f ms per step" % [fps_ms, yard_ms])
 	# the bound checks: the opening must be quick and nothing may stall for long

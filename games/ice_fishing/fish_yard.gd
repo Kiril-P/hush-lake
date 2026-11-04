@@ -79,8 +79,9 @@ func _step(delta: float, player: Vector3) -> void:
 				var impact := -v.y
 				if impact > 2.5:
 					v.y = impact * 0.3   # a small bounce
-					v.x *= 0.8
-					v.z *= 0.8
+					var keep := clampf(0.8 - impact * 0.025, 0.4, 0.8)   # a hard landing (a throw) skids far less than a gentle one
+					v.x *= keep
+					v.z *= keep
 					landed.emit(e.f, impact)
 					touched.emit(p, impact)
 				else:
@@ -295,6 +296,41 @@ func near_eye(radius: float) -> int:
 		if Vector2(e.pos.x, e.pos.z).length() <= radius:
 			n += 1
 	return n
+
+## The fish nearest the line of sight: within `reach` metres and a small cone around where you look (3D `dir`). Null if none.
+func pick(origin: Vector3, dir: Vector3, reach := 5.5, min_cos := 0.965) -> Variant:
+	var best: Variant = null
+	var best_score := -1.0
+	for e in fish:
+		var off: Vector3 = (e.pos + Vector3(0, 0.15, 0)) - origin
+		var dist := off.length()
+		if dist > reach + e.r or dist < 0.2:
+			continue
+		var c := off.normalized().dot(dir)
+		if c < min_cos - e.r * 0.05:
+			continue
+		var score := c - dist * 0.01
+		if score > best_score:
+			best_score = score
+			best = e
+	return best
+
+## Takes one specific fish off the ice (it goes into your hands). Returns its dict.
+func take(e: Dictionary) -> Dictionary:
+	fish.erase(e)
+	e.node.queue_free()
+	(e.shadow as Node).queue_free()
+	return e.f
+
+## Where a ballistic throw from `from` with velocity `v` is at time `t` (the same gravity the fish fall with).
+static func arc_point(from: Vector3, v: Vector3, t: float) -> Vector3:
+	return from + v * t + Vector3(0, -0.5 * GRAVITY * t * t, 0)
+
+## Time until a throw from `from` with velocity `v` comes down to the ice.
+static func flight_time(from: Vector3, v: Vector3) -> float:
+	var a := 0.5 * GRAVITY
+	var disc := v.y * v.y + 4.0 * a * (from.y - GROUND)
+	return (v.y + sqrt(maxf(disc, 0.0))) / (2.0 * a)
 
 func near(pos: Vector3, radius: float) -> int:
 	var n := 0

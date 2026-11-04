@@ -229,6 +229,39 @@ func _ready() -> void:
 			await get_tree().process_frame
 		get_viewport().get_texture().get_image().save_png("res://renders/shot_olga.png")
 		print("saved olga")
+	# the hands: a fish in hand, winding up a throw with the arc preview, and the throw in flight
+	if only == "hands":
+		var ph: Node3D = g.get_node("Player")
+		ph.position = Vector3(-8.0, 1.7, 17.0)
+		ph.rotation.y = deg_to_rad(-25.0)
+		g.cam.rotation.x = deg_to_rad(4.0)
+		g.day_t = 0.0
+		g.scenery.set_time(0.0)
+		g.goal_done.fill(true)
+		g.test_capture = true
+		var fw := -ph.global_basis.z
+		for i in 3:
+			var at: Vector3 = ph.position + fw * (3.0 + i * 0.9) + ph.global_basis.x * (i - 1) * 1.1
+			g.yard.spawn(g._make_fish(g.SPECIES[i % 4]), Vector3(at.x, g.yard.GROUND, at.z), Vector3.ZERO)
+		g.cam.rotation.x = deg_to_rad(-22.0)
+		for i in 20:
+			await get_tree().process_frame
+		get_viewport().get_texture().get_image().save_png("res://renders/shot_hands_a.png")   # the crosshair is on a fish: "Click: grab"
+		g._grab_fish()
+		g.cam.rotation.x = deg_to_rad(6.0)
+		for i in 30:
+			await get_tree().process_frame
+		get_viewport().get_texture().get_image().save_png("res://renders/shot_hands_b.png")   # holding it
+		g._start_kick()
+		g.kick_charge = 0.7
+		for i in 10:
+			await get_tree().process_frame
+		g.kick_charge = 0.7
+		get_viewport().get_texture().get_image().save_png("res://renders/shot_hands_c.png")   # winding up: the arc preview
+		g._release_kick()
+		await get_tree().create_timer(0.35).timeout
+		get_viewport().get_texture().get_image().save_png("res://renders/shot_hands_d.png")   # in flight
+		print("saved hands")
 	# the panels: journal, catch card, refreeze
 	if only == "ui":
 		var pu: Node3D = g.get_node("Player")

@@ -42,6 +42,10 @@ const KICK_MIN := 7.0                                    # a tap kick sends a fi
 const KICK_BASE_MAX := 16.0                               # a fully charged kick (more with Kick Power)
 const KICK_CHARGE_TIME := 0.9
 const KICK_REACH := 3.6
+const GRAB_REACH := 5.5          # you can grab a fish this far away, in front of the crosshair
+const THROW_MIN := 7.0
+const THROW_BASE_MAX := 30.0
+const THROW_LIFT := 0.38         # radians added to your look pitch: a throw leaves the hand on a lob (0.38 rad = 22 degrees)
 const PICKUP_RADIUS := 3.8
 const DIVE_MAX := 16                                      # belt fish diving into the funnel at once (visual only)
 const RIG_INTERVAL := 7.0
@@ -341,12 +345,19 @@ var settings_ctrls: Array = []
 var test_capture := false     # headless tools cannot capture the mouse: they ask the game to behave as if it were
 var kick_rings: Array = []
 var hold_block := false
+var held: Dictionary = {}       # the fish in your hand: {} when empty (a physical hold, not an inventory slot)
+var hold_node: Node3D           # its model in front of the camera
+var hold_sway := Vector2.ZERO   # the held fish lags behind when you turn
+var prev_look := Vector2.ZERO
+var arc_dots: Array = []        # the throw preview: dots along the arc
+var arc_ring: MeshInstance3D    # ...and a ring where it will land
 var tool_swap := 0.0
 var pickup_from: Array = []
 var restoring := false
 var slide_snd_t := 0.0
 var kick_boot: Node3D
 var boot_tween: Tween
+const HOLD_REST := Vector3(0.14, -0.34, -0.8)
 const BOOT_ROT := Vector3(-6, 38, 6)   # turned to show its side, toe forward
 const BOOT_REST := Vector3(0.24, -0.9, -0.2)   # below the bottom of the screen
 var bob_t := 0.0
@@ -389,6 +400,9 @@ func _ready() -> void:
 	tool_view.position = Vector3(0.38, -0.36, -0.65)
 	tool_view.scale = Vector3.ONE * 0.85
 	cam.add_child(tool_view)
+	hold_node = Node3D.new()
+	hold_node.position = HOLD_REST
+	cam.add_child(hold_node)
 	kick_boot = ToolModels.boot(cam)
 	kick_boot.position = BOOT_REST
 	_no_shadows(kick_boot)
@@ -1138,7 +1152,7 @@ void fragment() {
 	title.text = "HUSH LAKE"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	start_label = _plain(sbox, 20)
-	start_label.text = "Click to play   (Esc pauses)\n\nDrill a hole (1), fish it (2). Your catch drops onto the ice:\npush it into the Eye. Walk into fish, or hold right mouse\nand let go to kick them. E picks them up.\nLost? Press H and Olga points the way.\n\nWASD walk   V snowmobile   Tab journal   R refreeze\nM mute   F kick   N twice (paused): start over"
+	start_label.text = "Click to play   (Esc pauses)\n\nDrill a hole (1), fish it (2). Your catch drops onto the ice.\nClick a fish to GRAB it, click again to drop it, hold right\nmouse and let go to THROW it (aim a lob at the Eye).\nWalk into fish or kick them (right mouse, nothing in hand).\nE: stow in bucket / sweep up   Z: take one out\nLost? Press H and Olga points the way.\n\nWASD walk   V snowmobile   Tab journal   R refreeze\nM mute   N twice (paused): start over"
 	start_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_build_settings(sbox)
 	var start_center := CenterContainer.new()   # the card always sits in the middle of the screen, however tall it grows
@@ -1783,6 +1797,8 @@ func _species_held(sp: String) -> int:
 			for f in t.hooked:
 				if f.name == sp:
 					n += 1
+	if not held.is_empty() and held.name == sp:
+		n += 1
 	for e in yard.fish:   # fish on the ice, in the air toward the Eye, or riding a belt are out of the lake but not yet delivered
 		if e.f.name == sp:
 			n += 1
@@ -1923,7 +1939,7 @@ func _process(delta: float) -> void:
 	else:
 		prompt_label.text = _prompt_for(a)
 	_tick_yard(delta, captured)
-	if captured and a == "" and yard.near($Player.global_position, PICKUP_RADIUS + 1.0) > 0 and not guide.intro_active:
+	if captured and a == "" and (not held.is_empty() or yard.near($Player.global_position, PICKUP_RADIUS + 1.0) > 0) and not guide.intro_active:
 		prompt_label.text = _yard_hint()
 	guide.tick(delta, captured)
 	if guide.intro_active:
@@ -1932,7 +1948,7 @@ func _process(delta: float) -> void:
 		_animate(delta)
 		return
 	var pp3: Vector3 = $Player.global_position
-	scenery.set_eye_offering(captured and not carry.is_empty() and Vector2(pp3.x, pp3.z).length() - EYE_R <= RANGE_EYE + 4.0, pp3)
+	scenery.set_eye_offering(captured and _hands_have_fish() and Vector2(pp3.x, pp3.z).length() - EYE_R <= RANGE_EYE + 4.0, pp3)
 	_update_hold(a, delta)
 	if kick_charge >= 0.0:
 		work_bar.visible = true
@@ -2076,7 +2092,14 @@ func _snow_fx(pos: Vector3, amount: int, power: float) -> void:
 func _kick_max() -> float:
 	return KICK_BASE_MAX + 3.0 * GameState.level("kick")
 
+func _hold_hint() -> String:
+	return "Click: drop   Right mouse (hold): throw   E: stow in bucket" + ("   Z: take one out" if not carry.is_empty() else "")
+
 func _yard_hint() -> String:
+	if not held.is_empty():
+		return _hold_hint()
+	if _aim_fish() != null:
+		return "Click: grab this fish   Right mouse / F: kick   E: sweep up"
 	var pl: Node3D = $Player
 	var fwd := -pl.global_basis.z
 	fwd.y = 0.0
@@ -2095,6 +2118,8 @@ func _tick_yard(delta: float, captured: bool) -> void:
 	yard.pull = 3.8 + 0.9 * eye_stage()
 	yard.step(delta, ppos)
 	_update_kick_rings(captured)
+	_update_hand(delta)
+	_update_arc()
 	if kick_charge >= 0.0:
 		if captured and not guide.intro_active:
 			kick_charge = minf(kick_charge + delta / KICK_CHARGE_TIME, 1.0)
@@ -2180,6 +2205,8 @@ func _update_crosshair(a: String, captured: bool) -> void:
 			kind = 1
 		elif a == "ice" and tool == 0 and _can_drill_at(Vector3(aim_pos.x, 0.0, aim_pos.z)):
 			kind = 1
+		if kind == 0 and held.is_empty() and yard.count() > 0 and _aim_fish() != null:
+			kind = 3   # a fish you can grab
 		if kind == 0 and yard.count() > 0:
 			var pl: Node3D = $Player
 			var fwd := -pl.global_basis.z
@@ -2189,13 +2216,220 @@ func _update_crosshair(a: String, captured: bool) -> void:
 	crosshair.kind = kind
 	crosshair.progress = work_bar.value if work_bar.visible else -1.0
 
+# ---------- hands: grab, hold, drop, throw, stow ----------
+# Free, physical handling (after Project P.I.T.T.): click a fish to grab it, carry it in your hand (it sways as you turn),
+# click to drop it, hold the right mouse to charge a throw with an arc preview, let go to throw. E stows it in your bucket
+# (or sweeps up everything at your feet), Z takes one out again. Clicking the Eye with a fish in hand lobs it in.
+
+## The fish under the crosshair (within reach), or null.
+func _aim_fish() -> Variant:
+	return yard.pick(cam.global_position, -cam.global_basis.z, GRAB_REACH)
+
+func _hands_have_fish() -> bool:
+	return not carry.is_empty() or not held.is_empty()
+
+## Moves what is in your hand into the bucket list so the delivery functions (Eye, depot) treat it like the rest.
+func _hold_to_carry() -> void:
+	if held.is_empty():
+		return
+	carry.append(held)
+	held = {}
+	_set_hold_visual()
+	_refresh_view()
+
+func _grab_fish(target: Variant = null) -> bool:
+	if not held.is_empty():
+		return false
+	var e: Variant = target if target != null else _aim_fish()
+	if e == null:
+		return false
+	var at: Vector3 = e.pos
+	held = yard.take(e)
+	_set_hold_visual()
+	hold_node.position = HOLD_REST + Vector3(0, -0.25, 0.2)   # it comes up from below
+	_snow_fx(at, 4, 0.5)
+	sfx.play("plop", -2.0, 1.5)
+	view_pop = 0.8
+	_refresh()
+	return true
+
+func _set_hold_visual() -> void:
+	for c in hold_node.get_children():
+		c.queue_free()
+	hold_node.scale = Vector3.ONE
+	if held.is_empty():
+		return
+	var fm := _fish_mesh(held, hold_node, 0.95)
+	(fm as FishNode).amp = 1.8
+	fm.rotation = Vector3(0.15, PI * 0.5 + 0.7, 0.25)   # across the lower right of the view, its side showing   # nose away from you, a little turned so you see its side
+	_no_shadows(hold_node)
+	hold_node.scale = Vector3.ONE * 0.4
+	var tw := hold_node.create_tween()
+	tw.tween_property(hold_node, "scale", Vector3.ONE, 0.2).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+func _throw_dir() -> Vector3:
+	return (-cam.global_basis.z).rotated(cam.global_basis.x, THROW_LIFT).normalized()
+
+func _throw_origin() -> Vector3:
+	return cam.global_position + (-cam.global_basis.z) * 0.95 + Vector3(0, -0.3, 0)
+
+func _throw_power(frac: float) -> float:
+	return lerpf(THROW_MIN, THROW_BASE_MAX + 3.0 * GameState.level("kick"), clampf(frac, 0.0, 1.0))
+
+func _throw_velocity(frac: float) -> Vector3:
+	return _throw_dir() * _throw_power(frac) + Vector3(yard.player_vel.x, 0, yard.player_vel.z) * 0.6
+
+func _throw_held(frac: float) -> bool:
+	if held.is_empty():
+		return false
+	var f := held
+	held = {}
+	_set_hold_visual()
+	var e := yard.spawn(f, _throw_origin(), _throw_velocity(frac))
+	e.spin = randf_range(-14.0, 14.0)
+	sfx.play("cast", -3.0, 0.85 + frac * 0.5)
+	_kick_tool(1.1)
+	view_pop = 0.5
+	fov_kick = maxf(fov_kick, 1.5 + frac * 3.0)
+	shake = maxf(shake, 0.004 + 0.01 * frac)
+	_refresh_view()
+	_refresh()
+	return true
+
+func _drop_held() -> bool:
+	if held.is_empty():
+		return false
+	var f := held
+	held = {}
+	_set_hold_visual()
+	var fwd := -cam.global_basis.z
+	fwd.y = 0.0
+	fwd = fwd.normalized()
+	yard.spawn(f, cam.global_position + fwd * 0.9 + Vector3(0, -0.8, 0), fwd * 2.0 + Vector3(0, 1.2, 0))
+	sfx.play("plop", -4.0, 1.1)
+	_refresh()
+	return true
+
+func _stow_held() -> bool:
+	if held.is_empty():
+		return false
+	if free_space() <= 0:
+		_say("Your bucket is full. Throw it into the Eye, or drop it.")
+		sfx.play("deny")
+		return false
+	carry.append(held)
+	held = {}
+	_set_hold_visual()
+	sfx.play("plop", -2.0, 1.3)
+	_refresh_view()
+	_refresh()
+	return true
+
+func _take_from_bucket() -> bool:
+	if not held.is_empty() or carry.is_empty():
+		return false
+	held = carry.pop_back()
+	_set_hold_visual()
+	sfx.play("plop", -3.0, 1.4)
+	_refresh_view()
+	_refresh()
+	return true
+
+## Each frame: the held fish hangs in front of you, lags when you turn, bobs when you walk and draws back while you charge a throw.
+func _update_hand(delta: float) -> void:
+	if held.is_empty():
+		hold_node.visible = false
+		return
+	hold_node.visible = not guide.intro_active
+	var pl: Node3D = $Player
+	var look := Vector2(pl.rotation.y, cam.rotation.x)
+	var dl := Vector2(wrapf(look.x - prev_look.x, -PI, PI), look.y - prev_look.y)
+	prev_look = look
+	hold_sway += Vector2(dl.x * 2.2, -dl.y * 2.2)
+	hold_sway *= exp(-9.0 * delta)
+	hold_sway = hold_sway.clamp(Vector2(-0.22, -0.22), Vector2(0.22, 0.22))
+	var c := maxf(kick_charge, 0.0)
+	var tm := Time.get_ticks_msec() * 0.001
+	var bob := Vector3(sin(bob_t) * 0.012, absf(sin(bob_t)) * -0.014, 0.0) if moving else Vector3(0, sin(tm * 2.0) * 0.004, 0)
+	hold_node.position = hold_node.position.lerp(HOLD_REST + Vector3(hold_sway.x, hold_sway.y, 0.0) + bob + Vector3(0.12, 0.1, 0.2) * c, minf(1.0, delta * 16.0))
+	hold_node.rotation = Vector3(-0.25 * c + hold_sway.y * 0.6, -hold_sway.x * 1.2, hold_sway.x * 0.8)
+	if hold_node.get_child_count() > 0:
+		var fm: FishNode = hold_node.get_child(0) as FishNode
+		if fm:
+			fm.amp = 1.6 + 2.0 * c   # it wriggles harder the more you wind up
+
+## The throw preview: dots along the arc and a ring where it will come down (aqua when that is the Eye's pull).
+func _update_arc() -> void:
+	var show := not held.is_empty() and kick_charge >= 0.0 and _cap() and not guide.intro_active
+	while arc_dots.size() < 14:
+		var m := MeshInstance3D.new()
+		var sm := SphereMesh.new()
+		sm.radius = 0.09
+		sm.height = 0.18
+		sm.radial_segments = 6
+		sm.rings = 3
+		m.mesh = sm
+		var mt := StandardMaterial3D.new()
+		mt.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mt.albedo_color = Color(0.95, 0.6, 0.15)
+		mt.disable_fog = true
+		m.material_override = mt
+		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		m.visible = false
+		add_child(m)
+		arc_dots.append(m)
+	if arc_ring == null:
+		arc_ring = MeshInstance3D.new()
+		var tm2 := TorusMesh.new()
+		tm2.inner_radius = 0.8
+		tm2.outer_radius = 1.0
+		tm2.rings = 24
+		tm2.ring_segments = 6
+		arc_ring.mesh = tm2
+		var mt2 := StandardMaterial3D.new()
+		mt2.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mt2.albedo_color = Color(0.95, 0.6, 0.15)
+		mt2.disable_fog = true
+		mt2.render_priority = 2
+		arc_ring.material_override = mt2
+		arc_ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		arc_ring.visible = false
+		add_child(arc_ring)
+	arc_ring.visible = show
+	for d in arc_dots:
+		d.visible = show
+	if not show:
+		return
+	var from := _throw_origin()
+	var v := _throw_velocity(kick_charge)
+	var tt := FishYard.flight_time(from, v)
+	var cam_pos := cam.global_position
+	for i in arc_dots.size():
+		var dp := FishYard.arc_point(from, v, tt * float(i + 1) / float(arc_dots.size() + 1))
+		arc_dots[i].global_position = dp
+		arc_dots[i].scale = Vector3.ONE * clampf(dp.distance_to(cam_pos) / 7.0, 1.0, 5.0)   # far dots grow so the arc reads at any range
+	var land := FishYard.arc_point(from, v, tt)
+	arc_ring.global_position = Vector3(land.x, 0.05, land.z)
+	var into_eye := Vector2(land.x, land.z).length() < EYE_R + FishYard.PULL_RANGE
+	var col := Color(0.35, 0.9, 0.85) if into_eye else Color(0.95, 0.6, 0.15)
+	(arc_ring.material_override as StandardMaterial3D).albedo_color = col
+	for d in arc_dots:
+		(d.material_override as StandardMaterial3D).albedo_color = col
+	arc_ring.scale = Vector3.ONE * clampf(land.distance_to(cam_pos) / 9.0, 1.0, 3.5) * (1.0 + 0.1 * sin(Time.get_ticks_msec() * 0.012))
+
 func _start_kick() -> void:
 	kick_charge = 0.0
-	_boot_move(Vector3(0.28, -0.34, -0.3), Vector3(-18, 38, 6), 0.35)   # the foot draws back
+	if held.is_empty():
+		_boot_move(Vector3(0.28, -0.34, -0.3), Vector3(-18, 38, 6), 0.35)   # the foot draws back (with a fish in hand the arm winds up instead)
 
 ## Release the right mouse button: everything in front of your boots flies off the way you are facing.
 func _release_kick() -> void:
 	if kick_charge < 0.0:
+		return
+	if not held.is_empty():   # a fish in hand: the charge is a throw
+		var frac := kick_charge
+		kick_charge = -1.0
+		_throw_held(frac)
 		return
 	var power := lerpf(KICK_MIN, _kick_max(), kick_charge)
 	kick_charge = -1.0
@@ -2648,6 +2882,7 @@ func _tithe() -> void:
 	_refresh()
 
 func _feed_by_hand() -> void:
+	_hold_to_carry()
 	if carry.is_empty():
 		_tithe()
 		return
@@ -2929,6 +3164,7 @@ func _build_depot(pos: Vector3, pay := true) -> void:
 		_refresh()
 
 func _use_depot(d: Dictionary) -> void:
+	_hold_to_carry()
 	if carry.is_empty():
 		_say("Drop fish here and a sled runs them to the Eye.")
 		return
@@ -3204,8 +3440,10 @@ func _refund() -> int:
 
 func _prompt_for(a: String) -> String:
 	if a == "olga":
-		return "Click: talk to Olga" if carry.is_empty() else "Olga doesn't buy fish: the Eye does"
+		return "Click: talk to Olga" if not _hands_have_fish() else "Olga doesn't buy fish: the Eye does"
 	if a == "eye":
+		if not held.is_empty():
+			return "Click: throw it in (or hold right mouse and aim a lob)"
 		if carry.is_empty():
 			if eye_stage() >= TITHE_MIN_STAGE:
 				if yard.near_eye(EYE_R + FishYard.PULL_RANGE + 4.0) > 0:
@@ -3490,6 +3728,9 @@ func _on_about_to_save() -> void:
 			var to_eye := (-Vector3(tp.x, 0, tp.z)).normalized()
 			for f in t.hooked:
 				loose.append({"f": _fish_to(f), "p": [tp.x + to_eye.x * 1.5, tp.z + to_eye.z * 1.5]})
+	if not held.is_empty():   # a fish in your hand is saved as one lying at your feet
+		var hf := -cam.global_basis.z
+		loose.append({"f": _fish_to(held), "p": [$Player.global_position.x + hf.x * 1.2, $Player.global_position.z + hf.z * 1.2]})
 	var pend: Array = []
 	for it in belt_fish:
 		pend.append({"f": _fish_to(it.f), "m": _belt_mult() * _belt_flag_mult(it.belt, it.f)})
@@ -3713,7 +3954,13 @@ func _unhandled_input(event: InputEvent) -> void:
 			_toggle_ride()
 			return
 		if event.keycode == KEY_E:
-			_pick_up_fish()
+			if not held.is_empty():
+				_stow_held()
+			else:
+				_pick_up_fish()
+			return
+		if event.keycode == KEY_Z:
+			_take_from_bucket()
 			return
 		if event.keycode == KEY_Q and tool == 6:
 			build_item = (build_item + 1) % BUILD_ITEMS.size()
@@ -3745,7 +3992,17 @@ func _unhandled_input(event: InputEvent) -> void:
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT \
 			and _cap() \
 			and not refreeze_panel.visible:
-		_click(_aim())
+		var a_click := _aim()
+		if a_click in ["", "ice"]:
+			if not held.is_empty():
+				_drop_held()
+				hold_block = true
+				return
+			if _aim_fish() != null:
+				_grab_fish()
+				hold_block = true   # the click that grabbed must not also start a drill
+				return
+		_click(a_click)
 
 func _spend(cost: float) -> bool:
 	if GameState.currency < cost:
@@ -3890,6 +4147,7 @@ func _pickup_auto(t: Dictionary) -> void:
 	_refresh()
 
 func _use_smoker(t: Dictionary) -> void:
+	_hold_to_carry()
 	if t.slot.is_empty():
 		if carry.is_empty():
 			_say("Carry fish here to smoke them")

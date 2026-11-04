@@ -171,3 +171,14 @@ Progress of the art-direction scores across four reviews: cohesion 6 -> 7 -> 7.5
 
 ### Last three small open items (from art review 4), closed
 Fewer Eye petals (16 + 10, was 20 + 20) so the lower third of Eye-facing views is clear; the auger flights are a tight helix of small blades (a spiral, not crossbars); the bank snow starts bluer. Not re-reviewed by an art director; judged from renders only.
+
+## Hands: grab, hold, throw (a redesign after "it feels tight and not free")
+Research (fan guides, provisional): Project P.I.T.T. is built on physical handling: left mouse picks things up and drops them, right mouse throws (a purchased upgrade), middle mouse rotates, tools shove; Moon Sweepers has capacity-limited carrying to a depot with grab/throw as logistics upgrades. Our old model was a capacity-1 click-feed bucket plus a kick: no way to handle one fish freely.
+New model (fish_yard.gd + ice_fishing.gd "hands" section, tests in tools/hands_test.gd, `tools/run_hands.sh`):
+- **Grab**: look at a fish within 5.5 m and click (`FishYard.pick`: the fish nearest the line of sight). It hangs in front of you as a real model that lags when you turn, bobs when you walk and wriggles harder as you wind up. One in each hand slot, no capacity gate: the bucket is for storage, the hand is for play.
+- **Drop** (click on empty ice), **throw** (hold right mouse / F: 0.9 s charge, release): ballistic arc with the same gravity as the fish fall with, from the hand along your look direction lifted 22 degrees, so looking up lobs farther. A dotted arc preview and a landing ring show where it comes down (aqua when that is inside the Eye's pull). Charge 0..1 gives 7 to 30 m/s (+3 per Kick Power level); a full charge flies ~35 m and skids; hard landings skid far less than gentle ones.
+- **Stow / take** (E / Z): the bucket becomes a pocket. With empty hands E still sweeps up the fish at your feet.
+- **Deliver**: clicking the Eye (or a depot, or the smoker) with a fish in hand uses it like the carried ones; a thrown fish that crosses the pupil is swallowed like any pushed fish (same payout and streak).
+- Saved: a fish in hand is saved as one lying at your feet; orders count it as out of the lake.
+- The first-10-minutes bot uses it through real events: 53 grabs, 53 throws, 53 swallowed in 10 minutes.
+Left for the owner's playtest: whether grab reach and the 22-degree lift feel right, whether the arc preview is readable enough, and whether stow/take (E/Z) is wanted at all now that you can just hold a fish.
