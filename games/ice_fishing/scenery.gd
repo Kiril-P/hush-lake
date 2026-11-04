@@ -141,7 +141,7 @@ func build(env: Environment, sun: DirectionalLight3D, hut: Node3D) -> void:
 	_terrain()
 	_mountains()
 	_decorate_hut(hut)
-	obstacles.append(Vector3(hut.position.x, hut.position.z, 3.6))
+	obstacles.append(Vector3(hut.position.x, hut.position.z, 4.0))   # (a little wider: the camera must not hug the walls)
 	_build_crane(hut)
 	_snow()
 	var clear: Array[Vector3] = []
@@ -435,6 +435,22 @@ func _decorate_hut(hut: Node3D) -> void:
 	_box(hut, Vector3(-1.4, 1.8, 2.03), Vector3(0.9, 0.8, 0.08), glow)
 	_box(hut, Vector3(2.53, 1.8, 0.0), Vector3(0.08, 0.8, 0.9), glow)
 	_box(hut, Vector3(-2.53, 1.8, 0.0), Vector3(0.08, 0.8, 0.9), glow)
+	# log courses, corner posts, window and door frames, a snow ledge on the eaves and a soft glow around each window:
+	# flat walls were the biggest "untextured" surfaces in the camp
+	var trim := _mat(Color(0.3, 0.19, 0.14))
+	for y in [0.5, 1.0, 1.5, 2.0, 2.5]:
+		_box(hut, Vector3(0, y, 0), Vector3(5.05, 0.05, 4.05), trim)
+	for cx in [-2.5, 2.5]:
+		for cz in [-2.0, 2.0]:
+			_box(hut, Vector3(cx, 1.55, cz), Vector3(0.28, 3.1, 0.28), trim)
+	_box(hut, Vector3(-1.4, 2.25, 2.06), Vector3(1.15, 0.1, 0.1), trim)   # window head and sill
+	_box(hut, Vector3(-1.4, 1.35, 2.06), Vector3(1.15, 0.1, 0.1), trim)
+	_box(hut, Vector3(0, 2.1, 2.1), Vector3(1.55, 0.14, 0.12), trim)       # door head
+	for gx in [[-1.4, 1.8, 2.0], [2.55, 1.8, 0.0], [-2.55, 1.8, 0.0]]:
+		var halo := _box(hut, Vector3(gx[0], gx[1], gx[2]), Vector3(1.5, 1.4, 0.02) if absf(gx[0]) < 2.0 else Vector3(0.02, 1.4, 1.5), _mat(Color(1.0, 0.72, 0.3, 0.14), 0.8))
+		halo.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var ledge := _box(hut, Vector3(0, 3.0, 0), Vector3(6.2, 0.14, 5.0), _mat(Color(0.9, 0.95, 1.0)))   # snow along the eaves
+	ledge.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	# lantern + warm light
 	_box(hut, Vector3(1.4, 1.7, 2.2), Vector3(0.22, 0.34, 0.22), glow)
 	var light := OmniLight3D.new()
@@ -458,7 +474,7 @@ func _decorate_hut(hut: Node3D) -> void:
 	snow.bottom_radius = 6.2
 	snow.height = 0.2
 	snow.radial_segments = 16
-	_mesh(hut, snow, _mat(Color(0.84, 0.91, 1.0), 0.0, false), Vector3(0, 0.0, 1.2))
+	_mesh(hut, snow, _mat(Color(0.84, 0.91, 1.0), 0.3, false), Vector3(0, 0.0, 1.2))   # a little self-light keeps trampled snow blue-white instead of lilac under the golden sun
 	# Olga herself, beside her counter
 	var op: Dictionary = NpcModels.olga()
 	olga = op
@@ -936,7 +952,7 @@ func decorate_stall(s: Node3D, id: String) -> void:
 	# s is the sign board node, facing the lake (+Z toward the centre); its local origin is the board centre
 	var gy := -0.05 - s.position.y            # local y of the ice
 	var wood := _mat(Color(0.3, 0.19, 0.13))
-	var snow := _mat(Color(0.88, 0.94, 1.0))
+	var snow := _mat(Color(0.88, 0.94, 1.0), 0.3)
 	var lamp := _mat(Color(1.0, 0.72, 0.3), 1.4)
 	glow_mats.append([lamp, 1.4, 3.5])
 	for x in [-2.0, 2.0]:
@@ -955,6 +971,12 @@ func decorate_stall(s: Node3D, id: String) -> void:
 	_mesh(s, pad, snow, Vector3(0, gy + 0.04, 0.5))
 	var dark := _mat(Color(0.16, 0.14, 0.22))
 	var iron := _mat(Color(0.3, 0.3, 0.36))
+	# the sign board gets a wooden frame, a lit lamp underneath and a darker kick-plate at the bottom
+	for fy in [-0.9, 0.9]:
+		_box(s, Vector3(0, fy, 0.02), Vector3(3.6, 0.13, 0.22), wood)
+	for fx in [-1.75, 1.75]:
+		_box(s, Vector3(fx, 0, 0.02), Vector3(0.13, 1.85, 0.22), wood)
+	_box(s, Vector3(0, 0.0, 0.085), Vector3(3.3, 0.02, 0.03), _mat(Color(1.0, 0.78, 0.35), 0.6))   # a thin amber rule under the name
 	match id:
 		"bucket":
 			for k in 4:
