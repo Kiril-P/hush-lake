@@ -354,8 +354,9 @@ func _build_petals() -> void:
 			pivot.position = Vector3(sin(a) * rg[1], 0.05, -cos(a) * rg[1])
 			pivot.rotation = Vector3(0.1, PI - a, 0)
 			var mi := MeshInstance3D.new()
-			mi.mesh = _petal_mesh(len * 0.62, float(rg[3]) * 0.8 * rng.randf_range(0.8, 1.2), 0.4)
+			mi.mesh = _petal_mesh(len * 0.5, float(rg[3]) * 0.62 * rng.randf_range(0.8, 1.2), 0.34)
 			mi.material_override = petal_mat
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF   # their shadows made dark polygons all over the ice
 			pivot.add_child(mi)
 			add_child(pivot)
 			petals.append({"pivot": pivot, "ph": rng.randf() * TAU, "ring": ri})

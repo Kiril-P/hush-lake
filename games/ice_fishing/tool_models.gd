@@ -176,5 +176,5 @@ static func boot(parent: Node3D) -> Node3D:
 	cuff.outer_radius = 0.1
 	cuff.rings = 12
 	cuff.ring_segments = 5
-	_add(b, cuff, mat(Color(0.95, 0.92, 0.84), 0.0, 0.9), Vector3(0, 0.23, 0.05))
+	_add(b, cuff, mat(Color(0.5, 0.62, 0.66), 0.0, 0.9), Vector3(0, 0.23, 0.05))
 	return b

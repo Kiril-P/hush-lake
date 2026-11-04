@@ -97,7 +97,7 @@ const TOOL_UNLOCK := ["", "", "t_auto", "t_smoker", "t_table", "t_belt", "t_buil
 
 const SPECIES := [
 	{"name": "Minnow",       "value": 1.0,   "w": 60.0, "color": Color(0.75, 0.8, 0.85)},
-	{"name": "Perch",        "value": 2.0,   "w": 22.0, "color": Color(0.6, 0.8, 0.5)},
+	{"name": "Perch",        "value": 2.0,   "w": 22.0, "color": Color(0.55, 0.84, 0.88)},
 	{"name": "Silver Pike",  "value": 5.0,   "w": 9.0,  "color": Color(0.85, 0.9, 1.0)},
 	{"name": "Golden Trout", "value": 14.0,  "w": 3.0,  "color": Color(1.0, 0.8, 0.25)},
 	{"name": "Old Boot",     "value": 0.5,   "w": 3.0,  "color": Color(0.4, 0.28, 0.2)},
@@ -235,6 +235,7 @@ var tool_line: Node3D
 var tool_sig := ""
 var tool_kick := 0.0
 var tool_base_x := 0.0
+var tool_base_z := 0.0
 var working := false
 var shake := 0.0
 var fov_kick := 0.0
@@ -489,7 +490,7 @@ func _label3d(parent: Node, pos: Vector3, text: String, px := 0.008, billboard :
 	l.position = pos
 	if billboard:
 		l.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-		l.no_depth_test = true
+		l.no_depth_test = false   # a label behind a wall or a card stays behind it
 	l.outline_size = 10
 	parent.add_child(l)
 	return l
@@ -829,7 +830,7 @@ func _make_hole(pos: Vector3, count := true) -> Dictionary:
 		stats.holes += 1
 	for k in 8:
 		var ang := TAU * k / 8.0 + randf() * 0.4
-		var chunk := _box(node, Vector3(cos(ang), 0.12, sin(ang)) * randf_range(0.75, 1.0), Vector3.ONE * randf_range(0.15, 0.3), Color(0.9, 0.95, 1.0))
+		var chunk := _box(node, Vector3(cos(ang), 0.12, sin(ang)) * randf_range(0.75, 1.0), Vector3.ONE * randf_range(0.15, 0.3), Color(0.78, 0.92, 1.0))
 		chunk.rotation = Vector3(randf(), randf(), randf())
 	var disc := MeshInstance3D.new()
 	var dc := CylinderMesh.new()
@@ -913,6 +914,7 @@ func _build_smoker(t: Dictionary) -> void:
 	t.extra = Node3D.new()
 	t.node.add_child(t.extra)
 	t.extra.scale = Vector3.ONE * 1.5
+	scenery.obstacles.append(Vector3(t.pos.x, t.pos.z, 1.5))   # the camera must not slide inside the walls
 	var sp: Dictionary = MachineModels.smoker(t.extra)
 	t.smoke_fx = sp.smoke
 	_pop_in(t.extra)
@@ -923,6 +925,7 @@ func _build_table(t: Dictionary) -> void:
 	t.extra = Node3D.new()
 	t.node.add_child(t.extra)
 	t.extra.scale = Vector3.ONE * 1.5
+	scenery.obstacles.append(Vector3(t.pos.x, t.pos.z, 1.3))
 	MachineModels.gut_table(t.extra)
 	_pop_in(t.extra)
 	t.tag = _label3d(t.node, Vector3(0, 2.6, 0), "Gut Table", 0.012)
@@ -1402,7 +1405,7 @@ func _make_fish(s: Dictionary) -> Dictionary:
 func _note_found(f: Dictionary) -> void:
 	if not journal.has(f.name):
 		_log("FOUND %s" % f.name)
-		_banner("NEW DISCOVERY: %s  (%d coins)" % [f.name, _species_value(f.name)], f.color)
+		_banner("NEW DISCOVERY: %s  (%d coins)" % [f.name, _species_value(f.name)], Style.AMBER)
 		if sfx:
 			sfx.play("rare")
 	journal[f.name] = journal.get(f.name, 0) + 1
@@ -1675,10 +1678,12 @@ func _sync_tool_view() -> void:
 	tool_spin = null
 	tool_line = null
 	tool_tip = null
+	tool_base_z = 0.0
 	match tool:
 		0:  # auger: spins while you hold click
 			var tier := mini(GameState.level("drill"), TIER_COLORS.size() - 1)
-			tool_base_x = deg_to_rad(-22)
+			tool_base_x = deg_to_rad(-12)   # shaft out front, slightly down, leaning across the screen on a diagonal so it reads as a drill and not a log
+			tool_base_z = deg_to_rad(24)
 			var parts: Dictionary = ToolModels.auger(tool_body, TIER_COLORS[tier], tier)
 			tool_spin = parts.spin
 		1:  # rod, its line shows while a cast is active
@@ -1691,6 +1696,7 @@ func _sync_tool_view() -> void:
 			var accents := [Color(1.0, 0.78, 0.35), Color(0.95, 0.5, 0.2), Color(0.55, 0.9, 0.95), Color(0.3, 0.75, 0.85), Color(1.0, 0.9, 0.6)]
 			ToolModels.builder(tool_body, accents[clampi(tool - 2, 0, accents.size() - 1)])
 	tool_body.rotation.x = tool_base_x
+	tool_body.rotation.z = tool_base_z
 
 ## First-person snowmobile: hood, windshield, handlebars and gloves at the bottom of the screen.
 func _build_ride_view() -> void:
@@ -1974,7 +1980,7 @@ func _animate(delta: float) -> void:
 	_update_fishing_lines()
 	if tool_body:
 		tool_body.rotation.x = tool_base_x + tool_kick * 0.6 + fight_amt * (0.12 + 0.1 * sin(Time.get_ticks_msec() * 0.035))
-		tool_body.rotation.z = fight_amt * 0.05 * sin(Time.get_ticks_msec() * 0.027)
+		tool_body.rotation.z = tool_base_z + fight_amt * 0.05 * sin(Time.get_ticks_msec() * 0.027)
 	if tool_spin and working and tool == 0:
 		tool_spin.rotation.z += 16.0 * delta
 	working = false
@@ -3090,6 +3096,12 @@ func _other_line(t: Dictionary) -> bool:
 			return true
 	return false
 
+func _hole_with_fight() -> bool:
+	for h in holes:
+		if h.state == "hole" and h.cast == 3:
+			return true
+	return false
+
 func _hole_of(a: String) -> Dictionary:
 	if not a.begins_with("hole:"):
 		return {}
@@ -3111,6 +3123,8 @@ func _below_text(t: Dictionary) -> String:
 func _tile_action_text(t: Dictionary) -> String:
 	match t.state:
 		"hole":
+			if _hole_with_fight():
+				return "Hold on! Landing the fish..."
 			if t.cast == 2: return "BITE! CLICK!"
 			if t.cast == 1: return "Waiting... (click to reel in)"
 			if _emptied(t):
@@ -3188,6 +3202,8 @@ func _prompt_for(a: String) -> String:
 			return "The Eye's rim"
 		var sec: Dictionary = model.sectors[cell.sector]
 		if not sec.unlocked:
+			if yard.near($Player.global_position, PICKUP_RADIUS + 1.0) > 0:
+				return _yard_hint()   # fish to push beats a lecture about the locked ice under them
 			return "LOCKED - clear a neighbouring sector to open %s" % sec.name
 		var head := "Solid ice (1: Drill)"
 		if tool == 6 and _tool_unlocked(6):
