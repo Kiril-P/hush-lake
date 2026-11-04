@@ -242,7 +242,7 @@ void fragment() {
 	base = mix(base, vec3(0.85, 0.95, 1.0), crack * (0.4 + 0.6 * mott));
 	// sky sheen toward grazing angles
 	float fres = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 6.0);
-	ALBEDO = pow(base, vec3(1.9));   // the mesh colours are chosen as screen colours: darken to linear like the old material did
+	ALBEDO = pow(base, vec3(1.55));   // the mesh colours are chosen as screen colours: darken to linear like the old material did
 	ROUGHNESS = 0.4 - 0.1 * mott;
 	SPECULAR = 0.12;
 	EMISSION = sky_tint * fres * 0.10;
@@ -263,8 +263,8 @@ func _ice_and_eye() -> void:
 	var segs := 96
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var factors := [0.0, 0.5, 0.8, 1.0]
-	var cols := [Color(0.16, 0.5, 0.82, 1.0), Color(0.24, 0.62, 0.9, 1.0), Color(0.46, 0.8, 0.96, 1.0), Color(0.74, 0.93, 1.0, 1.0)]
+	var factors := [0.0, 0.45, 0.88, 1.0]   # the pale shore band is wider now, so the ice meets the bank softly
+	var cols := [Color(0.5, 0.68, 0.85, 1.0), Color(0.58, 0.75, 0.9, 1.0), Color(0.7, 0.85, 0.95, 1.0), Color(0.84, 0.94, 0.99, 1.0)]   # less saturated: it read as ocean
 	var rings := []
 	for k in factors.size():
 		var ring := []
@@ -562,7 +562,7 @@ void fragment() {
 """
 
 func _aurora() -> void:
-	var cols := [Color(0.2, 1.0, 0.6), Color(0.3, 0.8, 1.0), Color(0.7, 0.4, 1.0)]
+	var cols := [Color(0.2, 1.0, 0.6), Color(0.3, 0.85, 1.0), Color(0.25, 1.0, 0.85)]   # (no violet: the palette is teal and amber)
 	var angs := [-35.0, 15.0, 65.0]
 	var sh := Shader.new()
 	sh.code = AURORA_SHADER
@@ -604,7 +604,7 @@ func set_time(t: float) -> void:
 # ---------- terrain, forest, shore ----------
 func _ground_color(p: Vector3) -> Color:
 	var r := Vector2(p.x, p.z).length()
-	var col := Color(1.0, 0.95, 0.92)
+	var col := Color(0.93, 0.96, 1.0)
 	var v := detail.get_noise_2d(p.x * 3.0, p.z * 3.0) * 0.035
 	col = Color(col.r + v, col.g + v, col.b + v * 0.5)
 	var e := edge_at(p.x, p.z)

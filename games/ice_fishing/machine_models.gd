@@ -11,7 +11,7 @@ const TEAL := Color(0.16, 0.6, 0.68)
 const TEAL_LIGHT := Color(0.35, 0.82, 0.86)
 const WOOD := Color(0.43, 0.29, 0.19)
 const WOOD_DARK := Color(0.28, 0.19, 0.14)
-const BRICK := Color(0.74, 0.34, 0.25)
+const BRICK := Color(0.56, 0.32, 0.26)   # a muted brick: the loud warm colour is reserved for amber
 const SNOW := Color(0.9, 0.94, 1.0)
 const AMBER := Color(1.0, 0.76, 0.32)
 
@@ -334,7 +334,7 @@ static func rig(node: Node3D) -> Dictionary:
 	box(beacon, Vector3(0.0, 0.0, 0.34), Vector3(0.06, 0.06, 0.6), AMBER, 2.0)
 	# the crane at the back
 	box(node, Vector3(0, 3.0, -2.6), Vector3(0.5, 3.0, 0.5), STEEL_DARK)
-	var arm := box(node, Vector3(0, 5.1, -4.4), Vector3(0.28, 0.28, 6.0), Color(0.78, 0.4, 0.2), 0.2)
+	var arm := box(node, Vector3(0, 5.1, -4.4), Vector3(0.28, 0.28, 6.0), TEAL, 0.2)
 	arm.rotation_degrees.x = 10.0
 	post(node, Vector3(0, 3.9, -6.9), 0.02, 2.6, Color(0.85, 0.92, 1.0), 0.0, 0.3)
 	box(node, Vector3(0, 2.5, -6.9), Vector3(0.7, 0.4, 0.7), AMBER.darkened(0.2), 0.6)   # the grab

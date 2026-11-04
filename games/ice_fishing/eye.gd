@@ -332,12 +332,15 @@ func _petal_mesh(length: float, width: float, thick: float) -> ArrayMesh:
 
 func _build_petals() -> void:
 	petal_mat = StandardMaterial3D.new()
-	petal_mat.albedo_color = Color(0.72, 0.9, 1.0)
-	petal_mat.roughness = 0.25
+	petal_mat.albedo_color = Color(0.78, 0.9, 0.98)
+	petal_mat.roughness = 0.78   # matte, like the rest of the low-poly world (they used to be glassy and loud)
 	petal_mat.emission_enabled = true
 	petal_mat.emission = Color(0.25, 0.8, 0.9)
-	petal_mat.emission_energy_multiplier = 0.45
+	petal_mat.emission_energy_multiplier = 0.2
 	petal_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	petal_mat.distance_fade_mode = BaseMaterial3D.DISTANCE_FADE_PIXEL_ALPHA   # petals fade out as you walk up to them, so they never wall off the Eye
+	petal_mat.distance_fade_min_distance = 2.5
+	petal_mat.distance_fade_max_distance = 7.0
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 41
 	var rings := [[20, EYE_R + 2.2, 2.6, 0.5], [20, EYE_R + 3.4, 2.2, 0.42]]
@@ -351,7 +354,7 @@ func _build_petals() -> void:
 			pivot.position = Vector3(sin(a) * rg[1], 0.05, -cos(a) * rg[1])
 			pivot.rotation = Vector3(0.1, PI - a, 0)
 			var mi := MeshInstance3D.new()
-			mi.mesh = _petal_mesh(len, float(rg[3]) * rng.randf_range(0.8, 1.2), 0.75)
+			mi.mesh = _petal_mesh(len * 0.8, float(rg[3]) * rng.randf_range(0.8, 1.2), 0.45)
 			mi.material_override = petal_mat
 			pivot.add_child(mi)
 			add_child(pivot)
@@ -686,7 +689,7 @@ func _apply_uniforms() -> void:
 	core_mat.set_shader_parameter("glow", g)
 	core_mat.set_shader_parameter("flare", flare)
 	shaft_mat.set_shader_parameter("t", t)
-	shaft_mat.set_shader_parameter("amount", clampf(0.1 + g * 0.3 + open * 0.3 + flare * 0.45, 0.0, 1.3) * (0.3 + night * 1.1))
+	shaft_mat.set_shader_parameter("amount", clampf(0.1 + g * 0.3 + open * 0.3 + flare * 0.45, 0.0, 1.3) * (0.14 + night * 1.2))   # by day the shaft is faint: it used to stand behind the crosshair all the time
 	marker_mat.set_shader_parameter("t", t)
 	marker_mat.set_shader_parameter("a", offer_a * (0.8 + 0.2 * sin(t * 6.0)))
 
@@ -716,7 +719,7 @@ func _process(delta: float) -> void:
 	for p in petals:
 		var base := lerpf(0.1, 0.26, oe) + (0.12 if p.ring == 1 else 0.0)
 		p.pivot.rotation.x = base + flinch * 0.4 + sin(t * 1.1 + p.ph) * 0.025
-	petal_mat.emission_energy_multiplier = 0.2 + glow * 0.5 + flare * 0.8
+	petal_mat.emission_energy_multiplier = 0.12 + glow * 0.3 + flare * 0.8
 	for m in crystal_mats:
 		m.emission_energy_multiplier = 0.5 + glow * 0.5 + flare * 1.0 + night * 0.6
 	top_light.light_energy = (0.7 + glow * 1.5 + open * 2.2) * (1.0 + flare * 1.8)

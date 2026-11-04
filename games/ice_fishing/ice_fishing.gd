@@ -301,6 +301,7 @@ var eye_burst_t := 0.0
 var eye_pending := 0.0
 var eye_pending_t := 0.0
 var sign_labels := {}
+var sign_descs := {}
 var msg_time := 0.0
 var view: Node3D
 var coins_label: Label
@@ -388,7 +389,7 @@ func _ready() -> void:
 	cam.add_child(tool_view)
 	kick_boot = ToolModels.boot(cam)
 	kick_boot.position = BOOT_REST
-	kick_boot.scale = Vector3.ONE * 0.7
+	kick_boot.scale = Vector3.ONE * 0.55
 	kick_boot.rotation_degrees = BOOT_ROT
 	model = LakeModelScript.new()
 	var fresh_lake := GameState.extra.is_empty()
@@ -524,7 +525,7 @@ func _build_world() -> void:
 	add_child(hut)
 	hut.look_at(Vector3(0, 0, 0), Vector3.UP, true)
 	hut_pos = hut.global_position + hut.global_basis.z * 2.3 + Vector3(0, 1.1, 0)
-	_box(hut, Vector3(0, 1.5, 0), Vector3(5, 3, 4), Color(0.55, 0.2, 0.18))
+	_box(hut, Vector3(0, 1.5, 0), Vector3(5, 3, 4), Color(0.5, 0.31, 0.23))   # warm wood: the lit windows and door are the amber
 	_box(hut, Vector3(0, 1.0, 2.05), Vector3(1.3, 2.0, 0.15), Color(1.0, 0.75, 0.35), "olga", 1.2)
 	_box(hut, Vector3(0, 1.05, 2.45), Vector3(1.8, 0.12, 0.8), Color(0.3, 0.19, 0.13))  # her window counter
 	_label3d(hut, Vector3(0, 2.7, 2.2), "OLGA'S FISH HUT", 0.011, false)
@@ -553,16 +554,26 @@ func _build_world() -> void:
 		add_child(s)
 		s.look_at(Vector3(0, 1.6, 0), Vector3.UP, true)
 		_box(s, Vector3.ZERO, Vector3(3.4, 1.7, 0.15), Color(0.18, 0.2, 0.3), "buy:" + id)
-		var l := Label3D.new()
+		var l := Label3D.new()   # name, level and price: big enough to read from the next stall
 		l.pixel_size = 0.0068
-		l.font_size = 36
-		l.width = 470.0   # the board is 3.4 m wide: long descriptions wrap onto the next line instead of running off the sign
+		l.font_size = 60
+		l.width = 480.0
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		l.outline_size = 10
-		l.line_spacing = -2.0
-		l.position = Vector3(0, 0, 0.1)
+		l.outline_size = 12
+		l.line_spacing = -6.0
+		l.position = Vector3(0, 0.3, 0.1)
 		s.add_child(l)
 		sign_labels[id] = l
+		var ld := Label3D.new()   # the small print
+		ld.pixel_size = 0.0068
+		ld.font_size = 30
+		ld.width = 480.0
+		ld.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		ld.outline_size = 8
+		ld.modulate = Color(0.85, 0.88, 0.96)
+		ld.position = Vector3(0, -0.4, 0.1)
+		s.add_child(ld)
+		sign_descs[id] = ld
 		scenery.decorate_stall(s, id)
 
 ## A fish cell: no mesh, no collider. It owns a stock of fish and a shoal of shadows you can see under the ice.
@@ -894,6 +905,7 @@ func _build_auto(t: Dictionary, count := true) -> void:
 	t.arm = parts.arm
 	_pop_in(t.extra)
 	t.tag = _label3d(t.node, Vector3(0, 3.0, 0), "", 0.012)
+	t.tag.visibility_range_end = 14.0
 
 func _build_smoker(t: Dictionary) -> void:
 	t.state = "smoker"
@@ -1006,10 +1018,11 @@ void fragment() {
 	eye_label = _plain(left, 17, Style.AQUA)
 	eye_bar = Style.bar(Style.AQUA, 7.0)
 	left.add_child(eye_bar)
-	eye_next_label = _plain(left, 14, Style.CREAM)
+	eye_next_label = _plain(left, 15, Style.CREAM)
 	eye_next_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	eye_next_label.custom_minimum_size = Vector2(270, 0)
 	lake_label = _plain(left, 15, Style.MUTED)
+	lake_label.custom_minimum_size = Vector2(270, 0)
 	msg_label = Label.new()
 	msg_label.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	msg_label.anchor_top = 1.0
@@ -1500,7 +1513,7 @@ func _check_goals() -> void:
 			sfx.play("goal")
 			shake = maxf(shake, 0.04)
 			_banner("GOAL COMPLETE: %s  +%d" % [g.text, g.reward], Color(1, 0.9, 0.4))
-			_say("GOAL DONE: %s  (+%d coins)\n%s" % [g.text, g.reward, g.line])
+			_say(String(g.line))   # (the banner already says what was done: the bottom line is just Olga)
 
 func _goals_text() -> String:
 	var lines_out := []
@@ -1550,7 +1563,7 @@ func _refresh() -> void:
 	eye_label.text = "The Eye   stage %d / %d   %d fed" % [eye_stage(), EYE_STAGES.size(), stats.eye_fed]
 	eye_bar.value = _eye_progress()
 	var est := eye_stage()
-	eye_next_label.text = ("Next: %s" % EYE_BOONS[est]) if est < EYE_STAGES.size() else "The Eye is awake.  Tithe Lv %d" % stats.tithe
+	eye_next_label.text = ("Next: %s" % String(EYE_BOONS[est]).split(":")[0]) if est < EYE_STAGES.size() else "The Eye is awake.  Tithe Lv %d" % stats.tithe
 	lake_label.text = "%d fish left  -  %d / %d sectors\n%s #%d  -  %d pearls  -  [R] refreeze" % [model.total_left(),
 		model.cleared_count(), model.sectors.size(), model.mod_info().name, _meta_int("lakes") + 1, _meta_int("pearls")]
 	combo_label.text = ("Combo x%d  (+%d%%)" % [combo, mini(combo - 1, 10) * 10]) if combo > 1 else ""
@@ -1558,13 +1571,15 @@ func _refresh() -> void:
 	for id in UPGRADES:
 		var u: Dictionary = UPGRADES[id]
 		if not unlocked[id]:
-			sign_labels[id].text = "???\ncomplete goals to unlock"
+			sign_labels[id].text = "???"
+			sign_descs[id].text = "complete goals to unlock"
 			continue
 		var lvl := GameState.level(id)
 		var cost_text := "%d coins" % GameState.cost(id, u.base, u.growth)
 		if lvl >= u.max:
 			cost_text = "MAX"
-		sign_labels[id].text = "%s  Lv%d\n%s\n%s" % [u.name, lvl, _upgrade_desc(id), cost_text]
+		sign_labels[id].text = "%s  Lv%d\n%s" % [u.name, lvl, cost_text]
+		sign_descs[id].text = _upgrade_desc(id)
 	for i in TOOLS.size():
 		var label: String = TOOLS[i] if _tool_unlocked(i) else "???"
 		if _tool_unlocked(i) and i == 0: label = DRILL_NAMES[mini(GameState.level("drill"), DRILL_NAMES.size() - 1)]
@@ -1981,7 +1996,7 @@ func _animate(delta: float) -> void:
 	for id in sector_labels:
 		var sp: Vector3 = sector_labels[id].pos
 		var dist := Vector2(sp.x - pp.x, sp.z - pp.z).length()
-		var lim: float = 62.0 if model.sectors[id].unlocked else 26.0
+		var lim: float = 62.0 if model.sectors[id].unlocked else 16.0
 		var lab: Label3D = sector_labels[id].label
 		lab.visible = reveal_t <= 0.0 and not guide.intro_active and dist < lim
 		lab.modulate.a = (0.6 if not model.sectors[id].unlocked else 1.0) * (1.0 - smoothstep(lim * 0.55, lim, dist))
@@ -2088,14 +2103,14 @@ func _update_kick_rings(captured: bool) -> void:
 	while kick_rings.size() < mini(want.size(), 8):
 		var m := MeshInstance3D.new()
 		var tm := TorusMesh.new()
-		tm.inner_radius = 0.7
+		tm.inner_radius = 0.64
 		tm.outer_radius = 0.76
 		tm.rings = 24
 		tm.ring_segments = 6
 		m.mesh = tm
 		var mt := StandardMaterial3D.new()
 		mt.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		mt.albedo_color = Color(1.0, 0.62, 0.1, 1.0)   # the old pale rings were fog washing them out, not the colour
+		mt.albedo_color = Color(0.95, 0.56, 0.08, 1.0)   # the old pale rings were fog washing them out, not the colour
 		mt.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		mt.disable_fog = true
 		mt.render_priority = 2
@@ -2807,10 +2822,12 @@ func _build_machine_visual(belt: Dictionary, kind: String) -> void:
 	if kind == "cannery":
 		MachineModels.cannery(m)
 		var l := _label3d(m, Vector3(0, 4.7, 0), "CANNERY x1.5", 0.012)
+		l.visibility_range_end = 20.0
 		l.modulate = Color(1.0, 0.9, 0.7)
 	else:
 		MachineModels.sorter(m)
 		var l2 := _label3d(m, Vector3(0, 3.7, 0), "SORTER x1.6 (5+)", 0.012)
+		l2.visibility_range_end = 20.0
 		l2.modulate = Color(0.7, 1.0, 0.85)
 
 func _install_machine(t: Dictionary, kind: String, pay := true) -> void:
@@ -2842,6 +2859,7 @@ func _build_depot(pos: Vector3, pay := true) -> void:
 	MachineModels.depot(node)
 	_pop_in(node)
 	var l := _label3d(node, Vector3(0, 3.6, 0), "DEPOT", 0.014)
+	l.visibility_range_end = 22.0
 	l.modulate = Color(1.0, 0.9, 0.7)
 	depots.append(d)
 	scenery.obstacles.append(Vector3(pos.x, pos.z, 2.2))
@@ -2892,6 +2910,7 @@ func _build_rig(pos: Vector3, pay := true) -> void:
 	rig.beacon = rp.beacon
 	_pop_in(node)
 	rig.tag = _label3d(node, Vector3(0, 8.4, 0), "ICE-BREAKER", 0.016)
+	rig.tag.visibility_range_end = 45.0
 	rig.tag.modulate = Color(0.9, 0.95, 1.0)
 	rigs.append(rig)
 	scenery.obstacles.append(Vector3(pos.x, pos.z, 6.0))

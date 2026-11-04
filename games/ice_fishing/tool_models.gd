@@ -78,11 +78,11 @@ static func mitten(parent: Node, pos: Vector3, side := 1.0, tilt := 0.0) -> Node
 	m.rotation_degrees.x = tilt
 	m.scale = Vector3.ONE * 0.8
 	parent.add_child(m)
-	ball(m, Vector3(0, 0, 0), Vector3(0.075, 0.055, 0.1), MITTEN)
-	ball(m, Vector3(0.0, -0.005, -0.075), Vector3(0.07, 0.05, 0.06), MITTEN.darkened(0.06))   # the fingers, rounded off
-	ball(m, Vector3(-0.045 * side, 0.012, -0.03), Vector3(0.035, 0.035, 0.065), MITTEN.lightened(0.05))   # thumb
-	rod_seg(m, 0.15, 0.07, 0.04, 0.043, MITTEN_CUFF)   # cuff
-	rod_seg(m, 0.1, 0.088, 0.046, 0.046, Color(0.93, 0.9, 0.82))   # the cream stripe
+	ball(m, Vector3(0, 0, 0), Vector3(0.1, 0.075, 0.13), MITTEN)   # the mitten is the warm, readable part: amber, big
+	ball(m, Vector3(0.0, -0.005, -0.085), Vector3(0.09, 0.065, 0.08), MITTEN.darkened(0.06))   # the fingers, rounded off
+	ball(m, Vector3(-0.06 * side, 0.014, -0.03), Vector3(0.045, 0.045, 0.08), MITTEN.lightened(0.05))   # thumb
+	rod_seg(m, 0.16, 0.09, 0.03, 0.033, MITTEN_CUFF)   # a slim teal cuff
+	rod_seg(m, 0.12, 0.105, 0.036, 0.036, Color(0.93, 0.9, 0.82))   # the cream stripe
 	return m
 
 ## Hand auger. Returns {spin, tip: null}. The spinning part (shaft, flights, bit) is `spin`, the T-handle stays put.
@@ -109,7 +109,7 @@ static func auger(body: Node3D, tc: Color, tier: int) -> Dictionary:
 	var tip := _add(spin, tip_mesh, mat(tc, 0.5, 0.35, 0.5), Vector3(0, 0, -0.85))
 	tip.rotation_degrees.x = -90.0
 	if tier >= 2:   # power augers get a motor housing
-		box(body, Vector3(0, 0.0, -0.01), Vector3(0.13, 0.12, 0.17), tc.darkened(0.25), 0.5, 0.45, 0.2)
+		box(body, Vector3(0, 0.0, -0.01), Vector3(0.11, 0.1, 0.15), STEEL_DARK, 0.0, 0.45, 0.4)
 		box(body, Vector3(0, 0.07, -0.01), Vector3(0.06, 0.02, 0.1), AMBER, 0.8)
 	mitten(body, Vector3(0.125, 0.005, 0.12), 1.0, 0.0)
 	mitten(body, Vector3(-0.125, 0.005, 0.12), -1.0, 0.0)
@@ -164,7 +164,7 @@ static func builder(body: Node3D, accent: Color) -> Dictionary:
 static func boot(parent: Node3D) -> Node3D:
 	var b := Node3D.new()
 	parent.add_child(b)
-	var leather := Color(0.42, 0.27, 0.18)
+	var leather := Color(0.6, 0.42, 0.3)
 	box(b, Vector3(0, -0.07, -0.02), Vector3(0.15, 0.05, 0.36), WOOD_DARK, 0.0, 0.8)   # sole
 	box(b, Vector3(0, 0.0, -0.05), Vector3(0.14, 0.1, 0.3), leather, 0.0, 0.7)   # foot
 	ball(b, Vector3(0, -0.01, -0.2), Vector3(0.14, 0.1, 0.12), leather.lightened(0.05), 0.0, 0.7)   # toe cap

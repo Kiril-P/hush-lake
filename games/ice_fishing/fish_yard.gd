@@ -39,6 +39,7 @@ func spawn(f: Dictionary, pos: Vector3, vel: Vector3) -> Dictionary:
 	if fish.size() >= MAX_LOOSE:
 		var old: Dictionary = fish[0]   # the ice never clogs: the oldest fish is taken off it (and paid at half rate, see the game)
 		fish.erase(old)
+		(old.shadow as Node).queue_free()
 		overflowed.emit(old.f, old.node, old.pos)
 	var holder := Node3D.new()
 	add_child(holder)
@@ -49,6 +50,7 @@ func spawn(f: Dictionary, pos: Vector3, vel: Vector3) -> Dictionary:
 	var e := {"f": f, "node": holder, "fm": fm, "pos": pos, "vel": vel, "r": clampf(0.56 * lenk, 0.38, 1.15),
 		"puff_t": 0.0, "yaw": randf() * TAU, "roll": 0.0, "flop": 0.0, "flop_t": randf_range(1.0, 3.0), "still": 0.0, "spin": randf_range(-6.0, 6.0)}
 	holder.position = pos
+	e["shadow"] = _make_shadow(e.r)
 	fish.append(e)
 	return e
 
@@ -202,7 +204,36 @@ func _pose(e: Dictionary, dt: float) -> void:
 	var node: Node3D = e.node
 	node.position = e.pos
 	node.basis = Basis(Vector3.UP, e.yaw) * Basis(Vector3.RIGHT, e.roll)
+	var sh: MeshInstance3D = e.shadow
+	sh.position = Vector3(e.pos.x, -0.03, e.pos.z)
+	sh.rotation.y = e.yaw
+	var lift := clampf((e.pos.y - GROUND) / 3.0, 0.0, 1.0)   # a fish in the air casts a smaller, fainter shadow
+	sh.scale = Vector3(e.r * 1.5, 1.0, e.r * 0.8) * (1.0 - 0.4 * lift)
 	(e.fm as FishNode).amp = clampf(0.2 + sp * 0.25 + e.flop * 5.0 + (1.0 if airborne else 0.0), 0.2, 3.0)
+
+static var _shadow_mat: StandardMaterial3D
+static var _shadow_mesh: CylinderMesh
+
+## A soft dark disc on the ice under a fish, so a pale fish on pale snow is grounded and easy to find.
+func _make_shadow(r: float) -> MeshInstance3D:
+	if _shadow_mat == null:
+		_shadow_mat = StandardMaterial3D.new()
+		_shadow_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_shadow_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_shadow_mat.albedo_color = Color(0.05, 0.1, 0.3, 0.32)
+		_shadow_mat.disable_fog = true
+		_shadow_mesh = CylinderMesh.new()
+		_shadow_mesh.top_radius = 1.0
+		_shadow_mesh.bottom_radius = 1.0
+		_shadow_mesh.height = 0.01
+		_shadow_mesh.radial_segments = 14
+	var m := MeshInstance3D.new()
+	m.mesh = _shadow_mesh
+	m.material_override = _shadow_mat
+	m.scale = Vector3(r * 1.5, 1.0, r * 0.8)
+	m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(m)
+	return m
 
 static var _lift_mat: StandardMaterial3D
 
@@ -222,6 +253,7 @@ static func _lift(n: Node) -> void:
 
 func _swallow(e: Dictionary) -> void:
 	fish.erase(e)
+	(e.shadow as Node).queue_free()
 	swallowed.emit(e.f, e.node, e.pos)
 
 ## A kick: every fish in the cone in front of `origin` flies off along `dir` (flat, normalised). Returns how many.
@@ -297,6 +329,7 @@ func collect(pos: Vector3, radius: float, limit: int) -> Array:
 		var e: Dictionary = c[1]
 		fish.erase(e)
 		e.node.queue_free()
+		(e.shadow as Node).queue_free()
 		last_collected.append(e.pos)
 		got.append(e.f)
 	return got
@@ -304,4 +337,5 @@ func collect(pos: Vector3, radius: float, limit: int) -> Array:
 func clear_all() -> void:
 	for e in fish:
 		e.node.queue_free()
+		(e.shadow as Node).queue_free()
 	fish.clear()
