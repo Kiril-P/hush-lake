@@ -72,6 +72,7 @@ func _ready() -> void:
 			var sp: Dictionary = g._make_fish(g.SPECIES[i % 4])
 			var at := py.position + fw * (3.0 + (i % 3) * 0.9) + rt * (-1.6 + i * 0.5)
 			g.yard.spawn(sp, Vector3(at.x, g.yard.GROUND, at.z), Vector3.ZERO)
+		g.test_capture = true
 		for step in [["a", 0.5], ["b", 1.2]]:
 			await get_tree().create_timer(step[1]).timeout
 			get_viewport().get_texture().get_image().save_png("res://renders/shot_yard_%s.png" % step[0])

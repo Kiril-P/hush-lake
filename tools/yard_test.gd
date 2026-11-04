@@ -60,9 +60,9 @@ func _ready() -> void:
 	check("it arcs up and comes back down", y_mid > 1.0 and e.pos.y < y_mid)
 	sim(g, 1.2, far)
 	check("it lands (and makes a landing sound event)", is_equal_approx(e.pos.y, yard.GROUND) and landed[0] >= 1)
-	sim(g, 8.0, far)
-	check("it slides to a stop on the ice", Vector2(e.vel.x, e.vel.z).length() < 0.05)
-	check("it stopped near the hole it came from", flat(e.pos).distance_to(flat(hole_p)) < 14.0)
+	sim(g, 12.0, far)
+	await get_tree().create_timer(0.3).timeout
+	check("the first catch at the tutorial hole is pulled in and swallowed with no input", yard.count() == 0 and g.stats.eye_fed >= 1)
 
 	# --- friction: a fast fish glides a good while, then stops
 	yard.clear_all()
@@ -155,6 +155,78 @@ func _ready() -> void:
 	var fw: Dictionary = yard.spawn(g._make_fish(g.SPECIES[0]), Vector3(ob.x + ob.z + 5.0, yard.GROUND, ob.y), Vector3(-8.0, 0, 0))
 	sim(g, 3.0, far)
 	check("fish bounce off the hut instead of going through it", Vector2(fw.pos.x - ob.x, fw.pos.z - ob.y).length() >= ob.z + fw.r - 0.01)
+
+	# --- walk-push follows where you are heading
+	yard.clear_all()
+	yard.obstacles = []
+	var fo: Dictionary = yard.spawn(g._make_fish(g.SPECIES[0]), Vector3(-50, yard.GROUND, 60.5), Vector3.ZERO)
+	var pw := Vector3(-52.0, 1.7, 60.0)
+	yard.player_speed = 6.0
+	yard.player_vel = Vector3(6, 0, 0)
+	for i in 100:
+		pw.x += 6.0 / 60.0
+		yard.step(1.0 / 60.0, pw)
+	yard.player_speed = 0.0
+	yard.player_vel = Vector3.ZERO
+	check("an off-centre fish is carried along your path, not squirted sideways", fo.pos.x > -50.0 + 4.0 and absf(fo.pos.z - 60.0) < 1.6)
+
+	# --- the real shoreline
+	yard.clear_all()
+	var bank_dir := Vector3(0, 0, 1)
+	var edge_r: float = g.scenery.edge_at(0, 1)
+	var fe2: Dictionary = yard.spawn(g._make_fish(g.SPECIES[0]), Vector3(0, yard.GROUND, edge_r - 6.0), Vector3(0, 0, 30.0))
+	sim(g, 8.0, far)
+	check("a hard kick toward the bank stops on the ice, inside the real shoreline", Vector2(fe2.pos.x, fe2.pos.z).length() <= g.scenery.edge_at(fe2.pos.x, fe2.pos.z) - 1.4)
+
+	# --- pushing keeps the combo alive; overflow pays half and breaks no streak
+	g.combo = 3
+	g.combo_t = 2.0
+	g.feed_streak = 0
+	g.feed_streak_t = 0.0
+	yard.clear_all()
+	var fc: Dictionary = yard.spawn(g._make_fish(g.SPECIES[1]), Vector3(g.EYE_R - 3.0, yard.GROUND, 0), Vector3.ZERO)
+	sim(g, 4.0, far)
+	await get_tree().create_timer(0.2).timeout
+	check("swallowing a pushed fish refreshes the combo window", g.combo_t > 13.0)
+	g.combo = 0
+	g.combo_t = 0.0
+	yard.clear_all()
+	GameState.currency = 0.0
+	var first: Dictionary = g._make_fish(g.SPECIES[1])
+	yard.spawn(first, Vector3(-60, yard.GROUND, 60), Vector3.ZERO)
+	var half: float = first.base * first.mult * g.sale_mult() * g.EYE_MULT * 0.5
+	var streak0: int = g.feed_streak
+	for i in yard.MAX_LOOSE:
+		yard.spawn(g._make_fish(g.SPECIES[0]), Vector3(-60 + (i % 10) * 1.3, yard.GROUND, 62 + floorf(i / 10.0) * 1.3), Vector3.ZERO)
+	check("the 61st fish takes the oldest off the ice", yard.count() == yard.MAX_LOOSE)
+	check("overflow pays half the Eye rate and does not touch the streak", absf(GameState.currency - half) < 400.0 and GameState.currency >= half - 0.01 and g.feed_streak == streak0)
+	yard.clear_all()
+
+	# --- the kick is forgiving and shows what it hits
+	yard.clear_all()
+	var pk2 := Vector3(-30.0, 1.7, 80.0)
+	var ahead := Vector3(0, 0, -1)
+	var near_side: Dictionary = yard.spawn(g._make_fish(g.SPECIES[0]), Vector3(-30.0 + 2.8, yard.GROUND, 80.0 - 1.0), Vector3.ZERO)
+	check("a fish well off to the side still counts as a kick target (assist)", yard.targets(pk2, ahead, 3.4).size() == 1)
+	yard.clear_all()
+	yard.spawn(g._make_fish(g.SPECIES[0]), Vector3(-30.0, yard.GROUND, 80.0 + 2.5), Vector3.ZERO)
+	check("a fish behind you is not", yard.targets(pk2, ahead, 3.4).is_empty())
+	yard.clear_all()
+
+	# --- an Auto-Rod's stash does not wait for free hands
+	yard.obstacles = walls
+	g.carry.clear()
+	var ta: Dictionary = g._make_hole(g.guide.drill_spot + Vector3(0, 0, 14))
+	g._build_auto(ta, false)
+	for i in 3:
+		ta.stash.append(g._make_fish(g.SPECIES[0]))
+	g.tool = 2
+	g.unlocked["t_auto"] = true
+	g._click("hole:%d" % ta.idx)
+	check("collecting a stash fills your hands and spills the rest onto the ice", g.carry.size() == 1 and yard.count() == 2 and ta.stash.is_empty())
+	g.carry.clear()
+	yard.clear_all()
+	yard.obstacles = []
 
 	# --- the cap: the ice never clogs
 	yard.obstacles = []

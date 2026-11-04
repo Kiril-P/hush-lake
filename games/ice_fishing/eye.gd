@@ -559,8 +559,8 @@ func stage_up(st: int) -> void:
 	wave = 0.0
 	wave_amp = 1.6
 	_spawn_ripple(2.2)
-	get_tree().create_timer(0.35).timeout.connect(func(): _spawn_ripple(1.6))
-	get_tree().create_timer(0.7).timeout.connect(func(): _spawn_ripple(1.2))
+	create_tween().tween_callback(func(): _spawn_ripple(1.6)).set_delay(0.35)
+	create_tween().tween_callback(func(): _spawn_ripple(1.2)).set_delay(0.7)
 	_emit_sparks(Color(1.0, 0.85, 0.45), 1.0)
 
 ## A fish went in. Safe to call as fast as belts deliver.
@@ -587,7 +587,7 @@ func gulp(power := 1.0) -> void:
 	wave = 0.0
 	wave_amp = 1.0 + 0.6 * clampf(power, 0.0, 2.0)
 	_spawn_ripple(1.4 + power)
-	get_tree().create_timer(0.25).timeout.connect(func(): _spawn_ripple(1.0 + power * 0.6))
+	create_tween().tween_callback(func(): _spawn_ripple(1.0 + power * 0.6)).set_delay(0.25)
 	_emit_sparks(Color(1.0, 0.88, 0.5), 1.0)
 
 ## The long breath before the awakening: lids close, glow drops.
@@ -604,9 +604,9 @@ func awaken() -> void:
 	wave_amp = 2.6
 	_spawn_ripple(3.0)
 	for pair in [[0.3, 2.2], [0.65, 1.7], [1.0, 1.3]]:
-		get_tree().create_timer(pair[0]).timeout.connect(func(): _spawn_ripple(pair[1]))
+		create_tween().tween_callback(func(): _spawn_ripple(pair[1])).set_delay(pair[0])
 	_emit_sparks(Color(1.0, 0.9, 0.55), 1.0)
-	get_tree().create_timer(0.5).timeout.connect(func(): _emit_sparks(Color(0.7, 1.0, 0.95), 1.0))
+	create_tween().tween_callback(func(): _emit_sparks(Color(0.7, 1.0, 0.95), 1.0)).set_delay(0.5)
 	for g in crystals:
 		for n in g:
 			if n.visible:

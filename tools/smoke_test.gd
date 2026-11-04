@@ -164,6 +164,7 @@ func _ready() -> void:
 	g.stats.eye_fed = g.eye_stage_at(0)
 	var sm0: float = g.sale_mult()
 	var tc0: float = g.tithe_cost()
+	g._tithe()   # (the first click arms it, the second pays)
 	g._tithe()
 	check("a tithe costs coins and raises every fish's value", g.stats.tithe == 1 and GameState.currency < 99999.0 - tc0 + 500.0 and g.sale_mult() > sm0 + g.TITHE_BONUS - 0.001)
 	check("tithes get dearer", g.tithe_cost() > tc0)

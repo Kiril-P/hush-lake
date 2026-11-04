@@ -7,6 +7,7 @@ extends Node3D
 signal swallowed(f: Dictionary, holder: Node3D, pos: Vector3)
 signal landed(f: Dictionary, impact: float)
 signal bumped(f: Dictionary)
+signal overflowed(f: Dictionary, holder: Node3D, pos: Vector3)
 
 const GROUND := 0.05
 const GRAVITY := 18.0
@@ -15,13 +16,16 @@ const FRICTION_BASE := 1.4        # ice is slippery: a constant drag plus a drag
 const FRICTION_SPEED := 0.35
 const PLAYER_R := 0.85
 const EDGE := 108.0
+const PULL_RANGE := 6.0           # the Eye pulls fish this far past its rim (weaker with distance)
 
 var fish: Array = []              # {f, node, fm, pos, vel, r, yaw, roll, flop, flop_t, still}
 var obstacles: Array = []         # Vector3(x, z, radius)
 var eye_r := 10.0
 var pupil_r := 4.8
-var pull := 3.4                   # the Eye's suction (m/s^2), grows with its stage
+var pull := 3.8                   # the Eye's suction (m/s^2), grows with its stage
 var player_speed := 0.0
+var player_vel := Vector3.ZERO       # flat velocity of the player: a walk-push goes the way you are moving
+var edge_fn := Callable()            # (x, z) -> the shoreline radius in that direction
 var swallow_enabled := true
 
 func count() -> int:
@@ -29,7 +33,9 @@ func count() -> int:
 
 func spawn(f: Dictionary, pos: Vector3, vel: Vector3) -> Dictionary:
 	if fish.size() >= MAX_LOOSE:
-		_swallow(fish[0])  # the oldest one rolls into the Eye so the ice never clogs
+		var old: Dictionary = fish[0]   # the ice never clogs: the oldest fish is taken off it (and paid at half rate, see the game)
+		fish.erase(old)
+		overflowed.emit(old.f, old.node, old.pos)
 	var holder := Node3D.new()
 	add_child(holder)
 	var lenk := float(f.get("lenk", 1.0))
@@ -74,17 +80,18 @@ func step(delta: float, player: Vector3) -> void:
 				v.z *= nsp / sp
 		# the Eye pulls fish that get close
 		var d := Vector2(p.x, p.z).length()
-		if d < eye_r + 2.0 and d > 0.01 and not airborne:
-			var k := 1.0 - clampf((d - pupil_r) / (eye_r + 2.0 - pupil_r), 0.0, 1.0) * 0.4
+		if d < eye_r + PULL_RANGE and d > 0.01 and not airborne:
+			var k := 1.0 - clampf((d - pupil_r) / (eye_r + PULL_RANGE - pupil_r), 0.0, 1.0) * 0.45
 			v.x -= p.x / d * pull * k * dt
 			v.z -= p.z / d * pull * k * dt
 		if d < pupil_r * 0.92 and swallow_enabled and p.y < 1.6:
 			swallow_now.append(e)
 		# the lake's edge and the camp's walls
-		if d > EDGE:
+		var edge: float = (edge_fn.call(p.x, p.z) - 1.5) if edge_fn.is_valid() else EDGE
+		if d > edge:
 			var nrm := Vector2(p.x, p.z) / d
-			p.x = nrm.x * EDGE
-			p.z = nrm.y * EDGE
+			p.x = nrm.x * edge
+			p.z = nrm.y * edge
 			var vn := v.x * nrm.x + v.z * nrm.y
 			if vn > 0.0:
 				v.x -= nrm.x * vn * 1.6
@@ -109,9 +116,13 @@ func step(delta: float, player: Vector3) -> void:
 				p.x = player.x + nrm3.x * lim2
 				p.z = player.z + nrm3.y * lim2
 				if player_speed > 0.4:
-					var push := maxf(player_speed * 1.15, 2.2)
-					v.x = lerpf(v.x, nrm3.x * push, 0.75)
-					v.z = lerpf(v.z, nrm3.y * push, 0.75)
+					var push := maxf(player_speed * 1.3, 2.5)
+					var mv := Vector2(player_vel.x, player_vel.z)
+					var pd := nrm3
+					if mv.length() > 0.1:   # follow where you are heading, not just away from your centre
+						pd = (nrm3 * 0.2 + mv.normalized() * 0.8).normalized()
+					v.x = lerpf(v.x, pd.x * push, 0.75)
+					v.z = lerpf(v.z, pd.y * push, 0.75)
 					if e.still > 0.0:
 						bumped.emit(e.f)
 						e.still = 0.0
@@ -181,20 +192,33 @@ func _swallow(e: Dictionary) -> void:
 ## A kick: every fish in the cone in front of `origin` flies off along `dir` (flat, normalised). Returns how many.
 func kick(origin: Vector3, dir: Vector3, power: float, reach := 3.4, cone := 0.5) -> int:
 	var hit := 0
-	for e in fish:
-		var off: Vector3 = e.pos - origin
-		off.y = 0.0
-		var dist := off.length()
-		if dist > reach + e.r:
-			continue
-		if dist > 0.5 and off.normalized().dot(dir) < cone:
-			continue
+	for e in targets(origin, dir, reach, cone):
 		var spread := dir.rotated(Vector3.UP, randf_range(-0.07, 0.07))
 		e.vel = spread * power * randf_range(0.92, 1.08) + Vector3(0, 1.6 + power * 0.1, 0)
 		e.spin = randf_range(-9.0, 9.0)
 		e.pos.y = maxf(e.pos.y, GROUND + 0.02)
 		hit += 1
 	return hit
+
+## The fish a kick from `origin` along `dir` would hit. If the cone is empty the nearest fish within 4.5 m
+## that is at least roughly ahead of you still counts (a forgiving kick, so near misses do not feel broken).
+func targets(origin: Vector3, dir: Vector3, reach := 3.4, cone := 0.5) -> Array:
+	var out: Array = []
+	var assist: Dictionary = {}
+	var assist_d := 1e9
+	for e in fish:
+		var off: Vector3 = e.pos - origin
+		off.y = 0.0
+		var dist := off.length()
+		var dt := off.normalized().dot(dir) if dist > 0.01 else 1.0
+		if dist <= reach + e.r and (dist <= 0.5 or dt >= cone):
+			out.append(e)
+		elif dist <= 4.5 and dt >= 0.17 and dist < assist_d:
+			assist = e
+			assist_d = dist
+	if out.is_empty() and not assist.is_empty():
+		out.append(assist)
+	return out
 
 func near(pos: Vector3, radius: float) -> int:
 	var n := 0

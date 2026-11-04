@@ -44,14 +44,14 @@ const HINTS := {
 	"Earn 250 coins": ["Gut Tables (5) and Smokers (4) make each fish worth more. Build them on fished-out holes.", ""],
 	"Build 3 Auto-Rods": ["Press 3 and click holes. More rods, more fish, no walking.", "hole"],
 	"Clear 3 sectors": ["Empty every hole in a sector to open the next. The lake map shows how far along you are.", ""],
-	"Tithe the Eye": ["With empty hands, click the Eye to offer it coins. Every gift makes fish worth more.", "eye"],
+	"Tithe the Eye": ["With empty hands, click the Eye twice to offer it coins. Every gift makes fish worth more.", "eye"],
 	"Reach Eye stage 3": ["Feed it more. Belts, rigs and tithes all count.", "eye"],
 }
 const GENERIC_HINTS := {
 	"autos": "Press 3 and click holes you drilled. More rods, no walking.",
 	"sectors": "Empty every hole in a sector to open the next.",
 	"rigs": "Press 7, press Q until it says Ice-Breaker, then click open ice.",
-	"tithe": "With empty hands, click the Eye to offer it coins.",
+	"tithe": "With empty hands, click the Eye twice to offer it coins.",
 	"eye_stage": "Feed the Eye. Rigs and tithes count too.",
 	"eye_fed": "Push fish into the Eye. Belts do it for you.",
 	"earned": "Keep the fish moving into the Eye.",
@@ -274,12 +274,14 @@ func _step(id: String, title: String, hint: String, where = null) -> Dictionary:
 func _player_pos() -> Vector3:
 	return (game.get_node("Player") as Node3D).global_position
 
-func _nearest_hole(state: String) -> Variant:
+func _nearest_hole(state: String, fishable := false) -> Variant:
 	var pp := _player_pos()
 	var best: Variant = null
 	var bd := 1e9
 	for t in game.holes:
 		if t.state != state:
+			continue
+		if fishable and game.model.tile_left(t.c) == 0:   # a fished-out hole is no place to cast
 			continue
 		var d := Vector2(t.pos.x - pp.x, t.pos.z - pp.z).length()
 		if d < bd:
@@ -310,6 +312,13 @@ func _resolve(where: String) -> Variant:
 		return Vector3(bp.x, 0.0, bp.z)
 	return null
 
+## Where the hole that is actually biting / fighting is (not just the nearest one).
+func _cast_hole_pos(c: int) -> Variant:
+	for t in game.holes:
+		if t.state == "hole" and t.cast == c:
+			return Vector3(t.pos.x, 0.0, t.pos.z)
+	return null
+
 func _hole_with_cast(c: int) -> bool:
 	for t in game.holes:
 		if t.state == "hole" and t.cast == c:
@@ -321,7 +330,7 @@ func current() -> Dictionary:
 	var s: Dictionary = g.stats
 	var carrying: bool = not g.carry.is_empty()
 	if _hole_with_cast(2):
-		return _step("bite", "It's biting!", "Click now!", _resolve("hole"))
+		return _step("bite", "It's biting!", "Click now!", _cast_hole_pos(2))
 	if g.yard.count() > 0 and is_early() and not carrying:
 		if s.eye_fed == 0:
 			return _step("push0", "Push the fish into the Eye", "Walk into it, or hold right mouse and let go to kick it. The Eye pulls close fish in. (E picks it up.)", _resolve("fish"))
@@ -340,19 +349,25 @@ func current() -> Dictionary:
 		if s.eye_fed >= 1 and GameState.currency >= GameState.cost("bucket", g.UPGRADES.bucket.base, g.UPGRADES.bucket.growth):
 			return _step("bucket", "Buy a Bucket", "Walk to its stall and click the sign. You will carry more fish per trip.", _resolve("stall:bucket"))
 		if _hole_with_cast(3):
-			return _step("fight", "Hold on!", "It is fighting. It lands in your hands when it tires.", _resolve("hole"))
+			return _step("fight", "Hold on!", "It is fighting. It drops onto the ice when it tires: then push it into the Eye.", _cast_hole_pos(3))
 		if _hole_with_cast(1):
-			return _step("wait", "Wait for a bite", "A dip in the float is only a nibble. Click when it splashes and the marker pops up.", _resolve("hole"))
-		if _nearest_hole("hole") == null:
+			return _step("wait", "Wait for a bite", "A dip in the float is only a nibble. Click when it splashes and the marker pops up.", _cast_hole_pos(1))
+		if _nearest_hole("hole", true) == null:
 			return _step("drill2", "Drill another hole", "Press 1, then hold click on the ice.", _resolve("drill"))
 		if g.tool != 1:
 			return _step("tool1", "Take out the rod", "Press 2 to equip it.", _resolve("hole"))
 		var more := "Click your hole to cast a line."
 		if s.eye_fed >= 1:
 			more = "Cast again. Save up for a Bucket at the stalls (%d coins)." % GameState.cost("bucket", g.UPGRADES.bucket.base, g.UPGRADES.bucket.growth)
-		return _step("cast", "Cast a line", more, _resolve("hole"))
+		return _step("cast", "Cast a line", more, _nearest_hole("hole", true))
 	if _hole_with_cast(3):
-		return _step("fight", "Hold on!", "It is fighting. It lands in your hands when it tires.", _resolve("hole"))
+		return _step("fight", "Hold on!", "It is fighting. It drops onto the ice when it tires: then push it into the Eye.", _cast_hole_pos(3))
+	# the unlocked Auto-Rod comes before a long grind like "fish a patch empty"
+	if g.unlocked.get("t_auto", false) and s.autos == 0:
+		for i in g.GOALS.size():
+			if g.GOALS[i].stat == "autos" and not g.goal_done[i]:
+				var h0: Array = HINTS.get(g.GOALS[i].text, [GENERIC_HINTS.get("autos", ""), ""])
+				return _step("goal%d" % i, String(g.GOALS[i].text), String(h0[0]), _resolve(String(h0[1])) if h0[1] != "" else null)
 	for pass_opt in [false, true]:
 		for i in g.GOALS.size():
 			var gl: Dictionary = g.GOALS[i]

@@ -52,3 +52,6 @@ Added tithes (endless value sink), Eye-stage rig slots (up to 7), goal rewards, 
 
 Half-active play on the first lake: about 76 minutes. Run `ECON_LAKES=3 tools/run_econ.sh` to see a later lake.
 Still true: a few tens of thousands of unspent coins at the very end of a lake. A second machine tier would absorb them.
+
+## After physical fish (sim re-run)
+`tools/econ_sim.gd` now charges push/carry time per fish (hole distance 14 m + 4 m per Eye stage; push each fish at 1.5 s + distance/9 + 0.6 s, or scoop a bucketful and carry, whichever is faster). Optimal player empties the first lake in ~54 min (active 100%) and ~71 min (active 50%). Milestone times matter more than the end time: see `tools/first10.sh` for the human-like first 10 minutes (first feed ~11 s, bucket ~17 s). Not retuned: the council's rule was to retune only if the first lake fell outside 55-90 min of play.

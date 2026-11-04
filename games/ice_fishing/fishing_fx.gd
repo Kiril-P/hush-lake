@@ -93,10 +93,7 @@ static func splash(parent: Node3D, pos: Vector3, amount := 14, power := 1.0, col
 	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	parent.add_child(p)
 	p.emitting = true
-	var tm := p.get_tree().create_timer(1.3)
-	tm.timeout.connect(func():
-		if is_instance_valid(p):
-			p.queue_free())
+	p.create_tween().tween_callback(p.queue_free).set_delay(1.3)
 
 ## A short vertical shaft of light above `pos` (world space child of `parent`), for rare catches.
 static func beam(parent: Node3D, pos: Vector3, color: Color, height := 6.0, dur := 0.9) -> void:

@@ -90,7 +90,7 @@ const PERKS := {
 	"hands":   {"name": "Quick Hands",  "desc": "start with +1 drill speed level",     "cost": 2, "max": 3},
 }
 const SECTOR_PERK := 0.02   # +2% sale value per cleared sector
-const COMBO_WINDOW := 8.0
+const COMBO_WINDOW := 14.0   # long enough to push a catch to the Eye between casts
 const CAPACITIES := [1, 3, 6, 10, 16, 24, 36, 50]
 const TOOLS := ["Drill", "Rod", "Auto-Rod", "Smoker", "Gut Table", "Belt", "Build"]
 const TOOL_UNLOCK := ["", "", "t_auto", "t_smoker", "t_table", "t_belt", "t_build"]
@@ -126,7 +126,7 @@ const GOALS := [
 	{"text": "Drill your first hole", "stat": "holes", "target": 1, "reward": 4,
 		"line": "Olga: Every last fish out of this lake, dear. Start with the Shallows. Cast a line (2)."},
 	{"text": "Catch a fish", "stat": "caught", "target": 1, "reward": 4,
-		"line": "Olga: Now carry it to the Eye, dear. Walk up to the rim and click."},
+		"line": "Olga: Now push it into the Eye, dear. Walk into it, or kick it with the right mouse."},
 	{"text": "Feed a fish to the Eye", "stat": "eye_fed", "target": 1, "reward": 5,
 		"line": "Olga: There. It looked at you, didn't it? Save up for a bucket at the stalls."},
 	{"text": "Buy a Bucket", "stat": "lvl:bucket", "target": 1, "reward": 10,
@@ -324,6 +324,16 @@ var yard: FishYard
 var kick_charge := -1.0       # right mouse held: 0..1, or -1 when not charging
 var kicks := 0
 var player_prev := Vector3.ZERO
+var flying: Array = []        # fish thrown at the Eye but not yet paid: {f, m}. They are saved so a quit mid-throw loses nothing
+var tithe_armed_t := 0.0      # an empty-handed click on the Eye arms the tithe; a second click inside this window pays it
+var reset_armed_t := 0.0
+var ever_captured := false
+var sim_paused := false       # the mouse is free (Esc): the lake stops, the settings card shows
+var fov_base := BASE_FOV
+var rig_serial := 0
+var settings_ctrls: Array = []
+var test_capture := false     # headless tools cannot capture the mouse: they ask the game to behave as if it were
+var kick_rings: Array = []
 var work_bar: ProgressBar
 
 func _ready() -> void:
@@ -372,6 +382,8 @@ func _ready() -> void:
 	yard.eye_r = EYE_R
 	yard.pupil_r = PUPIL_R
 	yard.swallowed.connect(_on_fish_swallowed)
+	yard.overflowed.connect(_on_fish_overflow)
+	yard.edge_fn = scenery.edge_at
 	yard.landed.connect(func(_f, impact): sfx.play("plop", -10.0 + minf(impact, 8.0) * 0.5, randf_range(0.8, 1.2)))
 	_build_ui()
 	for c in model.tile_sector:
@@ -381,7 +393,8 @@ func _ready() -> void:
 	_setup_lanterns()
 	var resumed := _restore(GameState.extra)
 	_paint_all()
-	GameState.currency_changed.connect(func(_v): _refresh())
+	GameState.currency_changed.connect(_on_currency_changed)
+	_apply_settings()
 	_refresh_view()
 	_build_ride_view()
 	_setup_belt_fish()
@@ -396,11 +409,14 @@ func _ready() -> void:
 		if _meta_int("lakes") > 0:
 			_banner("%s #%d: %s" % [model.mod_info().name, _meta_int("lakes") + 1, model.mod_info().desc], Color(0.7, 0.9, 1.0))
 		if GameState.save_slot.begins_with("test"):
-			_say("Olga: The Eye wants feeding, dear. Press 1 and hold click anywhere on the ice. Carry what you catch to the Eye.")
+			_say("Olga: The Eye wants feeding, dear. Press 1 and hold click anywhere on the ice. Push what you catch into the Eye.")
 		else:
 			guide.want_intro = true
 
 # ---------- hex helpers ----------
+func _on_currency_changed(_v: float) -> void:
+	_refresh()
+
 func _ring(c: Vector2i) -> int:
 	return maxi(maxi(abs(c.x), abs(c.y)), abs(-c.x - c.y))
 
@@ -996,8 +1012,9 @@ func _build_ui() -> void:
 	title.text = "HUSH LAKE"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	start_label = _plain(sbox, 20)
-	start_label.text = "Click to play\n\nDrill a hole (1), fish it (2). Your catch drops onto the ice: push it into the Eye\nWalk into fish, or hold right mouse and let go to kick them. E picks them up.\nLost? Press H and Olga points the way\n\nWASD walk   V snowmobile   Tab journal   R refreeze\nM mute   Esc free mouse   (N while paused: start over)"
+	start_label.text = "Click to play   (Esc pauses)\n\nDrill a hole (1), fish it (2). Your catch drops onto the ice: push it into the Eye\nWalk into fish, or hold right mouse and let go to kick them. E picks them up.\nLost? Press H and Olga points the way\n\nWASD walk   V snowmobile   Tab journal   R refreeze\nM mute   F kick (or right mouse)   (N twice while paused: start over)"
 	start_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_build_settings(sbox)
 	start_panel = _panel(ui, sbox)
 	start_panel.set_anchors_preset(Control.PRESET_CENTER)
 	start_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
@@ -1103,6 +1120,69 @@ func _build_ui() -> void:
 	add_child(guide)
 	guide.build(ui)
 	_ignore_mouse(ui)
+	for c in settings_ctrls:   # the pause card's sliders must take clicks (everything else lets them through to resume)
+		c.mouse_filter = Control.MOUSE_FILTER_STOP
+
+## Settings on the pause card: mouse sensitivity, volume, field of view, invert Y. Saved with the profile.
+func _build_settings(parent: Node) -> void:
+	var sv: Dictionary = GameState.meta.get("settings", {})
+	var rows := [["Mouse", "sens", 0.0005, 0.006, float(sv.get("sens", 0.002))], ["Volume", "vol", 0.0, 1.0, float(sv.get("vol", 1.0))],
+		["Field of view", "fov", 60.0, 100.0, float(sv.get("fov", BASE_FOV))]]
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 4)
+	parent.add_child(box)
+	for r in rows:
+		var hb := HBoxContainer.new()
+		box.add_child(hb)
+		var l := _plain(hb, 17)
+		l.text = r[0]
+		l.custom_minimum_size = Vector2(130, 0)
+		var sl := HSlider.new()
+		sl.min_value = r[2]
+		sl.max_value = r[3]
+		sl.step = (r[3] - r[2]) / 100.0
+		sl.value = r[4]
+		sl.custom_minimum_size = Vector2(260, 22)
+		sl.set_meta("key", r[1])
+		sl.value_changed.connect(func(v: float): _set_setting(r[1], v))
+		hb.add_child(sl)
+		settings_ctrls.append(sl)
+	var cb := CheckBox.new()
+	cb.text = "Invert look (Y)"
+	cb.button_pressed = bool(sv.get("inv", false))
+	cb.toggled.connect(func(on: bool): _set_setting("inv", 1.0 if on else 0.0))
+	box.add_child(cb)
+	settings_ctrls.append(cb)
+	var rb := Button.new()
+	rb.text = "Resume"
+	rb.pressed.connect(func(): Input.mouse_mode = Input.MOUSE_MODE_CAPTURED)
+	box.add_child(rb)
+	settings_ctrls.append(rb)
+
+func _set_setting(key: String, v: float) -> void:
+	var sv: Dictionary = GameState.meta.get("settings", {})
+	sv[key] = v
+	GameState.meta["settings"] = sv
+	_apply_settings()
+
+func _apply_settings() -> void:
+	var sv: Dictionary = GameState.meta.get("settings", {})
+	var pl: Node = get_node_or_null("Player")
+	if pl:
+		pl.sensitivity = float(sv.get("sens", 0.002))
+		pl.invert_y = float(sv.get("inv", 0.0)) > 0.5
+	fov_base = float(sv.get("fov", BASE_FOV))
+	AudioServer.set_bus_volume_db(0, linear_to_db(maxf(float(sv.get("vol", 1.0)), 0.0001)))
+
+func _cap() -> bool:
+	return test_capture or Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+
+func _on_pause_changed() -> void:
+	if sim_paused:
+		kick_charge = -1.0
+		work_bar.visible = false
+		prompt_label.text = ""
+	_log("pause %s" % sim_paused)
 
 func _banner(text: String, color := Color(1, 0.9, 0.4)) -> void:
 	banner_label.text = text
@@ -1357,7 +1437,7 @@ func _upgrade_desc(id: String) -> String:
 func _refresh() -> void:
 	_check_goals()
 	coins_label.text = "%d" % floor(GameState.currency)
-	carry_label.text = "Bucket %d / %d   worth %d" % [carry.size(), capacity(), floor(carry_worth())]
+	carry_label.text = "Bucket %d / %d   worth %d%s" % [carry.size(), capacity(), floor(carry_worth()), ("   |   %d on the ice" % yard.count()) if yard.count() > 0 else ""]
 	carry_bar.value = float(carry.size()) / maxf(1.0, float(capacity()))
 	eye_label.text = "The Eye   stage %d / %d   %d fed" % [eye_stage(), EYE_STAGES.size(), stats.eye_fed]
 	eye_bar.value = _eye_progress()
@@ -1647,6 +1727,23 @@ func _order_progress(f: Dictionary) -> void:
 	_refresh()
 
 func _process(delta: float) -> void:
+	tithe_armed_t = maxf(tithe_armed_t - delta, 0.0)
+	reset_armed_t = maxf(reset_armed_t - delta, 0.0)
+	var cap_now := _cap()
+	if cap_now:
+		ever_captured = true
+	# Esc frees the mouse and really pauses: no bites expire, no machines run, no timers tick (cutscenes play on)
+	var want_pause := ever_captured and not cap_now and not guide.intro_active
+	if want_pause != sim_paused:
+		sim_paused = want_pause
+		_on_pause_changed()
+	if sim_paused:
+		start_panel.visible = true
+		if msg_time > 0.0:
+			msg_time -= delta
+			if msg_time <= 0.0:
+				msg_label.text = ""
+		return
 	if msg_time > 0.0:
 		msg_time -= delta
 		if msg_time <= 0.0:
@@ -1672,7 +1769,7 @@ func _process(delta: float) -> void:
 		_float_text(Vector3(0, 6.0, 0), "+%s" % _coins(eye_pending), Color(0.6, 1.0, 0.9), 0.034)
 		eye_pending = 0.0
 		eye_pending_t = 0.7
-	var captured := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+	var captured := _cap()
 	start_panel.visible = not captured
 	_walk(delta)
 	var raw := _aim_raw()
@@ -1725,7 +1822,7 @@ func _animate(delta: float) -> void:
 			cam.rotation.x = lerpf(cam.rotation.x, deg_to_rad(-12.0), minf(1.0, delta * 2.0))
 	else:
 		reveal_fov = 0.0
-	cam.fov = BASE_FOV + fov_kick + ride_fov + reveal_fov + cine_fov
+	cam.fov = fov_base + fov_kick + ride_fov + reveal_fov + cine_fov
 	tool_kick = move_toward(tool_kick, 0.0, delta * 3.0)
 	var any_cast := false
 	for h in holes:
@@ -1778,22 +1875,61 @@ func _kick_max() -> float:
 	return KICK_BASE_MAX + 3.0 * GameState.level("kick")
 
 func _yard_hint() -> String:
-	return "Walk into fish to push them   Right mouse: kick (hold = harder)   E: pick up"
+	var pl: Node3D = $Player
+	var fwd := -pl.global_basis.z
+	fwd.y = 0.0
+	var n := yard.targets(pl.global_position, fwd.normalized(), KICK_REACH).size()
+	return ("Kick: %d fish ahead   " % n if n > 0 else "") + "Right mouse / F: kick (hold = harder)   E: pick up   or walk into them"
 
 func _tick_yard(delta: float, captured: bool) -> void:
 	var pl: Node3D = $Player
 	var ppos := pl.global_position
 	yard.player_speed = Vector2(ppos.x - player_prev.x, ppos.z - player_prev.z).length() / maxf(delta, 0.0001) if player_prev != Vector3.ZERO else 0.0
 	yard.player_speed = minf(yard.player_speed, 14.0)
+	yard.player_vel = Vector3(ppos.x - player_prev.x, 0.0, ppos.z - player_prev.z) / maxf(delta, 0.0001) if player_prev != Vector3.ZERO else Vector3.ZERO
 	player_prev = ppos
-	yard.pull = 3.4 + 0.9 * eye_stage()
+	yard.pull = 3.8 + 0.9 * eye_stage()
 	yard.step(delta, ppos)
+	_update_kick_rings(captured)
 	if kick_charge >= 0.0:
 		if captured and not guide.intro_active:
 			kick_charge = minf(kick_charge + delta / KICK_CHARGE_TIME, 1.0)
 			tool_kick = -0.35 * kick_charge
 		else:
 			kick_charge = -1.0
+
+## An amber ring on the ice under every fish a kick would hit right now (brighter while you charge).
+func _update_kick_rings(captured: bool) -> void:
+	var want: Array = []
+	if captured and yard.count() > 0 and not guide.intro_active:
+		var pl: Node3D = $Player
+		var fwd := -pl.global_basis.z
+		fwd.y = 0.0
+		want = yard.targets(pl.global_position, fwd.normalized(), KICK_REACH)
+	while kick_rings.size() < mini(want.size(), 8):
+		var m := MeshInstance3D.new()
+		var tm := TorusMesh.new()
+		tm.inner_radius = 0.62
+		tm.outer_radius = 0.74
+		tm.rings = 24
+		tm.ring_segments = 6
+		m.mesh = tm
+		var mt := StandardMaterial3D.new()
+		mt.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		mt.albedo_color = Color(1.0, 0.62, 0.12, 0.85)
+		mt.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.material_override = mt
+		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(m)
+		kick_rings.append(m)
+	var pulse := 0.8 + 0.2 * sin(Time.get_ticks_msec() * 0.012)
+	for i in kick_rings.size():
+		var ring: MeshInstance3D = kick_rings[i]
+		ring.visible = i < want.size()
+		if ring.visible:
+			ring.global_position = Vector3(want[i].pos.x, 0.03, want[i].pos.z)
+			ring.scale = Vector3.ONE * (want[i].r / 0.5) * (1.0 + 0.25 * maxf(kick_charge, 0.0)) * pulse
+			(ring.material_override as StandardMaterial3D).albedo_color.a = 0.45 + 0.5 * maxf(kick_charge, 0.0)
 
 func _start_kick() -> void:
 	kick_charge = 0.0
@@ -1838,8 +1974,23 @@ func _pick_up_fish() -> void:
 	_refresh_view()
 	_refresh()
 
+## More than MAX_LOOSE fish on the ice: the oldest is taken for half pay, no streak, and fades where it lay.
+func _on_fish_overflow(f: Dictionary, holder: Node3D, _pos: Vector3) -> void:
+	_settle_fish(f, EYE_MULT * 0.5)
+	_order_progress(f)
+	var tw := create_tween()
+	tw.tween_property(holder, "scale", Vector3.ONE * 0.05, 0.6)
+	tw.tween_callback(holder.queue_free)
+	var st := eye_stage()
+	if st > eye_seen_stage:
+		eye_seen_stage = st
+		_eye_stage_up(st)
+	_refresh()
+
 ## A loose fish crossed into the pupil: the Eye eats it (pays now) and it spirals down the funnel.
 func _on_fish_swallowed(f: Dictionary, holder: Node3D, pos: Vector3) -> void:
+	if combo > 0:
+		combo_t = COMBO_WINDOW   # pushing a catch home keeps the combo alive
 	_feed_eye(f, EYE_MULT, true)
 	var tw := create_tween()
 	_spiral_into_eye(tw, holder, [pos, pos], 0.5)
@@ -1851,7 +2002,7 @@ func _walk(delta: float) -> void:
 		return
 	var d := Vector3(int(Input.is_physical_key_pressed(KEY_D)) - int(Input.is_physical_key_pressed(KEY_A)), 0,
 		int(Input.is_physical_key_pressed(KEY_S)) - int(Input.is_physical_key_pressed(KEY_W)))
-	moving = d != Vector3.ZERO and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+	moving = d != Vector3.ZERO and _cap()
 	if not moving:
 		return
 	var p: Node3D = $Player
@@ -2123,6 +2274,8 @@ func _fly_fish(f: Dictionary, from: Vector3, delay: float, _dest := "eye", eye_m
 	(fm as FishNode).amp = 2.0
 	holder.global_position = from
 	var pts := [from, scenery.eye_landing(from)]   # shared with the tween lambdas; a hand throw re-aims when it leaves the hand
+	var rec := {"f": f, "m": eye_mult}
+	flying.append(rec)
 	var tw := create_tween()
 	if delay > 0.0:
 		tw.tween_interval(delay)
@@ -2138,6 +2291,7 @@ func _fly_fish(f: Dictionary, from: Vector3, delay: float, _dest := "eye", eye_m
 		holder.global_position = pts[0].lerp(pts[1], t) + Vector3(0, sin(t * PI) * 4.0, 0)
 		fm.rotation.z = t * 7.0, 0.0, 1.0, 0.8 if not hand else 0.62).set_trans(Tween.TRANS_SINE)
 	tw.tween_callback(func():
+		flying.erase(rec)
 		_feed_eye(f, eye_mult, hand))
 	_spiral_into_eye(tw, holder, pts)
 	tw.tween_callback(holder.queue_free)
@@ -2198,6 +2352,15 @@ func _tithe() -> void:
 	if eye_stage() < TITHE_MIN_STAGE:
 		_say("The Eye does not notice coins yet. Feed it fish first.")
 		return
+	if yard.near($Player.global_position, 14.0) > 0:
+		_say("Push the fish in first: walk into them, or kick them (hold right mouse).")
+		return
+	if tithe_armed_t <= 0.0:
+		tithe_armed_t = 2.0
+		_say("Click the Eye again to offer %d coins." % tithe_cost())
+		sfx.play("tick", -4.0, 0.8)
+		return
+	tithe_armed_t = 0.0
 	if not _spend(tithe_cost()):
 		return
 	stats.tithe += 1
@@ -2325,7 +2488,7 @@ func _stage_reveal(st: int) -> void:
 	flash_rect.color.a = 0.4
 	var fl := create_tween()
 	fl.tween_property(flash_rect, "color:a", 0.0, 1.1)
-	get_tree().create_timer(0.45).timeout.connect(func(): sfx.play("goal", -4.0, 0.75))
+	create_tween().tween_callback(func(): sfx.play("goal", -4.0, 0.75)).set_delay(0.45)
 
 # ---------- belts ----------
 func belt_cost(t: Dictionary) -> int:
@@ -2417,7 +2580,7 @@ func _build_cost(item: int) -> int:
 		0: return int(ceil(120.0 * pow(1.9, _count_belts("cannery"))))
 		1: return int(ceil(90.0 * pow(1.9, _count_belts("sorter"))))
 		2: return int(ceil(70.0 * pow(1.5, depots.size())))
-		_: return int(ceil(RIG_BASE * pow(RIG_GROWTH, rigs.size())))
+		_: return 0 if int(stats.get("rig_moves", 0)) > 0 else int(ceil(RIG_BASE * pow(RIG_GROWTH, rigs.size())))
 
 ## Is p a legal spot for a free-standing building (depot / ice-breaker)?
 func _can_place_at(p: Vector3, radius: float) -> bool:
@@ -2525,13 +2688,17 @@ func _build_rig(pos: Vector3, pay := true) -> void:
 	if rigs.size() >= rig_cap():
 		_say("The lake can bear %d ice-breakers for now. Wake the Eye further for more." % rig_cap())
 		return
-	if pay and not _spend(float(_build_cost(3))):
+	var free_move: bool = pay and int(stats.get("rig_moves", 0)) > 0   # an Ice-Breaker you picked up goes down again for free
+	if pay and not free_move and not _spend(float(_build_cost(3))):
 		return
+	if free_move:
+		stats["rig_moves"] = int(stats.rig_moves) - 1
 	var node := Node3D.new()
 	node.position = Vector3(pos.x, 0.0, pos.z)
 	add_child(node)
 	node.look_at(Vector3(0, 0, 0), Vector3.UP, true)
-	var idx := rigs.size()
+	rig_serial += 1
+	var idx := rig_serial
 	var a := Vector3(pos.x, 0.0, pos.z)
 	var dir := (-a).normalized()
 	var b := dir * (PUPIL_R + 0.4)
@@ -2556,7 +2723,8 @@ func _build_rig(pos: Vector3, pay := true) -> void:
 	rig.tag.modulate = Color(0.9, 0.95, 1.0)
 	rigs.append(rig)
 	scenery.obstacles.append(Vector3(pos.x, pos.z, 6.0))
-	stats.rigs += 1
+	if pay and not free_move:
+		stats.rigs += 1
 	if pay:
 		_say("The ice-breaker rumbles to life. It feeds the Eye straight from the lake.")
 		sfx.play("rare")
@@ -2582,6 +2750,27 @@ func _rig_best(rg: Dictionary) -> Vector2i:
 			best_n = n
 			best = c
 	return best
+
+func _rig_of(a: String) -> Dictionary:
+	var id := int(a.substr(4))
+	for rg in rigs:
+		if rg.idx == id:
+			return rg
+	return {}
+
+## An Ice-Breaker with nothing left to chew can be lifted off the ice and placed again anywhere, for free.
+func _pick_up_rig(rg: Dictionary) -> void:
+	for i in scenery.obstacles.size():
+		var o: Vector3 = scenery.obstacles[i]
+		if absf(o.x - rg.pos.x) < 0.01 and absf(o.y - rg.pos.z) < 0.01:
+			scenery.obstacles.remove_at(i)
+			break
+	rg.node.queue_free()
+	rigs.erase(rg)
+	stats["rig_moves"] = int(stats.get("rig_moves", 0)) + 1
+	_say("Lifted the idle Ice-Breaker. Press 7, Q to Ice-Breaker, and set it down anywhere: it is free.")
+	sfx.play("buy")
+	_refresh()
 
 func _tick_rigs(delta: float) -> void:
 	for rg in rigs:
@@ -2730,8 +2919,7 @@ func _tile_action_text(t: Dictionary) -> String:
 				return "Depots and ice-breakers go on open ice (Q to switch)"
 			if tool == 5 and _tool_unlocked(5) and t.belt == null: return "Click: lay a belt to the Eye (%d)" % belt_cost(t)
 			if not t.stash.is_empty():
-				if free_space() <= 0: return "Hands full"
-				return "Click: collect %d fish" % mini(t.stash.size(), free_space())
+				return "Click: collect %d fish (what does not fit spills onto the ice)" % t.stash.size()
 			if model.tile_left(t.c) == 0:
 				return "Click: pick up Auto-Rod (refund %d)" % _refund()
 			if t.belt != null: return "Auto-Rod + belt (working)"
@@ -2760,12 +2948,19 @@ func _prompt_for(a: String) -> String:
 	if a == "eye":
 		if carry.is_empty():
 			if eye_stage() >= TITHE_MIN_STAGE:
-				return "Click: tithe %d coins to the Eye  (Lv %d, +%d%% value)" % [tithe_cost(), stats.tithe, int(TITHE_BONUS * 100.0 * stats.tithe)]
+				if yard.near($Player.global_position, 14.0) > 0:
+					return "Push the fish into the Eye (walk into them, or kick)"
+				if tithe_armed_t > 0.0:
+					return "Click again to offer %d coins  (Lv %d, +%d%% value)" % [tithe_cost(), stats.tithe, int(TITHE_BONUS * 100.0 * stats.tithe)]
+				return "Click twice: tithe %d coins to the Eye  (Lv %d)" % [tithe_cost(), stats.tithe]
 			return "The Eye: push fish into it (or click with a full bucket)"
 		return "Click: feed %d fish to the Eye for %d coins" % [carry.size(), floor(carry_worth() * EYE_MULT)]
 	if a.begins_with("depot:"):
 		return "Click: send %d fish to the Eye by sled" % carry.size() if not carry.is_empty() else "Depot (carry fish here: a sled runs them to the Eye)"
 	if a.begins_with("rig:"):
+		var rg := _rig_of(a)
+		if not rg.is_empty() and _rig_best(rg).x == 9999:
+			return "Idle Ice-Breaker: click to pick it up (placing it again is free)"
 		return "Ice-Breaker: feeding the Eye from the lake"
 	if a.begins_with("buy:"):
 		var id := a.substr(4)
@@ -2807,7 +3002,7 @@ func _prompt_for(a: String) -> String:
 	return "%s\n[%s: %d fish left]  %s" % [_tile_action_text(t), sec2.name, sec2.left, _below_text(t)]
 
 func _update_hold(a: String, delta: float) -> void:
-	var holding := Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+	var holding := Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and _cap()
 	work_bar.visible = false
 	if drill_marker:
 		drill_marker.visible = false
@@ -3019,9 +3214,23 @@ func _on_about_to_save() -> void:
 		hl.append({"p": [t.pos.x, t.pos.z], "s": t.state, "st": t.stash.map(_fish_to), "sl": t.slot.map(_fish_to),
 			"sm": t.smoke_t, "b": t.belt != null, "cn": t.belt != null and t.belt.get("cannery", false),
 			"so": t.belt != null and t.belt.get("sorter", false)})
+	# fish already drawn from the lake must not vanish: a fight in progress lies on the ice by its hole, fish riding belts
+	# and fish mid-throw are written down with the multiplier they were owed
+	var loose: Array = yard.fish.map(func(e): return {"f": _fish_to(e.f), "p": [e.pos.x, e.pos.z]})
+	for t in holes:
+		if t.state == "hole" and t.cast == 3:
+			var tp: Vector3 = t.node.global_position
+			var to_eye := (-Vector3(tp.x, 0, tp.z)).normalized()
+			for f in t.hooked:
+				loose.append({"f": _fish_to(f), "p": [tp.x + to_eye.x * 1.5, tp.z + to_eye.z * 1.5]})
+	var pend: Array = []
+	for it in belt_fish:
+		pend.append({"f": _fish_to(it.f), "m": _belt_mult() * _belt_flag_mult(it.belt, it.f)})
+	for rec in flying:
+		pend.append({"f": _fish_to(rec.f), "m": rec.m})
 	var p: Node3D = $Player
 	GameState.extra = {"holes": hl, "stats": stats, "goals": goal_done, "unlocked": unlocked, "journal": journal, "records": records, "tips": guide.to_dict(),
-		"carry": carry.map(_fish_to), "loose": yard.fish.map(func(e): return {"f": _fish_to(e.f), "p": [e.pos.x, e.pos.z]}), "tool": tool, "pos": [p.position.x, p.position.z],
+		"carry": carry.map(_fish_to), "loose": loose, "pending": pend, "tool": tool, "pos": [p.position.x, p.position.z],
 		"yaw": p.rotation.y, "pitch": cam.rotation.x,
 		"day": day_t, "time": play_time,
 		"depots": depots.map(func(d): return [d.pos.x, d.pos.z]), "rigs": rigs.map(func(rg): return [rg.pos.x, rg.pos.z]),
@@ -3034,6 +3243,7 @@ func _restore(d: Dictionary) -> bool:
 		model.from_dict(d.lake)
 	for k in d.get("stats", {}):
 		stats[k] = d.stats[k]
+	var st_saved := eye_stage()
 	var g: Array = d.get("goals", [])
 	for i in mini(g.size(), goal_done.size()):
 		goal_done[i] = g[i]
@@ -3072,6 +3282,9 @@ func _restore(d: Dictionary) -> bool:
 		_build_depot(Vector3(dp[0], 0.0, dp[1]), false)
 	for rp in d.get("rigs", []):
 		_build_rig(Vector3(rp[0], 0.0, rp[1]), false)
+	for pd in d.get("pending", []):   # paid now, quietly: they were already out of the lake when the game was saved
+		_settle_fish(_fish_from(pd.f), float(pd.m))
+	_reward_stages_quietly(st_saved, eye_stage())
 	tool = clampi(int(d.get("tool", 0)), 0, TOOLS.size() - 1)
 	day_t = d.get("day", 0.0)
 	play_time = float(d.get("time", 0.0))
@@ -3088,11 +3301,35 @@ func _restore(d: Dictionary) -> bool:
 	cam.rotation.x = d.get("pitch", cam.rotation.x)
 	return true
 
+## A fish that reaches the Eye with no ceremony (a save/restore or offline delivery): pays and counts, nothing more.
+func _settle_fish(f: Dictionary, mult: float) -> void:
+	stats.eye_fed += 1
+	var worth: float = f.base * f.mult * sale_mult() * mult
+	GameState.add(worth)
+	stats.earned += worth
+
+## Eye stages crossed without being there to see them (offline, a restored save) still pay out exactly once.
+func _reward_stages_quietly(from_stage: int, to_stage: int) -> void:
+	if to_stage <= from_stage:
+		return
+	for st in range(from_stage + 1, to_stage + 1):
+		_log("EYE stage %d (quiet)" % st)
+		if st >= EYE_STAGES.size() and stats.awakened == 0:
+			stats.awakened = 1
+			GameState.meta.pearls = _meta_int("pearls") + AWAKEN_PEARLS
+			_log("EYE AWAKE (quiet)")
+			GameState.meta["awaken_seen"] = true
+			_say("The Eye woke while you were away!  +%d%% fish value, +%d pearls." % [int(AWAKEN_BONUS * 100.0), AWAKEN_PEARLS])
+	eye_seen_stage = to_stage
+	scenery.set_eye_stage(to_stage)
+	scenery.set_eye_open(eye_open_frac())
+
 # auto-rods keep working while you're away (capped at 8 hours)
 func _offline(away: float) -> void:
 	away = minf(away, 8.0 * 3600.0)
 	if away < 30.0 or (stats.autos <= 0 and rigs.is_empty()):
 		return
+	var st0 := eye_stage()
 	var earned := 0.0
 	var stashed := 0
 	for rg in rigs:  # ice-breakers keep working, at 40% of their live pace
@@ -3105,7 +3342,7 @@ func _offline(away: float) -> void:
 			var rf := _draw_fish(pseudo)
 			if rf.is_empty():
 				break
-			earned += rf.base * sale_mult() * _belt_mult() * _belt_flag_mult(rg.belt, rf)
+			earned += rf.base * rf.mult * sale_mult() * _belt_mult() * _belt_flag_mult(rg.belt, rf)
 			stats.eye_fed += 1
 			_after_draw(pseudo)
 			rb -= (RIG_INTERVAL * model.wait_factor(best) * 0.6 + 0.6) * 2.5
@@ -3119,7 +3356,7 @@ func _offline(away: float) -> void:
 				var f := _draw_fish(t)
 				if f.is_empty():
 					break
-				earned += f.base * sale_mult() * _belt_mult()
+				earned += f.base * f.mult * sale_mult() * _belt_mult() * _belt_flag_mult(t.belt, f)
 				stats.eye_fed += 1
 				_after_draw(t)
 			elif t.stash.size() < STASH_MAX:
@@ -3136,6 +3373,7 @@ func _offline(away: float) -> void:
 		_say("Welcome back! Your belts and rigs fed the Eye while you were away: +%d coins." % floor(earned))
 	elif stashed > 0:
 		_say("Welcome back! Your auto-rods stashed %d fish while you were away." % stashed)
+	_reward_stages_quietly(st0, eye_stage())
 	eye_seen_stage = eye_stage()
 	scenery.set_eye_open(eye_open_frac())
 	_refresh()
@@ -3151,6 +3389,12 @@ func _unhandled_input(event: InputEvent) -> void:
 	if guide.intro_active:
 		if guide.intro_t > guide.skip_after and ((event is InputEventMouseButton and event.pressed) or (event is InputEventKey and event.pressed and event.keycode in [KEY_SPACE, KEY_ENTER, KEY_E])):
 			guide.skip_intro()
+		return
+	if event is InputEventKey and event.keycode == KEY_F and not event.echo and _cap():
+		if event.pressed:
+			_start_kick()
+		else:
+			_release_kick()
 		return
 	if event is InputEventKey and event.pressed and not event.echo:
 		if refreeze_panel.visible:
@@ -3196,8 +3440,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.keycode == KEY_M:
 			_say("Sound off" if sfx.toggle_mute() else "Sound on")
 			return
-		if event.keycode == KEY_N and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
-			_new_game()
+		if event.keycode == KEY_N and not _cap():
+			if reset_armed_t > 0.0:
+				_new_game()
+			else:
+				reset_armed_t = 4.0
+				_say("Press N again to delete this run and start over.")
 			return
 		var k: int = event.keycode - KEY_1
 		if k >= 0 and k < TOOLS.size():
@@ -3206,13 +3454,13 @@ func _unhandled_input(event: InputEvent) -> void:
 				_refresh()
 			else:
 				_say("Locked - complete goals to unlock.")
-	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and _cap():
 		if event.pressed:
 			_start_kick()
 		else:
 			_release_kick()
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT \
-			and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED \
+			and _cap() \
 			and not refreeze_panel.visible:
 		_click(_aim())
 
@@ -3240,7 +3488,11 @@ func _click(a: String) -> void:
 			_use_depot(depots[di])
 		return
 	if a.begins_with("rig:"):
-		_say("The ice-breaker is hard at work.")
+		var rg := _rig_of(a)
+		if not rg.is_empty() and _rig_best(rg).x == 9999:
+			_pick_up_rig(rg)
+		else:
+			_say("The ice-breaker is hard at work.")
 		return
 	if a.begins_with("buy:"):
 		_buy(a.substr(4))
@@ -3317,12 +3569,17 @@ func _click(a: String) -> void:
 			if t.stash.is_empty() and model.tile_left(t.c) == 0:
 				_pickup_auto(t)
 				return
-			var n := mini(t.stash.size(), free_space())
-			if n == 0:
-				_say("Hands full" if free_space() <= 0 else ("Belt running" if t.belt != null else "Stash is empty"))
+			if t.stash.is_empty():
+				_say("Belt running" if t.belt != null else "Stash is empty")
 				return
-			for i in n:
-				_add_carry(t.stash.pop_front())
+			var hp: Vector3 = t.node.global_position
+			var to_eye := (-Vector3(hp.x, 0.0, hp.z)).normalized()
+			while not t.stash.is_empty():   # what fits goes in your hands; the rest spills onto the ice, toward the Eye
+				var sf: Dictionary = t.stash.pop_front()
+				if free_space() > 0:
+					_add_carry(sf)
+				else:
+					yard.spawn(sf, hp + Vector3(0, 0.4, 0), to_eye.rotated(Vector3.UP, randf_range(-0.6, 0.6)) * randf_range(2.0, 3.2) + Vector3(0, 4.5, 0))
 			_refresh_view()
 			_refresh()
 		"smoker":
@@ -3427,6 +3684,10 @@ func _launch_catch(t: Dictionary, got: Array, best: Dictionary) -> void:
 	var to_player: Vector3 = $Player.global_position - hole_pos
 	to_player.y = 0.0
 	to_player = to_player.normalized() if to_player.length() > 0.1 else Vector3.RIGHT
+	# a catch tumbles out mostly toward the Eye (the lesson is "push it in"), a little toward you so it is never far from your boots
+	var to_eye := (-Vector3(hole_pos.x, 0.0, hole_pos.z))
+	to_eye = to_eye.normalized() if to_eye.length() > 0.1 else to_player
+	to_player = (to_eye * 0.65 + to_player * 0.35).normalized()
 	for i in got.size():
 		var f: Dictionary = got[i]
 		# out of the hole in an arc, toward you (a little wild), then it falls, bounces and slides

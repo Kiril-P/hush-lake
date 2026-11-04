@@ -93,9 +93,13 @@ func manual_fish_rate() -> float:
 	var ln: int = g.lines()
 	var catches := ceili(float(cap) / ln)
 	var walk: float = (6.0 + 1.6 * GameState.level("boots")) * g.RIDE_SPEED[mini(GameState.level("snowmobile"), 3)]
-	var trip_t: float = 2.0 * 9.0 / walk + 0.9 + float(g.drill_time()) * 0.5
 	var fish: float = mini(cap, catches * ln)
-	return active * fish / (catches * catch_t + trip_t)
+	# getting fish to the Eye is real work now: push each one (position, shove, walk it in) or scoop a bucketful (E) and carry
+	var dist: float = 14.0 + 4.0 * float(g.eye_stage())          # holes sit farther out as the lake opens
+	var push_per: float = 1.5 + dist / 9.0 + 0.6
+	var bucket_trip: float = 2.0 * dist / walk + 1.0 + float(g.drill_time()) * 0.5
+	var overhead: float = minf(push_per * fish, bucket_trip)
+	return active * fish / (catches * catch_t + overhead)
 
 func auto_fish_rate() -> float:
 	return autos / ((g.AUTO_WAIT[0] + g.AUTO_WAIT[1]) * 0.5 * g.bite_mult() * wf_here())

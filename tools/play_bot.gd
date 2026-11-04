@@ -45,6 +45,7 @@ func _ready() -> void:
 	await get_tree().create_timer(3.0).timeout  # let shaders compile so frame times are steady
 	await frames(5)
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	g.test_capture = true   # the window may not be focused (then the OS frees the mouse and the game would pause)
 	await frames(3)
 	var player: Node3D = g.get_node("Player")
 	var out_dir := Vector3(0.5, 0, -0.866)   # toward the Eye, still inside the Shallows
