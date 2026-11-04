@@ -159,3 +159,22 @@ static func builder(body: Node3D, accent: Color) -> Dictionary:
 	box(body, Vector3(0.12, 0.0, -0.4), Vector3(0.05, 0.06, 0.07), STEEL_DARK, 0.0, 0.4, 0.7)
 	mitten(body, Vector3(0.0, 0.0, 0.07), 1.0, 0.0)
 	return {"spin": null, "tip": null}
+
+## Your boot, for kicking: a chunky leather boot with amber laces and a fur cuff. Points along -Z (the toe leads).
+static func boot(parent: Node3D) -> Node3D:
+	var b := Node3D.new()
+	parent.add_child(b)
+	var leather := Color(0.42, 0.27, 0.18)
+	box(b, Vector3(0, -0.07, -0.02), Vector3(0.15, 0.05, 0.36), WOOD_DARK, 0.0, 0.8)   # sole
+	box(b, Vector3(0, 0.0, -0.05), Vector3(0.14, 0.1, 0.3), leather, 0.0, 0.7)   # foot
+	ball(b, Vector3(0, -0.01, -0.2), Vector3(0.14, 0.1, 0.12), leather.lightened(0.05), 0.0, 0.7)   # toe cap
+	box(b, Vector3(0, 0.12, 0.05), Vector3(0.13, 0.2, 0.14), leather, 0.0, 0.7)   # ankle
+	for i in 3:   # laces
+		box(b, Vector3(0, 0.06 + i * 0.04, -0.03 - i * 0.025), Vector3(0.1, 0.012, 0.012), AMBER, 0.5)
+	var cuff := TorusMesh.new()
+	cuff.inner_radius = 0.06
+	cuff.outer_radius = 0.1
+	cuff.rings = 12
+	cuff.ring_segments = 5
+	_add(b, cuff, mat(Color(0.95, 0.92, 0.84), 0.0, 0.9), Vector3(0, 0.23, 0.05))
+	return b

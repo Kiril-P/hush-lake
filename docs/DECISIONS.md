@@ -127,3 +127,7 @@ Two-provider council (GPT-6.1 Sol + Claude Opus 5.5) reviewed the plan and cross
 - Yard substeps are capped at 8 per frame (a long hitch cannot turn into hundreds of steps).
 - Opus N4 (guide cinematic timer counting while paused) checked and not a bug: `guide.tick` runs only from the un-paused `_process`.
 - The bot now buys an upgrade named on the NEXT strip when it can pay, and explores nearer after seeing a LOCKED prompt: 95 fish fed, 0 stalls in 10 minutes.
+
+## Visual and feel pass (council set aside; goal: one style, one vibe)
+Built: living ice shader, new tool models with mittens and a kick boot, snow puffs, all machines remodelled in one language (see docs/STYLE.md "Assets"), animated belt chevrons, steaming cannery, sweeping sorter scanner, spinning rig beacon, Olga as a figure, reactive crosshair and drawn tool icons, round minimap, field journal, centred cards (CenterContainer, so tall cards never run off screen), themed sliders/buttons, a cold vignette and a gentle colour grade, sector labels that stay readable at distance, hole water and lip, walk bob with footstep snow, fish colours fixed (vertex colours are sRGB) so fins keep their colour.
+Judging method: renders by `tools/showroom.sh` and `tools/shot.sh`; headless suites (yard, safety, guide, smoke) and the windowed bot stay green.

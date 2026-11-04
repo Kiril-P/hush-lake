@@ -78,9 +78,12 @@ func _ready() -> void:
 			await get_tree().create_timer(step[1]).timeout
 			get_viewport().get_texture().get_image().save_png("res://renders/shot_yard_%s.png" % step[0])
 			print("saved yard ", step[0])
+		g._start_kick()
+		await get_tree().create_timer(0.4).timeout
+		get_viewport().get_texture().get_image().save_png("res://renders/shot_yard_wind.png")
 		g.kick_charge = 1.0
 		g._release_kick()
-		for step in [["c", 0.18], ["d", 0.4]]:
+		for step in [["c", 0.1], ["d", 0.4]]:
 			await get_tree().create_timer(step[1]).timeout
 			get_viewport().get_texture().get_image().save_png("res://renders/shot_yard_%s.png" % step[0])
 			print("saved yard ", step[0])

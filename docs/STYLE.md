@@ -24,8 +24,17 @@ All UI colors and widgets live in `shared/style.gd` (`Style`); do not hardcode U
 - Crosshair is a small cream ring. Title card (`HUSH LAKE`) shows whenever the mouse is free.
 - Font: system rounded sans (Avenir Next Rounded, falling back to Trebuchet/Verdana). No font files bundled yet.
 
+## Assets (code-built, one design language)
+- **Machines** (`machine_models.gd`): blued steel body, teal trim, wood only where a person touches it, a snow cap on every flat top, amber lamps as the only warm note. Auto-Rod = derrick with a pumping beam and a stash crate; Smoker = smokehouse with a chimney (smokes while working); Gut Table = trestle table with a lamp; Belt = steel trough with teal rails and chevrons marching toward the Eye (shader); Cannery = brick works with a steaming stack; Sorter = gantry with a sweeping scanner; Depot = snow-roofed shed with a sled; Ice-Breaker = hull with a lit bridge, crane and a spinning amber beacon.
+- **Tools in hand** (`tool_models.gd`): auger with real flights, rod with cork grip, reel, guides and a lit tip bead, builder kit; knitted amber mittens with teal cuffs on every tool; a leather boot swings in for kicks.
+- **People:** Olga (`npc_models.gd`): teal parka, amber scarf, rose knitted hat; she breathes, turns her head to follow you and waves when you are near.
+- **Ice** (shader in `scenery.gd`): colour from the lake model plus soft mottling, drifting frost, fine cracks and glints that twinkle near you. Holes have a pale lip and rippling dark water.
+- **HUD widgets** (`hud_widgets.gd`): reactive crosshair (cream / amber when you can act / aqua on the Eye and kickable fish, with a progress ring), drawn tool icons, round minimap with a compass tick and fish specks, field journal table, themed sliders and buttons. A soft cold vignette frames the view.
+- Juice: snow puffs on landings, kicks, fast slides and footsteps; walking head-bob.
+- Judge assets in isolation with `tools/showroom.sh` (renders/room_*.png) and in the world with `tools/shot.sh` (`SHOT_ONLY=tools|machines2|yard|olga|ui|fishing`).
+
 ## Still to do
-Minimap and 3D plaques still use the old colors and fonts. Machines (cannery, sorter, depot, rig) need a consistent trim color. Add icons for tools.
+Fish models could use better fin shapes (and belt/rig fish are still beads); 3D plaques and welcome sign use the old fonts; no real audio mix pass; trees and shore clutter are still generic.
 
 ## Guidance
 The amber accent also means 'go here': the NEXT strip border, the world pin and the edge arrow are all amber on ink. Tips use the aqua accent. Nothing guiding the player is ever red or blocks the crosshair.

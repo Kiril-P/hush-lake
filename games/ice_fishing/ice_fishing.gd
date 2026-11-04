@@ -338,6 +338,10 @@ var settings_ctrls: Array = []
 var test_capture := false     # headless tools cannot capture the mouse: they ask the game to behave as if it were
 var kick_rings: Array = []
 var hold_block := false
+var kick_boot: Node3D
+var boot_tween: Tween
+const BOOT_ROT := Vector3(-6, 38, 6)   # turned to show its side, toe forward
+const BOOT_REST := Vector3(0.24, -0.9, -0.2)   # below the bottom of the screen
 var bob_t := 0.0
 var quiet_notice := ""         # an Eye stage reached out of sight: told to the player with the welcome-back line
 var work_bar: ProgressBar
@@ -378,6 +382,10 @@ func _ready() -> void:
 	tool_view.position = Vector3(0.38, -0.36, -0.65)
 	tool_view.scale = Vector3.ONE * 0.85
 	cam.add_child(tool_view)
+	kick_boot = ToolModels.boot(cam)
+	kick_boot.position = BOOT_REST
+	kick_boot.scale = Vector3.ONE * 0.7
+	kick_boot.rotation_degrees = BOOT_ROT
 	model = LakeModelScript.new()
 	var fresh_lake := GameState.extra.is_empty()
 	model.generate(randi(), String(GameState.meta.get("next_mod", "")) if fresh_lake else "", _meta_int("lakes") if fresh_lake else 0)
@@ -1259,6 +1267,8 @@ func _cap() -> bool:
 	return test_capture or Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
 
 func _on_pause_changed() -> void:
+	if kick_boot and sim_paused:
+		kick_boot.position = BOOT_REST
 	if not sim_paused:
 		hold_block = true   # the press that resumed play is still down: it must not drill or work a table until released
 	for tw in get_tree().get_processed_tweens():   # fish in flight must not land (and pay) while the lake is frozen
@@ -2000,6 +2010,25 @@ func _tick_yard(delta: float, captured: bool) -> void:
 		else:
 			kick_charge = -1.0
 
+func _boot_move(pos: Vector3, rot: Vector3, dur: float) -> void:
+	if boot_tween:
+		boot_tween.kill()
+	boot_tween = create_tween().set_parallel(true)
+	boot_tween.tween_property(kick_boot, "position", pos, dur).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	boot_tween.tween_property(kick_boot, "rotation_degrees", rot, dur).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+
+## The kick: the boot whips forward and up through the snow, then drops back out of sight.
+func _boot_swing(power: float) -> void:
+	if boot_tween:
+		boot_tween.kill()
+	var reach := 0.55 + 0.25 * clampf(power / _kick_max(), 0.0, 1.0)
+	boot_tween = create_tween()
+	boot_tween.tween_property(kick_boot, "position", Vector3(0.12, -0.22, -reach), 0.09).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	boot_tween.parallel().tween_property(kick_boot, "rotation_degrees", Vector3(32, 30, 4), 0.09).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	boot_tween.tween_interval(0.07)
+	boot_tween.tween_property(kick_boot, "position", BOOT_REST, 0.28).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	boot_tween.parallel().tween_property(kick_boot, "rotation_degrees", BOOT_ROT, 0.28)
+
 ## An amber ring on the ice under every fish a kick would hit right now (brighter while you charge).
 func _update_kick_rings(captured: bool) -> void:
 	var want: Array = []
@@ -2053,6 +2082,7 @@ func _update_crosshair(a: String, captured: bool) -> void:
 
 func _start_kick() -> void:
 	kick_charge = 0.0
+	_boot_move(Vector3(0.28, -0.34, -0.3), Vector3(-18, 38, 6), 0.35)   # the foot draws back
 
 ## Release the right mouse button: everything in front of your boots flies off the way you are facing.
 func _release_kick() -> void:
@@ -2066,6 +2096,7 @@ func _release_kick() -> void:
 	fwd = fwd.normalized()
 	var hit := yard.kick(pl.global_position, fwd, power, KICK_REACH)
 	_kick_tool(1.4)
+	_boot_swing(power)
 	view_pop = 0.5
 	if hit > 0:
 		kicks += 1
