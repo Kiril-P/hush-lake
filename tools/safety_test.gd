@@ -112,6 +112,76 @@ func _ready() -> void:
 	check("resumed: timers run again", not g.sim_paused and t2.timer < t_before - 0.1)
 	g._end_cast(t2)
 
+	# --- fish in the air do not land while paused
+	g.stats.eye_fed = 0
+	g.carry.clear()
+	for i in 2:
+		g.carry.append(g._make_fish(g.SPECIES[0]))
+	g._feed_by_hand()
+	g.ever_captured = true
+	await get_tree().create_timer(0.2).timeout
+	var fed_p: int = g.stats.eye_fed
+	await get_tree().create_timer(2.0).timeout
+	check("paused: thrown fish hang in the air and nothing is paid", g.sim_paused and g.stats.eye_fed == fed_p and g.flying.size() > 0)
+	g.ever_captured = false
+	await get_tree().create_timer(2.5).timeout
+	check("resumed: they land and pay", g.stats.eye_fed == fed_p + g.flying.size() + (2 - fed_p - g.flying.size()) and g.flying.is_empty() and g.stats.eye_fed == 2)
+
+	# --- an order is credited by fish settled from a save
+	g.order = {"type": "any", "need": 2, "have": 1, "reward": 7, "species": ""}
+	var coins_o: float = GameState.currency
+	g._settle_fish(g._make_fish(g.SPECIES[0]), g.EYE_MULT)
+	check("a fish settled on load counts toward the open order", g.orders_done >= 1 or int(g.order.get("have", 0)) == 2 or GameState.currency >= coins_o + 7.0)
+
+	# --- fish delivered after the Eye wakes mid-batch are paid with the awakened bonus
+	g.stats.awakened = 0
+	g.stats.eye_fed = g.eye_stage_at(4) - 1
+	g.eye_seen_stage = g.eye_stage()
+	var f1: Dictionary = g._make_fish(g.SPECIES[1])
+	var f2: Dictionary = g._make_fish(g.SPECIES[1])
+	var sm0: float = g.sale_mult()
+	var w1: float = g._settle_fish(f1, 1.0)
+	var w2: float = g._settle_fish(f2, 1.0)
+	check("the fish that wakes the Eye is paid at the old rate, the next one at the new rate", absf(w1 - f1.base * f1.mult * sm0) < 0.001 and w2 > w1 * (1.0 + g.AWAKEN_BONUS * 0.8 / sm0 * 1.0 - 0.001) - 0.001)
+
+	# --- settings persist and apply
+	g._set_setting("sens", 0.004)
+	g._set_setting("fov", 90.0)
+	g._set_setting("inv", 1.0)
+	g = await reload(g, slot)
+	check("settings survive a restart", absf(g.get_node("Player").sensitivity - 0.004) < 0.0001 and g.fov_base == 90.0 and g.get_node("Player").invert_y)
+
+	# --- a belt fish in transit survives a save
+	var tb: Dictionary = g._make_hole(g.guide.drill_spot + Vector3(0, 0, 5))
+	g._build_auto(tb, false)
+	g._build_belt(tb, false)
+	g.belt_fish.clear()
+	g._belt_push(tb.belt, g._make_fish(g.SPECIES[1]))
+	g.stats.eye_fed = 0
+	check("a fish is riding the belt", g.belt_fish.size() == 1)
+	g = await reload(g, slot)
+	check("a belt fish in transit is paid once on load", g.stats.eye_fed == 1 and g.belt_fish.is_empty())
+
+	# --- N asks twice, F kicks
+	g.test_capture = false
+	var nev := InputEventKey.new()
+	nev.keycode = KEY_N
+	nev.pressed = true
+	g.reset_armed_t = 0.0
+	g._unhandled_input(nev)
+	check("N once only warns", g.reset_armed_t > 0.0 and is_instance_valid(g) and not g.is_queued_for_deletion())
+	g.test_capture = true
+	var fev := InputEventKey.new()
+	fev.keycode = KEY_F
+	fev.pressed = true
+	g._unhandled_input(fev)
+	check("holding F charges a kick", g.kick_charge >= 0.0)
+	fev = InputEventKey.new()
+	fev.keycode = KEY_F
+	fev.pressed = false
+	g._unhandled_input(fev)
+	check("letting go releases it", g.kick_charge < 0.0)
+
 	# --- tithe and reset need confirming
 	g.yard.clear_all()
 	g.stats.eye_fed = g.eye_stage_at(1)
@@ -151,7 +221,10 @@ func _ready() -> void:
 	var rigs_stat: int = g.stats.rigs
 	g._build_rig(Vector3(30, 0, 30), true)
 	check("it goes down free and does not count as a second purchase", GameState.currency == coins_b and g.stats.rigs == rigs_stat and g.stats.rig_moves == 0 and g.rigs.size() == n_rigs)
-	check("rig ids stay unique after moving", g.rigs.map(func(x): return x.idx).size() == g.rigs.size())
+	var ids := {}
+	for r in g.rigs:
+		ids[r.idx] = true
+	check("rig ids stay unique after moving", ids.size() == g.rigs.size())
 
 	# --- guidance points at the right hole
 	var g3 = await fresh("test_safety2")

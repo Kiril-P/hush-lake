@@ -13,7 +13,7 @@ var T := 0.0
 var player: Node3D
 var fails := 0
 var rep := {"first_hole": -1.0, "first_cast": -1.0, "first_catch": -1.0, "first_feed": -1.0, "bucket": -1.0, "auto_rod": -1.0, "belt": -1.0,
-	"kick_tries": 0, "kick_hits": 0, "scan_time": 0.0, "stalls": 0, "stall_time": 0.0, "pushes": 0, "buys": []}
+	"missed_bites": 0, "kick_tries": 0, "kick_hits": 0, "scan_time": 0.0, "stalls": 0, "stall_time": 0.0, "pushes": 0, "buys": []}
 var last_progress := 0.0
 var last_sig := ""
 var stall_open := false
@@ -22,6 +22,10 @@ var frames_n := 0
 var last_us := 0
 var last_print := -1
 var hole_catches := {}   # hole idx -> bot-counted catches
+var known_empty := {}    # hole idx -> true once the game told us it is fished out (message on screen)
+var proc_ms := 0.0
+var locked_seen := false
+var last_msg := ""
 
 func check(name: String, ok: bool) -> void:
 	print(("PASS  " if ok else "FAIL  ") + name)
@@ -50,10 +54,8 @@ func tick() -> float:
 	await get_tree().process_frame
 	var d := get_process_delta_time()
 	T += d
-	var now := Time.get_ticks_usec()
-	frame_us += (now - last_us) / maxf(Engine.time_scale, 1.0)
+	proc_ms += Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0
 	frames_n += 1
-	last_us = now
 	_progress()
 	if int(T) % 30 == 0 and int(T) != last_print:
 		last_print = int(T)
@@ -68,6 +70,11 @@ func _progress() -> void:
 	if rep.bucket < 0.0 and GameState.level("bucket") > 0: rep.bucket = T
 	if rep.auto_rod < 0.0 and s.autos > 0: rep.auto_rod = T
 	if rep.belt < 0.0 and s.belts > 0: rep.belt = T
+	var m: String = g.msg_label.text
+	if m != last_msg:
+		last_msg = m
+		if m.contains("got away") or m.contains("Too early"):
+			rep.missed_bites += 1
 	var sig := "%d %d %d %d %d %d" % [s.holes, s.caught, s.eye_fed, GameState.level("bucket"), s.autos, int(GameState.currency / 5.0)]
 	if sig != last_sig:
 		last_sig = sig
@@ -216,21 +223,22 @@ func do_drill(st: Dictionary) -> void:
 	mouse(MOUSE_BUTTON_LEFT, false)
 
 func do_drill_near() -> void:
-	# a new hole somewhere sensible: 3-5 m from where we stand, on legal ice (the game says "Too close..." otherwise)
+	# look at a few bits of ice near us and read the prompt a player reads: "Hold click: drill here" means it is legal
+	if g.tool != 0:
+		tap(KEY_1)
+		await tick()
 	var p := flat(player.global_position)
-	var spot := Vector3.ZERO
-	var found := false
-	for i in 40:
+	for i in 10:
 		var a := randf() * TAU
-		var cand := p + Vector3(cos(a), 0, sin(a)) * randf_range(3.0, 5.0)
-		if g._can_drill_at(cand):
-			spot = cand
-			found = true
-			break
-	if not found:
-		await walk_to(p + Vector3(randf_range(-6, 6), 0, randf_range(-6, 6)), 1.0, 8.0)
-		return
-	await drill_at(spot)
+		var cand := p + Vector3(cos(a), 0, sin(a)) * randf_range(3.0, 5.5)
+		await look_at_point(Vector3(cand.x, 0.0, cand.z), 0.05, 3.0)
+		await tick()
+		if g.prompt_label.text.begins_with("Hold click: drill"):
+			await drill_at(cand)
+			return
+		if g.prompt_label.text.contains("LOCKED"):
+			locked_seen = true
+	await walk_to(p + Vector3(randf_range(-6, 6), 0, randf_range(-6, 6)), 1.0, 8.0)
 
 func drill_at(spot: Vector3) -> void:
 	if g.tool != 0:
@@ -249,21 +257,18 @@ func drill_at(spot: Vector3) -> void:
 
 ## A fresh hole farther out (22-34 m from the Eye): that is where pushing and kicking start to matter.
 func do_far_hole() -> void:
-	for i in 60:
-		var a := randf() * TAU
-		var r := randf_range(22.0, 34.0)
-		var cand := Vector3(cos(a) * r, 0, sin(a) * r)
-		if g._can_drill_at(cand):
-			await walk_to(cand + (flat(player.global_position) - cand).normalized() * 3.5, 1.5, 40.0)
-			await drill_at(cand)
-			return
+	# head out a random way and drill where the prompt allows it (a locked sector says so and we simply try another way)
+	var a := randf() * TAU
+	var r := randf_range(22.0, 34.0)
+	var cand := Vector3(cos(a) * r, 0, sin(a) * r)
+	await walk_to(cand, 3.0, 40.0)
 	await do_drill_near()
 
 func best_hole() -> Dictionary:
 	var best: Dictionary = {}
 	var bd := 1e9
 	for t in g.holes:
-		if t.state != "hole" or g.model.tile_left(t.c) == 0:
+		if t.state != "hole" or known_empty.has(t.idx):
 			continue
 		var dd: float = flat(t.pos).distance_to(flat(player.global_position))
 		if dd < bd:
@@ -289,6 +294,8 @@ func do_cast() -> void:
 		if await aim_click(hp, "hole:%d" % t.idx):
 			if rep.first_cast < 0.0:
 				rep.first_cast = T
+			if g.msg_label.text.contains("fished out"):
+				known_empty[t.idx] = true
 		return
 	# a line is out: wait for the bite, watching the float
 	var hp2: Vector3 = t.node.global_position + Vector3(0, 0.2, 0)
@@ -313,6 +320,9 @@ func do_bite() -> void:
 		look_step(hp, d)
 	if await aim_click(hp, "hole:%d" % t.idx, 1.2):
 		hole_catches[t.idx] = int(hole_catches.get(t.idx, 0)) + 1
+		await tick()
+		if g.msg_label.text.contains("Nothing left"):
+			known_empty[t.idx] = true
 
 func do_push() -> void:
 	var guard := T
@@ -410,15 +420,27 @@ func do_generic(st: Dictionary) -> void:
 	await do_cast()
 
 func report() -> void:
-	var fps_ms := frame_us / maxf(float(frames_n), 1.0) / 1000.0
+	var fps_ms := proc_ms / maxf(float(frames_n), 1.0)
+	# the fish physics alone, at the cap of 60 loose fish, stepped like the game does
+	var yard: Node = g.yard
+	yard.clear_all()
+	for i in 60:
+		yard.spawn(g._make_fish(g.SPECIES[0]), Vector3(-60 + (i % 10) * 1.3, 0.05, 60 + floorf(i / 10.0) * 1.3), Vector3(randf_range(-3, 3), 0, randf_range(-3, 3)))
+	var t0 := Time.get_ticks_usec()
+	for i in 300:
+		yard.step(1.0 / 60.0, Vector3(0, 1.7, 95))
+	var yard_ms := (Time.get_ticks_usec() - t0) / 300.0 / 1000.0
+	yard.clear_all()
 	print("REPORT first hole %s s, first cast %s s, first catch %s s, first feed %s s" % [rep.first_hole, rep.first_cast, rep.first_catch, rep.first_feed])
 	print("REPORT bucket %s s, auto-rod %s s, belt %s s, purchases %s" % [rep.bucket, rep.auto_rod, rep.belt, rep.buys])
 	print("REPORT fish fed %d, caught %d, coins %d, eye stage %d, holes %d" % [g.stats.eye_fed, g.stats.caught, int(GameState.currency), g.eye_stage(), g.holes.size()])
-	print("REPORT pushes %d, kicks %d/%d hit, scan time %.1f s, stalls %d (%.0f s)" % [rep.pushes, rep.kick_hits, rep.kick_tries, rep.scan_time, rep.stalls, rep.stall_time])
-	print("REPORT sim cost per frame (headless, whole game): %.2f ms" % fps_ms)
+	print("REPORT pushes %d, kicks %d/%d hit, missed bites %d, scan time %.1f s, stalls %d (%.0f s)" % [rep.pushes, rep.kick_hits, rep.kick_tries, rep.missed_bites, rep.scan_time, rep.stalls, rep.stall_time])
+	print("REPORT process time per frame (whole game, headless, scene time not rendered): %.2f ms; fish physics with 60 loose fish: %.3f ms per step" % [fps_ms, yard_ms])
 	# the bound checks: the opening must be quick and nothing may stall for long
 	check("first catch within 90 s", rep.first_catch > 0.0 and rep.first_catch <= 90.0)
 	check("first delivery to the Eye within 120 s", rep.first_feed > 0.0 and rep.first_feed <= 120.0)
+	check("the Bucket is bought within 180 s", rep.bucket > 0.0 and rep.bucket <= 180.0)
+	check("an Auto-Rod is built within 480 s", rep.auto_rod > 0.0 and rep.auto_rod <= 480.0)
 	check("no more than 3 stalls in 10 minutes", rep.stalls <= 3)
 	check("the bot made real progress: 20+ fish fed", g.stats.eye_fed >= 20)
 	print("FIRST10 %s (%d failures)" % ["PASS" if fails == 0 else "FAIL", fails])

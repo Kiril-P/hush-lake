@@ -196,10 +196,11 @@ func _ready() -> void:
 	yard.spawn(first, Vector3(-60, yard.GROUND, 60), Vector3.ZERO)
 	var half: float = first.base * first.mult * g.sale_mult() * g.EYE_MULT * 0.5
 	var streak0: int = g.feed_streak
+	var earned0: float = g.stats.earned
 	for i in yard.MAX_LOOSE:
 		yard.spawn(g._make_fish(g.SPECIES[0]), Vector3(-60 + (i % 10) * 1.3, yard.GROUND, 62 + floorf(i / 10.0) * 1.3), Vector3.ZERO)
 	check("the 61st fish takes the oldest off the ice", yard.count() == yard.MAX_LOOSE)
-	check("overflow pays half the Eye rate and does not touch the streak", absf(GameState.currency - half) < 400.0 and GameState.currency >= half - 0.01 and g.feed_streak == streak0)
+	check("overflow pays exactly half the Eye rate and does not touch the streak", absf(g.stats.earned - earned0 - half) < 0.001 and g.feed_streak == streak0)
 	yard.clear_all()
 
 	# --- the kick is forgiving and shows what it hits

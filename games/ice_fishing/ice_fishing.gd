@@ -1178,6 +1178,11 @@ func _cap() -> bool:
 	return test_capture or Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
 
 func _on_pause_changed() -> void:
+	for tw in get_tree().get_processed_tweens():   # fish in flight must not land (and pay) while the lake is frozen
+		if sim_paused:
+			tw.pause()
+		else:
+			tw.play()
 	if sim_paused:
 		kick_charge = -1.0
 		work_bar.visible = false
@@ -1977,7 +1982,6 @@ func _pick_up_fish() -> void:
 ## More than MAX_LOOSE fish on the ice: the oldest is taken for half pay, no streak, and fades where it lay.
 func _on_fish_overflow(f: Dictionary, holder: Node3D, _pos: Vector3) -> void:
 	_settle_fish(f, EYE_MULT * 0.5)
-	_order_progress(f)
 	var tw := create_tween()
 	tw.tween_property(holder, "scale", Vector3.ONE * 0.05, 0.6)
 	tw.tween_callback(holder.queue_free)
@@ -3282,9 +3286,6 @@ func _restore(d: Dictionary) -> bool:
 		_build_depot(Vector3(dp[0], 0.0, dp[1]), false)
 	for rp in d.get("rigs", []):
 		_build_rig(Vector3(rp[0], 0.0, rp[1]), false)
-	for pd in d.get("pending", []):   # paid now, quietly: they were already out of the lake when the game was saved
-		_settle_fish(_fish_from(pd.f), float(pd.m))
-	_reward_stages_quietly(st_saved, eye_stage())
 	tool = clampi(int(d.get("tool", 0)), 0, TOOLS.size() - 1)
 	day_t = d.get("day", 0.0)
 	play_time = float(d.get("time", 0.0))
@@ -3295,6 +3296,9 @@ func _restore(d: Dictionary) -> bool:
 		order.have = int(order.get("have", 0))
 		order.need = int(order.get("need", 3))
 		order.reward = int(order.get("reward", 10))
+	for pd in d.get("pending", []):   # paid now, quietly: they were already out of the lake when the game was saved (orders first, so they count)
+		_settle_fish(_fish_from(pd.f), float(pd.m))
+	_reward_stages_quietly(st_saved, eye_stage())
 	var pos: Array = d.get("pos", [0.0, 0.0])
 	$Player.position = Vector3(pos[0], $Player.position.y, pos[1])
 	$Player.rotation.y = d.get("yaw", 0.0)
@@ -3302,11 +3306,16 @@ func _restore(d: Dictionary) -> bool:
 	return true
 
 ## A fish that reaches the Eye with no ceremony (a save/restore or offline delivery): pays and counts, nothing more.
-func _settle_fish(f: Dictionary, mult: float) -> void:
+func _settle_fish(f: Dictionary, mult: float) -> float:
+	var before := eye_stage()
 	stats.eye_fed += 1
 	var worth: float = f.base * f.mult * sale_mult() * mult
 	GameState.add(worth)
 	stats.earned += worth
+	if eye_stage() > before:   # price the next fish with whatever this one just woke (the awakened bonus, for one)
+		_reward_stages_quietly(before, eye_stage())
+	_order_progress(f)
+	return worth
 
 ## Eye stages crossed without being there to see them (offline, a restored save) still pay out exactly once.
 func _reward_stages_quietly(from_stage: int, to_stage: int) -> void:
@@ -3342,8 +3351,7 @@ func _offline(away: float) -> void:
 			var rf := _draw_fish(pseudo)
 			if rf.is_empty():
 				break
-			earned += rf.base * rf.mult * sale_mult() * _belt_mult() * _belt_flag_mult(rg.belt, rf)
-			stats.eye_fed += 1
+			earned += _settle_fish(rf, _belt_mult() * _belt_flag_mult(rg.belt, rf))
 			_after_draw(pseudo)
 			rb -= (RIG_INTERVAL * model.wait_factor(best) * 0.6 + 0.6) * 2.5
 	for t in holes:
@@ -3356,8 +3364,7 @@ func _offline(away: float) -> void:
 				var f := _draw_fish(t)
 				if f.is_empty():
 					break
-				earned += f.base * f.mult * sale_mult() * _belt_mult() * _belt_flag_mult(t.belt, f)
-				stats.eye_fed += 1
+				earned += _settle_fish(f, _belt_mult() * _belt_flag_mult(t.belt, f))
 				_after_draw(t)
 			elif t.stash.size() < STASH_MAX:
 				var f2 := _draw_fish(t)
@@ -3368,8 +3375,7 @@ func _offline(away: float) -> void:
 				_after_draw(t)
 			else:
 				break
-	if earned > 0.0:
-		earn(earned)
+	if earned > 0.0:   # (each delivery was already paid by _settle_fish)
 		_say("Welcome back! Your belts and rigs fed the Eye while you were away: +%d coins." % floor(earned))
 	elif stashed > 0:
 		_say("Welcome back! Your auto-rods stashed %d fish while you were away." % stashed)
