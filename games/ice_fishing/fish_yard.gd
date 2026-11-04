@@ -8,6 +8,7 @@ signal swallowed(f: Dictionary, holder: Node3D, pos: Vector3)
 signal landed(f: Dictionary, impact: float)
 signal bumped(f: Dictionary)
 signal overflowed(f: Dictionary, holder: Node3D, pos: Vector3)
+signal sunk(f: Dictionary, holder: Node3D, pos: Vector3, id: String)   # a fish was thrown into a machine (depot, smoker)
 signal touched(pos: Vector3, impact: float)   # a fish hit the ice (for the landing puff)
 signal trail(pos: Vector3, speed: float)       # a fish is sliding fast (for the snow it kicks up)
 signal kicked(pos: Vector3, dir: Vector3, power: float)
@@ -30,6 +31,7 @@ var player_speed := 0.0
 var player_vel := Vector3.ZERO       # flat velocity of the player: a walk-push goes the way you are moving
 var edge_fn := Callable()            # (x, z) -> the shoreline radius in that direction
 var swallow_enabled := true
+var sinks: Array = []             # machines that take a fish thrown at them: {pos, r, h, id, accept: Callable}
 var last_collected: Array = []      # where the fish of the last collect() lay (for the pickup flight)
 
 func count() -> int:
@@ -67,6 +69,7 @@ func _step(delta: float, player: Vector3) -> void:
 	var dt := minf(delta, 0.05)
 	var n := fish.size()
 	var swallow_now: Array = []
+	var sink_now: Array = []
 	for e in fish:
 		var p: Vector3 = e.pos
 		var v: Vector3 = e.vel
@@ -145,6 +148,10 @@ func _step(delta: float, player: Vector3) -> void:
 						e.still = 0.0
 		e.pos = p
 		e.vel = v
+		for sk in sinks:   # a fish that reaches a machine's mouth goes in (if the machine will take it)
+			if p.y < sk.h and Vector2(p.x - sk.pos.x, p.z - sk.pos.z).length() < sk.r and sk.accept.call():
+				sink_now.append([e, sk.id])
+				break
 	# fish against fish: shove apart and swap some momentum, so a pile shoulders itself along
 	for i in n:
 		var a: Dictionary = fish[i]
@@ -176,6 +183,12 @@ func _step(delta: float, player: Vector3) -> void:
 	for e in swallow_now:
 		if fish.has(e):
 			_swallow(e)
+	for pair in sink_now:
+		var se: Dictionary = pair[0]
+		if fish.has(se):
+			fish.erase(se)
+			(se.shadow as Node).queue_free()
+			sunk.emit(se.f, se.node, se.pos, pair[1])
 
 func _pose(e: Dictionary, dt: float) -> void:
 	var v: Vector3 = e.vel

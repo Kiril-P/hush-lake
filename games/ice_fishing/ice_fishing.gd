@@ -419,6 +419,7 @@ func _ready() -> void:
 	yard.pupil_r = PUPIL_R
 	yard.swallowed.connect(_on_fish_swallowed)
 	yard.overflowed.connect(_on_fish_overflow)
+	yard.sunk.connect(_on_fish_sunk)
 	yard.edge_fn = scenery.edge_at
 	yard.touched.connect(func(pos: Vector3, impact: float): _snow_fx(pos, 4 + int(impact), 0.5 + impact * 0.12))
 	yard.trail.connect(func(pos: Vector3, speed: float):
@@ -940,6 +941,8 @@ func _build_smoker(t: Dictionary) -> void:
 	t.node.add_child(t.extra)
 	t.extra.scale = Vector3.ONE * 1.5
 	scenery.obstacles.append(Vector3(t.pos.x, t.pos.z, 1.5))   # the camera must not slide inside the walls
+	yard.sinks.append({"pos": Vector3(t.pos.x, 0, t.pos.z), "r": 2.2, "h": 2.2, "id": "smoker:%d" % t.idx,
+		"accept": func(): return t.state == "smoker" and t.slot.size() < SMOKER_SLOTS and (t.slot.is_empty() or t.smoke_t > 0.0)})
 	var sp: Dictionary = MachineModels.smoker(t.extra)
 	t.smoke_fx = sp.smoke
 	_pop_in(t.extra)
@@ -2481,6 +2484,29 @@ func _on_fish_overflow(f: Dictionary, holder: Node3D, _pos: Vector3) -> void:
 		_eye_stage_up(st)
 	_refresh()
 
+## A fish thrown into a machine goes in: a depot sends it to the Eye by sled, a smoker starts (or joins) a smoking batch.
+func _on_fish_sunk(f: Dictionary, holder: Node3D, pos: Vector3, id: String) -> void:
+	var tw := create_tween()
+	tw.tween_property(holder, "scale", Vector3.ONE * 0.1, 0.2)
+	tw.tween_callback(holder.queue_free)
+	if id.begins_with("depot:"):
+		var di := int(id.substr(6))
+		if di >= 0 and di < depots.size():
+			var d: Dictionary = depots[di]
+			_fly_fish(f, d.pos + Vector3(0, 1.8, 0), 0.25, "eye", EYE_MULT * DEPOT_MULT)
+			stats.deliveries += 1
+			_float_text(d.pos + Vector3(0, 3.4, 0), "in!", Color(0.8, 1.0, 0.9))
+			sfx.play("coin", -4.0, 0.85)
+	elif id.begins_with("smoker:"):
+		var ti := int(id.substr(7))
+		if ti >= 0 and ti < holes.size() and holes[ti].state == "smoker":
+			var t: Dictionary = holes[ti]
+			if t.slot.is_empty():
+				t.smoke_t = SMOKE_TIME
+			t.slot.append(f)
+			sfx.play("plop", -2.0, 0.8)
+	_refresh()
+
 ## A loose fish crossed into the pupil: the Eye eats it (pays now) and it spirals down the funnel.
 func _on_fish_swallowed(f: Dictionary, holder: Node3D, pos: Vector3) -> void:
 	if combo > 0:
@@ -3157,6 +3183,7 @@ func _build_depot(pos: Vector3, pay := true) -> void:
 	l.modulate = Color(1.0, 0.9, 0.7)
 	depots.append(d)
 	scenery.obstacles.append(Vector3(pos.x, pos.z, 2.2))
+	yard.sinks.append({"pos": Vector3(pos.x, 0, pos.z), "r": 3.0, "h": 2.2, "id": "depot:%d" % d.idx, "accept": func(): return true})
 	stats.depots += 1
 	if pay:
 		_say("Depot built. Drop fish here and a sled runs them to the Eye.")

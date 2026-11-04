@@ -13,6 +13,7 @@ A first-person cozy ice-fishing incremental in Godot 4.7. Feed the Eye under the
 | 1-7 | tools: drill, rod, auto-rod, smoker, gut table, belt, build |
 | click | use the tool / buy / feed |
 | F | same as right mouse |
+| throw at a depot or smoker | it goes in (the depot sends it to the Eye; the smoker starts a batch) |
 | E | stow your held fish in the bucket / with empty hands sweep up the fish at your feet |
 | Z | take one fish out of the bucket into your hand |
 | H | ask Olga what to do next |

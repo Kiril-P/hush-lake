@@ -149,6 +149,35 @@ func _ready() -> void:
 	g.held = {}
 	g._set_hold_visual()
 
+	# --- thrown fish go into machines: a depot sends them to the Eye, a smoker starts smoking them
+	yard.clear_all()
+	yard.obstacles = walls
+	g.stats.eye_fed = 0
+	g.scenery.obstacles.clear()
+	for sid in g.model.sectors:
+		g.model.sectors[sid].unlocked = true
+	g._build_depot(Vector3(-60, 0, 45), false)
+	var d: Dictionary = g.depots[g.depots.size() - 1]
+	var coins1 := GameState.currency
+	yard.spawn(g._make_fish(g.SPECIES[1]), Vector3(-60, 1.2, 55), Vector3(0, 0, -9))   # lobbed at the depot from 10 m
+	sim(g, 2.5, Vector3(0, 1.7, 95))
+	check("a fish thrown into a depot goes in (nothing left on the ice) and is sent to the Eye", yard.count() == 0 and g.flying.size() >= 1)
+	await get_tree().create_timer(2.5).timeout
+	check("...and pays at the depot rate", g.stats.eye_fed == 1 and GameState.currency > coins1)
+	var sm: Dictionary = g._make_hole(g._hex_pos(Vector2i(-2, 1)))
+	var sp: Vector3 = sm.pos
+	g._build_smoker(sm)
+	for i in 6:
+		yard.spawn(g._make_fish(g.SPECIES[0]), Vector3(sp.x, 1.0, sp.z + 6.0 + i * 0.1), Vector3(0, 0, -9))
+		sim(g, 1.2, Vector3(0, 1.7, 95))
+	check("fish thrown at a smoker go in until it holds 4, and it starts smoking", sm.slot.size() == 4 and sm.smoke_t > 0.0)
+	check("the rest stay on the ice (the smoker refuses a full batch)", yard.count() == 2)
+	sm.smoke_t = 0.0
+	yard.spawn(g._make_fish(g.SPECIES[0]), Vector3(sp.x, 1.0, sp.z + 6.0), Vector3(0, 0, -9))
+	sim(g, 1.5, Vector3(0, 1.7, 95))
+	check("a finished batch is not topped up (collect it first)", sm.slot.size() == 4)
+	yard.clear_all()
+
 	# --- the held fish shows nothing when your hands are empty
 	g._update_hand(0.016)
 	check("with empty hands nothing hangs in front of you", not g.hold_node.visible)

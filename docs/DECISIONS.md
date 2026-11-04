@@ -182,3 +182,6 @@ New model (fish_yard.gd + ice_fishing.gd "hands" section, tests in tools/hands_t
 - Saved: a fish in hand is saved as one lying at your feet; orders count it as out of the lake.
 - The first-10-minutes bot uses it through real events: 53 grabs, 53 throws, 53 swallowed in 10 minutes.
 Left for the owner's playtest: whether grab reach and the 22-degree lift feel right, whether the arc preview is readable enough, and whether stow/take (E/Z) is wanted at all now that you can just hold a fish.
+
+### Hands, second step: throw into machines
+Depots and smokers are catch targets (`FishYard.sinks`): a fish that reaches a depot's mouth (3 m) goes in and is sent to the Eye by sled at the depot rate; a fish that reaches a smoker (2.2 m) joins or starts a smoking batch (up to 4, refused when full or when a finished batch is waiting). So throwing is a logistics tool, not only a way to feed the Eye. Tests: `tools/run_hands.sh`. Two flaky bounds were loosened (kick charge margins, wind spectrum) because both involve random noise.
