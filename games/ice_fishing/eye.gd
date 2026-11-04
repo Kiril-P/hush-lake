@@ -383,9 +383,9 @@ func _build_crystals() -> void:
 	rng.seed = 12
 	for g in 5:
 		var mat := StandardMaterial3D.new()
-		mat.albedo_color = Color(0.5, 0.9, 1.0, 0.7)
+		mat.albedo_color = Color(0.5, 0.88, 0.96, 0.86)
 		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		mat.roughness = 0.08
+		mat.roughness = 0.5   # matte, like the petals
 		mat.emission_enabled = true
 		mat.emission = Color(0.2, 0.8, 0.95).lerp(Color(1.0, 0.8, 0.45), g * 0.15)
 		mat.emission_energy_multiplier = 0.6
@@ -396,7 +396,7 @@ func _build_crystals() -> void:
 			var cluster := k / 2
 			var a := TAU * (0.5 * g + 0.23 * cluster + 0.5 * cluster + rng.randf_range(-0.04, 0.04)) + (k % 2) * 0.09
 			var rr := EYE_R + 4.8 + g * 0.9 + (k % 2) * 1.2 + rng.randf_range(0.0, 0.6)
-			var h := (rng.randf_range(4.2, 5.4) + g * 1.3) * (1.0 if k % 2 == 0 else 0.6)
+			var h := (rng.randf_range(3.4, 4.2) + g * 0.8) * (1.0 if k % 2 == 0 else 0.6)   # kept under the camp roofline: they used to out-tower the hut
 			var node := Node3D.new()
 			node.position = Vector3(sin(a) * rr, 0.0, -cos(a) * rr)
 			node.rotation = Vector3(rng.randf_range(-0.22, 0.22), rng.randf() * TAU, rng.randf_range(-0.22, 0.22))

@@ -295,6 +295,12 @@ static func depot(node: Node3D) -> void:
 	var r2 := box(node, Vector3(0.4, 1.82, -0.2), Vector3(1.4, 0.08, 1.8), STEEL)
 	r2.rotation_degrees.z = -20.0
 	snow_cap(node, Vector3(-0.3, 2.0, -0.2), Vector3(2.5, 0.14, 1.9))
+	for pi in 5:   # planks on the shed front, a snow ledge under the eaves
+		box(node, Vector3(-1.3 + pi * 0.5, 0.9, 0.57), Vector3(0.02, 1.4, 0.02), WOOD_DARK)
+	for cx in [-1.4, 0.8]:
+		box(node, Vector3(cx, 0.9, 0.56), Vector3(0.12, 1.5, 0.08), WOOD_DARK)   # door-frame posts
+	var ledge := box(node, Vector3(-0.3, 1.66, 0.3), Vector3(2.5, 0.07, 0.6), SNOW)
+	ledge.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	box(node, Vector3(1.05, 0.42, 0.1), Vector3(0.7, 0.5, 0.6), WOOD)   # crates
 	box(node, Vector3(1.1, 0.88, 0.1), Vector3(0.5, 0.4, 0.5), WOOD.lightened(0.1))
 	snow_cap(node, Vector3(1.1, 1.1, 0.1), Vector3(0.55, 0.06, 0.55))
@@ -317,7 +323,15 @@ static func rig(node: Node3D) -> Dictionary:
 	box(node, Vector3(0, 1.55, 0), Vector3(5.8, 0.2, 11.2), TEAL.darkened(0.2))   # deck edge
 	for i in 6:   # deck plating and rivets
 		box(node, Vector3(0, 1.67, -4.6 + i * 1.8), Vector3(5.4, 0.02, 0.08), STEEL_DARK)
-	box(node, Vector3(0, 2.8, 2.2), Vector3(3.6, 2.4, 3.6), Color(0.84, 0.86, 0.9))   # the cabin
+	box(node, Vector3(0, 2.8, 2.2), Vector3(3.6, 2.4, 3.6), Color(0.74, 0.82, 0.9))   # the cabin: pale blue-grey, not flat white
+	for y in [2.0, 2.5, 3.0, 3.5]:   # horizontal cladding lines
+		box(node, Vector3(0, y, 2.2), Vector3(3.66, 0.04, 3.66), STEEL_DARK)
+	for cx in [-1.8, 1.8]:
+		box(node, Vector3(cx, 2.8, 2.2), Vector3(0.14, 2.5, 3.7), STEEL_DARK)   # corner posts
+	box(node, Vector3(0, 2.4, 4.04), Vector3(3.0, 0.1, 0.06), STEEL_DARK)   # window sill and head
+	box(node, Vector3(0, 3.82, 4.04), Vector3(3.0, 0.1, 0.06), STEEL_DARK)
+	box(node, Vector3(-1.52, 2.4, 2.2), Vector3(0.05, 1.0, 1.0), AMBER, 1.2)   # side windows
+	box(node, Vector3(1.52, 2.4, 2.2), Vector3(0.05, 1.0, 1.0), AMBER, 1.2)
 	box(node, Vector3(0, 3.35, 4.04), Vector3(3.0, 0.9, 0.06), AMBER, 1.6)   # the bridge window
 	for sx in [-1.2, 0.0, 1.2]:
 		box(node, Vector3(sx, 3.35, 4.07), Vector3(0.05, 0.9, 0.03), STEEL_DARK)

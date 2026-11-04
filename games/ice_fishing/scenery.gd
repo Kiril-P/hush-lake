@@ -620,12 +620,12 @@ func set_time(t: float) -> void:
 # ---------- terrain, forest, shore ----------
 func _ground_color(p: Vector3) -> Color:
 	var r := Vector2(p.x, p.z).length()
-	var col := Color(0.93, 0.96, 1.0)
+	var col := Color(0.8, 0.9, 1.0)   # the golden sun warms it back toward white: start blue so the bank never goes peach
 	var v := detail.get_noise_2d(p.x * 3.0, p.z * 3.0) * 0.035
 	col = Color(col.r + v, col.g + v, col.b + v * 0.5)
 	var e := edge_at(p.x, p.z)
 	if r < e + 3.0:
-		col = col.lerp(Color(0.62, 0.88, 1.0), 0.75)  # packed blue-white ice on the bank
+		col = col.lerp(Color(0.66, 0.9, 1.0), 0.85)  # packed blue-white ice on the bank (no peach: the warm tint came from the golden sun on cream snow)
 	col = col.lerp(Color(0.52, 0.6, 0.82), clampf((p.y - 4.0) / 14.0, 0.0, 0.8))
 	return col
 
@@ -662,6 +662,7 @@ func _terrain() -> void:
 			_tri(st, rows[i][j2], rows[i + 1][j], rows[i + 1][j2])
 	var m := StandardMaterial3D.new()
 	m.vertex_color_use_as_albedo = true
+	m.vertex_color_is_srgb = true   # picked as screen colours: treated as linear they went near-white and the golden sun turned the bank peach
 	m.roughness = 0.95
 	m.cull_mode = BaseMaterial3D.CULL_DISABLED
 	var mi := MeshInstance3D.new()
@@ -977,6 +978,11 @@ func decorate_stall(s: Node3D, id: String) -> void:
 	for fx in [-1.75, 1.75]:
 		_box(s, Vector3(fx, 0, 0.02), Vector3(0.13, 1.85, 0.22), wood)
 	_box(s, Vector3(0, 0.0, 0.085), Vector3(3.3, 0.02, 0.03), _mat(Color(1.0, 0.78, 0.35), 0.6))   # a thin amber rule under the name
+	for pi in 6:   # planks on the counter front, a dark kick-plate and a snow lip
+		_box(s, Vector3(-1.4 + pi * 0.56, gy + 0.45, 1.46), Vector3(0.02, 0.88, 0.02), _mat(Color(0.2, 0.13, 0.1)))
+	_box(s, Vector3(0, gy + 0.08, 1.46), Vector3(3.5, 0.14, 0.05), _mat(Color(0.2, 0.13, 0.1)))
+	var lip := _box(s, Vector3(0, gy + 0.93, 1.1), Vector3(3.6, 0.07, 0.85), _mat(Color(0.9, 0.95, 1.0)))
+	lip.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	match id:
 		"bucket":
 			for k in 4:

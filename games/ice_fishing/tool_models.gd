@@ -78,7 +78,7 @@ static func mitten(parent: Node, pos: Vector3, side := 1.0, tilt := 0.0) -> Node
 	m.rotation_degrees.x = tilt
 	m.scale = Vector3.ONE * 0.8
 	parent.add_child(m)
-	ball(m, Vector3(0, 0, 0), Vector3(0.1, 0.075, 0.13), MITTEN)   # the mitten is the warm, readable part: amber, big
+	ball(m, Vector3(0, 0, 0), Vector3(0.1, 0.075, 0.13), MITTEN, 0.35)   # the mitten is the warm, readable part: amber, big (a little emission keeps it amber under the blue night light)
 	ball(m, Vector3(0.0, -0.005, -0.085), Vector3(0.09, 0.065, 0.08), MITTEN.darkened(0.06))   # the fingers, rounded off
 	ball(m, Vector3(-0.06 * side, 0.014, -0.03), Vector3(0.045, 0.045, 0.08), MITTEN.lightened(0.05))   # thumb
 	rod_seg(m, 0.16, 0.09, 0.03, 0.033, MITTEN_CUFF)   # a slim teal cuff
@@ -99,7 +99,7 @@ static func auger(body: Node3D, tc: Color, tier: int) -> Dictionary:
 	rod_seg(spin, -0.02, -0.78, 0.016, 0.014, STEEL, 0.0, 0.8)
 	for i in 8:
 		var w := lerpf(0.15, 0.08, float(i) / 7.0)
-		var blade := box(spin, Vector3(0, 0, -0.13 - i * 0.085), Vector3(w, 0.013, 0.05), tc.lerp(STEEL, 0.35), 0.25, 0.4, 0.4)
+		var blade := box(spin, Vector3(0, 0, -0.13 - i * 0.085), Vector3(w, 0.013, 0.05), STEEL_DARK.lerp(tc, 0.25), 0.1, 0.4, 0.5)   # dark flights read against the white ice
 		blade.rotation.z = i * 0.95
 	var tip_mesh := CylinderMesh.new()
 	tip_mesh.top_radius = 0.0

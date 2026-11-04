@@ -494,6 +494,8 @@ func _tick_marker(delta: float, to: Variant, show: bool) -> void:
 	var dist := Vector2(to.x - pp.x, to.z - pp.z).length()
 	marker.visible = dist > 2.5
 	marker.global_position = Vector3(to.x, 0.0, to.z)
+	var night: float = game.scenery._night if game.scenery else 0.0
+	marker_col.visible = night < 0.3 and dist > 12.0   # no tall pillar by night or up close (it stood behind the crosshair); the cone and ring remain
 	var k := clampf(dist / 16.0, 0.6, 5.0)
 	if ping_t > 0.0:
 		k *= 1.0 + 0.35 * absf(sin(ping_t * 6.0))

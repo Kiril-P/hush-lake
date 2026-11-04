@@ -3932,12 +3932,12 @@ func _launch_catch(t: Dictionary, got: Array, best: Dictionary) -> void:
 	sfx.play("plop", -4.0, randf_range(1.0, 1.3))
 	view_pop = 1.0
 
-func _rarity(name: String) -> Array:
+func _rarity(name: String) -> Array:   # rarity colours stay inside the palette: cream, teal, sky, warm amber, bright amber
 	var v := _species_value(name)
 	if v < 2.5: return ["COMMON", Style.CREAM]
-	if v < 6.0: return ["UNCOMMON", Color(0.62, 0.92, 0.5)]
-	if v < 20.0: return ["RARE", Color(0.45, 0.78, 1.0)]
-	if v < 100.0: return ["EPIC", Color(0.82, 0.58, 1.0)]
+	if v < 6.0: return ["UNCOMMON", Color(0.5, 0.92, 0.84)]
+	if v < 20.0: return ["RARE", Color(0.55, 0.8, 1.0)]
+	if v < 100.0: return ["EPIC", Color(1.0, 0.72, 0.45)]
 	return ["LEGENDARY", Style.AMBER]
 
 func _show_card(best: Dictionary, count: int, new_species: bool, new_record: bool) -> void:
