@@ -11,14 +11,14 @@ extends Node3D
 
 const Y_FILL := 0.03
 const Y_LINE := 0.045
-const CURTAIN_H := 1.1
+const CURTAIN_H := 0.8
 
-const COL_LOCKED_FILL := Color(0.88, 0.95, 1.0)
+const COL_LOCKED_FILL := Color(0.82, 0.91, 0.99)
 const COL_LOCKED_LINE := Color(0.96, 0.99, 1.0)
 const COL_GATE := Color(0.6, 0.92, 1.0)
 const COL_OPEN_LINE := Color(0.42, 0.9, 0.88)
-const COL_CLEARED_FILL := Color(0.03, 0.16, 0.26)
-const COL_CLEARED_LINE := Color(1.0, 0.8, 0.38)
+const COL_CLEARED_FILL := Color(0.06, 0.32, 0.42)   # thawed water: teal, not slate
+const COL_CLEARED_LINE := Color(0.95, 0.84, 0.55)   # a softer, paler gold: the strong amber stays for what you can act on
 
 const FILL_SHADER := """
 shader_type spatial;
@@ -32,10 +32,12 @@ varying vec3 wpos;
 void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
 void fragment() {
 	// a quiet diagonal hatch, so a closed sector is also readable as a pattern and not only as a colour
-	float band = step(0.5, fract((wpos.x + wpos.z) * 0.16));
+	float band = step(0.5, fract((wpos.x + wpos.z) * 0.45));
 	float k = smoothstep(11.0, 14.0, length(wpos.xz));   // never over the Eye's own pupil
-	ALBEDO = tint * dim * mix(1.0, 0.93 + 0.07 * band, stripes);
-	ALPHA = alpha * mix(1.0, 0.8 + 0.2 * band, stripes) * fade * k;
+	float near = 1.0 - smoothstep(18.0, 45.0, distance(wpos, CAMERA_POSITION_WORLD));   // the hatch fades out with distance: it is a close-up texture
+	float st = stripes * near;
+	ALBEDO = tint * dim * mix(1.0, 0.96 + 0.04 * band, st);
+	ALPHA = alpha * mix(1.0, 0.86 + 0.14 * band, st) * fade * k;
 }
 """
 
@@ -170,7 +172,7 @@ func _make_patch(id: Vector2i) -> void:
 	frost.mesh = fm
 	var fmat := _mat(_fill_shader)
 	fmat.set_shader_parameter("tint", COL_LOCKED_FILL)
-	fmat.set_shader_parameter("alpha", 0.62)
+	fmat.set_shader_parameter("alpha", 0.48)
 	frost.material_override = fmat
 	frost.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(frost)
@@ -178,7 +180,7 @@ func _make_patch(id: Vector2i) -> void:
 	thaw.mesh = fm
 	var tmat := _mat(_fill_shader)
 	tmat.set_shader_parameter("tint", COL_CLEARED_FILL)
-	tmat.set_shader_parameter("alpha", 0.5)
+	tmat.set_shader_parameter("alpha", 0.34)
 	tmat.set_shader_parameter("stripes", 0.0)
 	thaw.material_override = tmat
 	thaw.position.y = 0.004
@@ -246,7 +248,7 @@ func _rebuild_lines(id: Vector2i, s: int) -> void:
 	line_st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var gate_st := SurfaceTool.new()
 	gate_st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var w := 0.16 if s == 1 else (0.46 if s == 0 else 0.3)
+	var w := 0.14 if s == 1 else (0.3 if s == 0 else 0.24)
 	var n_line := 0
 	var n_gate := 0
 	for e in owned_edges(id):
@@ -262,10 +264,10 @@ func _rebuild_lines(id: Vector2i, s: int) -> void:
 		1:
 			lm.set_shader_parameter("col", Color(COL_OPEN_LINE.r, COL_OPEN_LINE.g, COL_OPEN_LINE.b, 0.34))
 		_:
-			lm.set_shader_parameter("col", Color(COL_CLEARED_LINE.r, COL_CLEARED_LINE.g, COL_CLEARED_LINE.b, 0.9))
+			lm.set_shader_parameter("col", Color(COL_CLEARED_LINE.r, COL_CLEARED_LINE.g, COL_CLEARED_LINE.b, 0.75))
 	(p.line as MeshInstance3D).mesh = line_st.commit() if n_line > 0 else null
 	(p.gate as MeshInstance3D).mesh = gate_st.commit() if n_gate > 0 else null
-	(p.gate.material_override as ShaderMaterial).set_shader_parameter("col", Color(COL_GATE.r, COL_GATE.g, COL_GATE.b, 0.5))
+	(p.gate.material_override as ShaderMaterial).set_shader_parameter("col", Color(COL_GATE.r, COL_GATE.g, COL_GATE.b, 0.3))
 
 ## A sector opens: its frost melts away and the border flashes once.
 func _unlock_flash(id: Vector2i) -> void:

@@ -41,7 +41,7 @@ func _draw() -> void:
 				var b: Vector2 = e.b * PX
 				if a.length() > r or b.length() > r:
 					continue
-				var colr := Color(0.96, 0.99, 1.0, 0.95) if e.st == 0 else (Color(1.0, 0.8, 0.38, 0.9) if e.st == 2 else Color(0.42, 0.9, 0.88, 0.35))
+				var colr := Color(0.96, 0.99, 1.0, 0.95) if e.st == 0 else (Color(0.95, 0.84, 0.55, 0.9) if e.st == 2 else Color(0.42, 0.9, 0.88, 0.35))
 				draw_line(c + a, c + b, colr, 1.8 if e.st == 0 else 1.2, true)
 	# the Eye, your holes and belts
 	draw_circle(c, game.EYE_R * PX, Color(0.1, 0.6, 0.75, 0.9))

@@ -745,7 +745,7 @@ func _update_sector_hud(delta: float) -> void:
 			col = Color(0.92, 0.97, 1.0)
 		elif sec.cleared:
 			txt = "%s  -  cleared" % sec.name
-			col = Color(1.0, 0.8, 0.38)
+			col = Color(0.95, 0.84, 0.55)
 		else:
 			txt = "%s  -  %d fish left" % [sec.name, sec.left]
 			col = Style.AMBER

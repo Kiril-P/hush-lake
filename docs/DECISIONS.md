@@ -195,3 +195,6 @@ Complaint: sectors were hard to spot and ugly (blurry frost discs that did not m
 - **Minimap** draws the same owned edges (white closed, gold cleared, faint teal open).
 - Everything is unshaded and fog-free, dims at night (the white would glare), and stays off the Eye's pupil. Shadows off. Frame time unchanged (about 8 ms).
 - Tests: `tools/run_sectors.sh` (outline = 18 edges, shared edges match, each drawn once, state restyling, melt ghost, HUD pill). Renders: `SHOT_ONLY=sectors tools/shot.sh`.
+
+### Sector display, independent review (Opus 5.5): easy to spot 8/10, clean/pretty 6/10, cohesion 6/10, "clearly better than discs and labels: yes"
+Applied its three fixes: the hatch is finer (0.45 vs 0.16 frequency), softer, and fades out beyond ~18-45 m from the camera (it was a "striped tablecloth" from above); the cleared fill is teal water (0.06, 0.32, 0.42 at alpha 0.34) instead of muddy slate, with a paler gold edge (gold stays off the amber accent); locked border 0.30 m (was 0.46), fill alpha 0.48, curtain 0.8 m at alpha 0.3. Judged from renders again; no human has seen it in play.
