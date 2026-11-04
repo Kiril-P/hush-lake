@@ -120,6 +120,26 @@ func _ready() -> void:
 	GameState.upgrades["kick"] = 0
 	g.get_node("Player").global_position = Vector3(-8.2, g.EYE_H, 14.3)
 
+	# --- how far a kick sends a fish (the numbers behind "does it feel right"): a tap is a nudge, a full charge crosses the Shallows
+	yard.clear_all()
+	var dist := {}
+	for lvl in [0, 3, 5]:
+		GameState.upgrades["kick"] = lvl
+		for frac in [0.0, 0.5, 1.0]:
+			yard.clear_all()
+			var kp := Vector3(-60.0, 1.7, 70.0)
+			var kf: Dictionary = yard.spawn(g._make_fish(g.SPECIES[0]), Vector3(-60.0, yard.GROUND, 68.5), Vector3.ZERO)
+			var pw: float = lerpf(g.KICK_MIN, g._kick_max(), frac)
+			yard.kick(kp, Vector3(0, 0, -1), pw, 3.6)
+			sim(g, 12.0, kp + Vector3(80, 0, 0))
+			dist["%d/%.1f" % [lvl, frac]] = 68.5 - kf.pos.z
+	GameState.upgrades["kick"] = 0
+	print("KICKDIST tap %.1f m, half %.1f m, full %.1f m (Kick Power 0);  full at level 3: %.1f m, level 5: %.1f m" % [dist["0/0.0"], dist["0/0.5"], dist["0/1.0"], dist["3/1.0"], dist["5/1.0"]])
+	check("a tap kick moves a fish about a Shallows-hole-to-Eye distance: 8-16 m", dist["0/0.0"] >= 8.0 and dist["0/0.0"] <= 16.0)
+	check("a full charge sends it 25-40 m (the outer ring needs charging)", dist["0/1.0"] >= 25.0 and dist["0/1.0"] <= 40.0)
+	check("charge matters (half is between tap and full)", dist["0/0.5"] > dist["0/0.0"] + 3.0 and dist["0/0.5"] < dist["0/1.0"] - 3.0)
+	check("Kick Power is worth buying: level 5 flies at least 40% farther than level 0", dist["5/1.0"] >= dist["0/1.0"] * 1.4)
+
 	# --- fish bump into fish
 	yard.clear_all()
 	var fa: Dictionary = yard.spawn(g._make_fish(g.SPECIES[0]), Vector3(-50, yard.GROUND, 50), Vector3(9, 0, 0))

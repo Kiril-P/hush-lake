@@ -304,6 +304,8 @@ func _ready() -> void:
 	GameState.upgrades["bucket"] = 1
 	g3.unlocked["t_auto"] = true
 	g3.stats.autos = 0
+	for gi in 5:
+		g3.goal_done[gi] = true
 	check("the unlocked Auto-Rod comes before emptying a patch", g3.guide.current().id.begins_with("goal") and "Auto-Rod" in g3.guide.current().title)
 	g3.stats.autos = 1
 	print("SAFETY %s (%d failures)" % ["PASS" if fails == 0 else "FAIL", fails])

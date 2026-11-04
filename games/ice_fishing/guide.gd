@@ -362,12 +362,16 @@ func current() -> Dictionary:
 		return _step("cast", "Cast a line", more, _nearest_hole("hole", true))
 	if _hole_with_cast(3):
 		return _step("fight", "Hold on!", "It is fighting. It drops onto the ice when it tires: then push it into the Eye.", _cast_hole_pos(3))
-	# the unlocked Auto-Rod comes before a long grind like "fish a patch empty"
-	if g.unlocked.get("t_auto", false) and s.autos == 0:
-		for i in g.GOALS.size():
-			if g.GOALS[i].stat == "autos" and not g.goal_done[i]:
-				var h0: Array = HINTS.get(g.GOALS[i].text, [GENERIC_HINTS.get("autos", ""), ""])
-				return _step("goal%d" % i, String(g.GOALS[i].text), String(h0[0]), _resolve(String(h0[1])) if h0[1] != "" else null)
+	# Something to DO beats something to wait for: while a doable build/buy goal is open, the strip points at that, not at a
+	# long grind like "fish a patch empty" (which happens by itself while you do the other things).
+	var act := _first_actionable_goal()
+	if act >= 0:
+		var ga: Dictionary = g.GOALS[act]
+		var ha: Array = HINTS.get(ga.text, [GENERIC_HINTS.get(ga.stat, ""), ""])
+		var ta := String(ga.text)
+		if int(ga.target) > 1:
+			ta += "   %d / %d" % [mini(int(g._stat(ga.stat)), int(ga.target)), int(ga.target)]
+		return _step("goal%d" % act, ta, String(ha[0]), _resolve(String(ha[1])) if ha[1] != "" else null)
 	for pass_opt in [false, true]:
 		for i in g.GOALS.size():
 			var gl: Dictionary = g.GOALS[i]
@@ -380,6 +384,38 @@ func current() -> Dictionary:
 				title += "   %d / %d" % [cur_v, int(gl.target)]
 			return _step("goal%d" % i, title, String(h[0]), _resolve(String(h[1])) if h[1] != "" else null)
 	return _step("done", "Wake the Eye", "Keep feeding it. When the lake is empty, press R to refreeze.", _resolve("eye"))
+
+## Stats that are earned by playing, not by doing one particular thing.
+const GRIND_STATS := ["tiles_cleared", "sectors", "eye_fed", "earned", "eye_stage", "journal", "caught"]
+
+## The first open main-line goal that is an action the player can take right now (not a grind, and its tool/stall is unlocked).
+## Returns its index, or -1 when the only goals left are grinds.
+func _first_actionable_goal() -> int:
+	var g := game
+	var s: Dictionary = g.stats
+	for i in g.GOALS.size():
+		var gl: Dictionary = g.GOALS[i]
+		if g.goal_done[i] or bool(gl.get("opt", false)):
+			continue
+		var st := String(gl.stat)
+		if st in GRIND_STATS:
+			continue
+		var ok := true
+		match st:
+			"autos": ok = g.unlocked.get("t_auto", false)
+			"belts": ok = g.unlocked.get("t_belt", false) and s.autos >= 1
+			"cans": ok = g.unlocked.get("t_build", false) and s.belts >= 1
+			"depots", "rigs": ok = g.unlocked.get("t_build", false)
+			"gutted": ok = g.unlocked.get("t_table", false)
+			"smokes": ok = g.unlocked.get("t_smoker", false)
+			"tithe": ok = g.eye_stage() >= g.TITHE_MIN_STAGE
+			"holes": ok = false   # (drilling more holes is a means, not the thing to chase)
+			_:
+				if st.begins_with("lvl:"):
+					ok = g.unlocked.get(st.substr(4), false)
+		if ok:
+			return i
+	return -1
 
 ## Letterbox bars for a moment (the Eye waking).
 func cinematic(seconds: float) -> void:

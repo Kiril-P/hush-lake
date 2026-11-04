@@ -184,5 +184,32 @@ func _ready() -> void:
 	gd.skip_intro()
 	await get_tree().create_timer(0.3).timeout
 	check("an early skip still wakes the Eye", eye.crystals[4][0].visible and not g.awaken_hold and eye.hush == 0.0)
+	# --- doing beats grinding: with an Auto-Rod built and belts unlocked the strip asks for the belt, not "fish a patch empty"
+	var g4 = load("res://games/ice_fishing/ice_fishing.tscn").instantiate()
+	add_child(g4)
+	await get_tree().process_frame
+	GameState.upgrades["bucket"] = 1
+	g4.unlocked["t_auto"] = true
+	g4.unlocked["t_belt"] = true
+	g4.stats.autos = 0
+	g4.stats.holes = 1
+	g4.goal_done[0] = true
+	g4.goal_done[1] = true
+	g4.goal_done[2] = true
+	g4.goal_done[3] = true
+	g4.goal_done[4] = true
+	check("the Auto-Rod goal comes before the patch grind", "Auto-Rod" in g4.guide.current().title)
+	g4.stats.autos = 1
+	g4.goal_done[6] = true
+	check("then the belt, still not 'fish a patch empty'", "belt" in g4.guide.current().title.to_lower())
+	g4.stats.belts = 1
+	g4.goal_done[7] = true
+	var nxt: String = g4.guide.current().title
+	check("next it is more Auto-Rods, still before the grind", "auto-rod" in g4.guide.current().title.to_lower())
+	for i in g4.GOALS.size():
+		if g4.GOALS[i].stat == "autos":
+			g4.goal_done[i] = true
+	check("with nothing buildable left it falls back to the grind", "patch" in g4.guide.current().title.to_lower())
+	g4.queue_free()
 	print("GUIDE %s (%d failures)" % ["PASS" if fails == 0 else "FAIL", fails])
 	get_tree().quit(1 if fails > 0 else 0)

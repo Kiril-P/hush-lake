@@ -412,6 +412,16 @@ func do_generic(st: Dictionary) -> void:
 			if GameState.level(id) > l0:
 				rep.buys.append("%s@%d" % [id, int(T)])
 			return
+	# the strip says "Build a Cannery on a belt": pick the build tool (7), stand at an Auto-Rod that has a belt and click it
+	if String(st.title).begins_with("Build a Cannery") and g.unlocked.get("t_build", false) and GameState.currency >= g._build_cost(0):
+		for t in g.holes:
+			if t.state == "auto" and t.belt != null and not t.belt.get("cannery", false):
+				tap(KEY_7)
+				await tick()
+				await walk_to(t.pos, 4.5)
+				await aim_click(t.node.global_position + Vector3(0, 0.3, 0), "hole:%d" % t.idx, 5.0)
+				tap(KEY_1)
+				return
 	# an Auto-Rod when the tool is open and affordable: put it on a hole we already fished
 	if g.unlocked.get("t_auto", false) and g.stats.autos == 0 and GameState.currency >= g.auto_cost():
 		var h: Dictionary = best_hole()
