@@ -229,6 +229,48 @@ func _ready() -> void:
 			await get_tree().process_frame
 		get_viewport().get_texture().get_image().save_png("res://renders/shot_olga.png")
 		print("saved olga")
+	# sectors: the border of the open Shallows seen from the ice, a cleared sector next to a locked one, and at night
+	if only == "sectors":
+		var pz: Node3D = g.get_node("Player")
+		g.goal_done.fill(true)
+		g.test_capture = true
+		g.day_t = 0.0
+		g.scenery.set_time(0.0)
+		pz.position = Vector3(0, 1.7, 8.0)
+		pz.rotation.y = deg_to_rad(180.0)
+		g.cam.rotation.x = deg_to_rad(-9.0)
+		for i in 12:
+			await get_tree().process_frame
+		get_viewport().get_texture().get_image().save_png("res://renders/shot_sectors_a.png")   # facing the closed ring from inside the Shallows
+		# open one neighbour, clear another
+		var ids: Array = g.model.sectors.keys()
+		for id in ids:
+			var sec: Dictionary = g.model.sectors[id]
+			if sec.ring == 1 and sec.center.y > 0 and sec.center.x <= 1:
+				sec.unlocked = true
+				for tc in sec.tiles:
+					g.model.stock[tc] = {}
+				sec.cleared = true
+				break
+		g._update_sector_labels()
+		for i in 70:
+			await get_tree().process_frame
+		get_viewport().get_texture().get_image().save_png("res://renders/shot_sectors_b.png")   # one sector cleared (gold), the rest closed
+		pz.position = Vector3(0, 40.0, 60.0)
+		pz.rotation.y = deg_to_rad(0.0)
+		g.cam.rotation.x = deg_to_rad(-38.0)
+		for i in 12:
+			await get_tree().process_frame
+		get_viewport().get_texture().get_image().save_png("res://renders/shot_sectors_c.png")   # from above
+		g.day_t = 0.5
+		g.scenery.set_time(0.5)
+		pz.position = Vector3(0, 1.7, 8.0)
+		pz.rotation.y = deg_to_rad(180.0)
+		g.cam.rotation.x = deg_to_rad(-9.0)
+		for i in 12:
+			await get_tree().process_frame
+		get_viewport().get_texture().get_image().save_png("res://renders/shot_sectors_d.png")   # night
+		print("saved sectors")
 	# the hands: a fish in hand, winding up a throw with the arc preview, and the throw in flight
 	if only == "hands":
 		var ph: Node3D = g.get_node("Player")

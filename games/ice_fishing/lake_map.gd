@@ -33,6 +33,16 @@ func _draw() -> void:
 		if q.length() > r - 1.0:
 			continue
 		_hex(c + q, game.TILE * PX * 0.94, game.tile_map_color(game.tiles[tc]))
+	# sector borders, the same lines you see on the ice: white = locked, gold = cleared, faint teal = open
+	if game.sector_view:
+		for id in game.sector_view.patches:
+			for e in game.sector_view.owned_edges(id):
+				var a: Vector2 = e.a * PX
+				var b: Vector2 = e.b * PX
+				if a.length() > r or b.length() > r:
+					continue
+				var colr := Color(0.96, 0.99, 1.0, 0.95) if e.st == 0 else (Color(1.0, 0.8, 0.38, 0.9) if e.st == 2 else Color(0.42, 0.9, 0.88, 0.35))
+				draw_line(c + a, c + b, colr, 1.8 if e.st == 0 else 1.2, true)
 	# the Eye, your holes and belts
 	draw_circle(c, game.EYE_R * PX, Color(0.1, 0.6, 0.75, 0.9))
 	draw_circle(c, game.PUPIL_R * PX, Color(0.02, 0.05, 0.1))

@@ -219,7 +219,12 @@ const HEX_DIRS := [Vector2i(1, 0), Vector2i(1, -1), Vector2i(0, -1), Vector2i(-1
 
 var cam: Camera3D
 var model
-var sector_labels := {}
+var sector_view: SectorView
+var sector_hud: Control
+var sector_hud_label: Label
+var sector_hud_dot: Panel
+var sector_hud_t := 0.0
+var sector_hud_last := ""
 var lantern_idx := {}
 var shadow_mat: StandardMaterial3D
 var shoal_mesh: ArrayMesh
@@ -432,7 +437,6 @@ func _ready() -> void:
 	_build_ui()
 	for c in model.tile_sector:
 		_make_tile(c)
-	_make_sector_labels()
 	_make_sector_patches()
 	_setup_lanterns()
 	var resumed := _restore(GameState.extra)
@@ -693,76 +697,15 @@ func tile_map_color(t: Dictionary) -> Color:
 	var f := clampf(float(model.tile_left(t.c)) / maxf(init, 1.0), 0.0, 1.0)
 	return Color(0.62, 0.8, 0.95).lerp(Color(0.16, 0.38, 0.7), f)
 
-func _make_sector_labels() -> void:
-	for id in model.sectors:
-		var sec: Dictionary = model.sectors[id]
-		var pos: Vector3 = _hex_pos(sec.center) + Vector3(0, 4.5, 0)
-		var l := _label3d(self, pos, "", 0.0011)
-		l.fixed_size = true   # a sector's name is the same readable size wherever you stand
-		l.no_depth_test = false   # ...but a label behind a building stays hidden by it
-		l.font_size = 30
-		l.outline_size = 8
-		sector_labels[id] = {"label": l, "pos": pos}
-
-## Locked sectors lie under a soft frost; cleared ones have thawed into dark open water. Both are feathered discs.
-func _soft_disc(col: Color, plateau: float) -> ShaderMaterial:
-	var grad := Gradient.new()
-	grad.offsets = PackedFloat32Array([0.0, plateau, 1.0])
-	grad.colors = PackedColorArray([col, col, Color(col.r, col.g, col.b, 0.0)])
-	var tex := GradientTexture2D.new()
-	tex.gradient = grad
-	tex.fill = GradientTexture2D.FILL_RADIAL
-	tex.fill_from = Vector2(0.5, 0.5)
-	tex.fill_to = Vector2(1.0, 0.5)
-	tex.width = 128
-	tex.height = 128
-	# the patch fades out near the Eye so frost/thaw never lies over its pupil
-	var sh := Shader.new()
-	sh.code = """
-shader_type spatial;
-render_mode unshaded, cull_disabled, blend_mix, depth_draw_never;
-uniform sampler2D tex : source_color;
-varying vec3 wpos;
-void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
-void fragment() {
-	vec4 c = texture(tex, UV);
-	float k = smoothstep(11.0, 14.0, length(wpos.xz));
-	ALBEDO = c.rgb;
-	ALPHA = c.a * k;
-}
-"""
-	var m := ShaderMaterial.new()
-	m.shader = sh
-	m.set_shader_parameter("tex", tex)
-	return m
-
 func _make_sector_patches() -> void:
-	var fm := _soft_disc(Color(0.95, 0.98, 1.0, 0.42), 0.35)
-	var tm := _soft_disc(Color(0.02, 0.12, 0.26, 0.93), 0.75)
-	for id in model.sectors:
-		var wp := _hex_pos(model.sectors[id].center)
-		var frost := MeshInstance3D.new()
-		var fq := PlaneMesh.new()
-		fq.size = Vector2(5.6, 5.6) * TILE
-		frost.mesh = fq
-		frost.material_override = fm
-		frost.position = Vector3(wp.x, 0.04, wp.z)
-		add_child(frost)
-		var thaw := MeshInstance3D.new()
-		var tq := PlaneMesh.new()
-		tq.size = Vector2(4.5, 4.5) * TILE
-		thaw.mesh = tq
-		thaw.material_override = tm
-		thaw.position = Vector3(wp.x, 0.05, wp.z)
-		thaw.visible = false
-		add_child(thaw)
-		sector_patches[id] = {"frost": frost, "thaw": thaw}
+	sector_view = SectorView.new()
+	add_child(sector_view)
+	sector_view.build(self)
+	sector_patches = sector_view.patches
 
 func _update_sector_patches() -> void:
-	for id in sector_patches:
-		var sec: Dictionary = model.sectors[id]
-		sector_patches[id].frost.visible = not sec.unlocked
-		sector_patches[id].thaw.visible = sec.cleared
+	if sector_view:
+		sector_view.refresh()
 
 ## One shore lantern per sector, placed in the direction of its sector, lit once that sector is cleared.
 func _setup_lanterns() -> void:
@@ -779,21 +722,43 @@ func _update_lanterns() -> void:
 	for id in lantern_idx:
 		scenery.set_lantern(lantern_idx[id], model.sectors[id].cleared)
 
-func _update_sector_labels() -> void:
+## The pill under the left card: the sector under the crosshair when you look at the ice, otherwise the one you stand on.
+func _update_sector_hud(delta: float) -> void:
+	sector_hud_t -= delta
+	if sector_hud_t > 0.0:
+		return
+	sector_hud_t = 0.12
+	var at: Vector3 = $Player.global_position
+	if aim_flat < 60.0 and aim_pos != Vector3.ZERO:
+		at = aim_pos
+	var c := _cell_at(Vector3(at.x, 0.0, at.z))
+	var id: Variant = model.tile_sector.get(c, null)
+	var txt := ""
+	var col := Style.AMBER
+	if id == null:
+		txt = "Open ice" if Vector2(at.x, at.z).length() < EYE_R + 2.0 else "Shore"
+		col = Style.MUTED
+	else:
+		var sec: Dictionary = model.sectors[id]
+		if not sec.unlocked:
+			txt = "LOCKED  -  %s" % sec.name
+			col = Color(0.92, 0.97, 1.0)
+		elif sec.cleared:
+			txt = "%s  -  cleared" % sec.name
+			col = Color(1.0, 0.8, 0.38)
+		else:
+			txt = "%s  -  %d fish left" % [sec.name, sec.left]
+			col = Style.AMBER
+	if txt != sector_hud_last:
+		sector_hud_last = txt
+		sector_hud_label.text = txt
+		(sector_hud_dot.get_theme_stylebox("panel") as StyleBoxFlat).bg_color = col
+		(sector_hud_dot.get_theme_stylebox("panel") as StyleBoxFlat).border_color = col.lightened(0.4)
+	sector_hud.visible = not guide.intro_active and reveal_t <= 0.0
+
+func _update_sector_labels() -> void:   # (name kept: it refreshes everything that shows sector state)
 	_update_lanterns()
 	_update_sector_patches()
-	for id in sector_labels:
-		var sec: Dictionary = model.sectors[id]
-		var l: Label3D = sector_labels[id].label
-		if not sec.unlocked:
-			l.text = "LOCKED"
-			l.modulate = Color(0.7, 0.75, 0.9, 0.6)
-		elif sec.cleared:
-			l.text = "%s\nCLEARED" % sec.name
-			l.modulate = Color(1.0, 0.88, 0.45)
-		else:
-			l.text = "%s\n%d fish left" % [sec.name, sec.left]
-			l.modulate = Color(1, 1, 1)
 
 ## True if p is a legal place to drill: on the ice, in an open sector, off the Eye, clear of other holes.
 func _can_drill_at(p: Vector3) -> bool:
@@ -1055,6 +1020,17 @@ void fragment() {
 	eye_next_label.custom_minimum_size = Vector2(270, 0)
 	lake_label = _plain(left, 15, Style.MUTED)
 	lake_label.custom_minimum_size = Vector2(270, 0)
+	# the sector pill: always says which sector the crosshair (or your feet) is on, and whether it is open
+	var pill_row := HBoxContainer.new()
+	pill_row.add_theme_constant_override("separation", 8)
+	sector_hud_dot = _dot(pill_row, Style.AMBER, 14)
+	sector_hud_label = _plain(pill_row, 16, Style.CREAM)
+	var sec_sep := HSeparator.new()
+	sec_sep.modulate = Color(1, 1, 1, 0.25)
+	left.add_child(sec_sep)
+	left.add_child(pill_row)   # a row in the left card, so it can never overlap it
+	sector_hud = pill_row
+	left.move_child(lake_label, left.get_child_count() - 1)   # facts last, the sector row above them
 	msg_label = Label.new()
 	msg_label.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	msg_label.anchor_top = 1.0
@@ -2041,13 +2017,7 @@ func _animate(delta: float) -> void:
 			var ang: float = sh.a + tm * sh.spd
 			sh.node.position = Vector3(cos(ang) * sh.r, 0.065, sin(ang * 1.7) * sh.r * 0.8)
 			sh.node.rotation.y = -ang + PI * 0.5
-	for id in sector_labels:
-		var sp: Vector3 = sector_labels[id].pos
-		var dist := Vector2(sp.x - pp.x, sp.z - pp.z).length()
-		var lim: float = 62.0 if model.sectors[id].unlocked else 12.0
-		var lab: Label3D = sector_labels[id].label
-		lab.visible = reveal_t <= 0.0 and not guide.intro_active and dist < lim and not _under_hud(sp + Vector3(0, 0.0, 0))
-		lab.modulate.a = (0.6 if not model.sectors[id].unlocked else 1.0) * (1.0 - smoothstep(lim * 0.55, lim, dist))
+	_update_sector_hud(delta)
 
 # ---------- fish on the ice ----------
 func no_kicks_yet() -> bool:

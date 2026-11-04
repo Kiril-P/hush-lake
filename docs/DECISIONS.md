@@ -185,3 +185,13 @@ Left for the owner's playtest: whether grab reach and the 22-degree lift feel ri
 
 ### Hands, second step: throw into machines
 Depots and smokers are catch targets (`FishYard.sinks`): a fish that reaches a depot's mouth (3 m) goes in and is sent to the Eye by sled at the depot rate; a fish that reaches a smoker (2.2 m) joins or starts a smoking batch (up to 4, refused when full or when a finished batch is waiting). So throwing is a logistics tool, not only a way to feed the Eye. Tests: `tools/run_hands.sh`. Two flaky bounds were loosened (kick charge margins, wind spectrum) because both involve random noise.
+
+## Sector display redesign (sector_view.gd)
+Complaint: sectors were hard to spot and ugly (blurry frost discs that did not match the hex shapes, lots of floating "LOCKED" labels). Now:
+- **Geometry follows the real sectors**: each sector is a 7-tile hex flower; its outline is the 18 outer hex edges, computed from the model (matched to tile neighbours by world direction). The fill covers exactly those tiles, so borders are straight, crisp and aligned with the minimap.
+- **Locked** = flat frosted sheet with a quiet diagonal hatch, a bright 0.46 m border, and a thin glowing "gate" curtain (1.1 m, additive, fades upward) where it meets ground you can already fish. **Open** = only a faint thin teal line. **Cleared** = deep thawed-water tint and a warm gold border. Each shared edge is drawn once, by the sector that matters more (locked > cleared > open).
+- **Opening a sector**: its frost melts over 1.6 s and the border flashes warm white for 1.4 s (no pop).
+- **No floating labels any more.** A row in the top-left card names the sector under the crosshair (or under your feet): "The Shallows - 258 fish left", "LOCKED - Mirror Shelf", "Lantern Shelf - cleared".
+- **Minimap** draws the same owned edges (white closed, gold cleared, faint teal open).
+- Everything is unshaded and fog-free, dims at night (the white would glare), and stays off the Eye's pupil. Shadows off. Frame time unchanged (about 8 ms).
+- Tests: `tools/run_sectors.sh` (outline = 18 edges, shared edges match, each drawn once, state restyling, melt ghost, HUD pill). Renders: `SHOT_ONLY=sectors tools/shot.sh`.

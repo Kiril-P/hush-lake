@@ -26,7 +26,7 @@ A first-person cozy ice-fishing incremental in Godot 4.7. Feed the Eye under the
 Notes for playtesters are in `PLAYTEST.md` (what to look for, what to write down).
 
 ## Checks (no human needed)
-`tools/run_yard.sh` (fish physics) · `run_hands.sh` (grab, hold, throw, stow) · `run_safety.sh` (saves, offline, pause) · `run_guide.sh` (onboarding) · `run_audio.sh` (sound levels) · `run_smoke.sh` (everything, several minutes) · `first10.sh` (a bot plays the first 10 minutes) · `play_bot.sh` (windowed, real input) · `perf_render.sh` (rendered frame times) · `shot.sh` / `showroom.sh` (screenshots).
+`tools/run_yard.sh` (fish physics) · `run_hands.sh` (grab, hold, throw, stow) · `run_sectors.sh` (sector borders and states) · `run_safety.sh` (saves, offline, pause) · `run_guide.sh` (onboarding) · `run_audio.sh` (sound levels) · `run_smoke.sh` (everything, several minutes) · `first10.sh` (a bot plays the first 10 minutes) · `play_bot.sh` (windowed, real input) · `perf_render.sh` (rendered frame times) · `shot.sh` / `showroom.sh` (screenshots).
 
 ## Docs
 `docs/STYLE.md` (the look), `docs/DECISIONS.md` (why things are the way they are), `docs/BALANCE.md`, `docs/ROADMAP.md`.
