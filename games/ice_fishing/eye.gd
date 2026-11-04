@@ -343,7 +343,7 @@ func _build_petals() -> void:
 	petal_mat.distance_fade_max_distance = 7.0
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 41
-	var rings := [[20, EYE_R + 2.2, 2.6, 0.5], [20, EYE_R + 3.4, 2.2, 0.42]]
+	var rings := [[16, EYE_R + 2.2, 2.6, 0.5], [10, EYE_R + 3.6, 2.0, 0.4]]   # fewer petals: the pale slabs used to fill the lower third of every Eye-facing view
 	var ri := 0
 	for rg in rings:
 		var n: int = rg[0]

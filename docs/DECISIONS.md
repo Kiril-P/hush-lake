@@ -168,3 +168,6 @@ Not reviewed again: the pause card render (shot tool shows none) and anything af
 Fixed after it: the "dark shapes that belong to no object" were the shoal of fish silhouettes under the ice (a game feature) drawn as shapeless blobs, so they are now flat fish silhouettes with forked tails; nothing held in hand casts a shadow; stall sign text sits clear of the board; no hover prompt prints across the journal or refreeze card; the old "Cast a line" message is cleared when a fish is hooked.
 Left open (small): pale petals still fill the lower third of Eye-facing shots; the auger is a stick with crossbars, not a spiral; the shore band is still peach-pink in a couple of low shots and the Ice-Breaker bow is mauve; "The Shallows" label ghosts behind the NEXT card.
 Progress of the art-direction scores across four reviews: cohesion 6 -> 7 -> 7.5 -> 8; readability 5 -> 5.5 -> 6 -> 6.5.
+
+### Last three small open items (from art review 4), closed
+Fewer Eye petals (16 + 10, was 20 + 20) so the lower third of Eye-facing views is clear; the auger flights are a tight helix of small blades (a spiral, not crossbars); the bank snow starts bluer. Not re-reviewed by an art director; judged from renders only.

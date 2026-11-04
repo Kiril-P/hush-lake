@@ -620,7 +620,7 @@ func set_time(t: float) -> void:
 # ---------- terrain, forest, shore ----------
 func _ground_color(p: Vector3) -> Color:
 	var r := Vector2(p.x, p.z).length()
-	var col := Color(0.8, 0.9, 1.0)   # the golden sun warms it back toward white: start blue so the bank never goes peach
+	var col := Color(0.72, 0.85, 1.0)   # the golden sun warms it back toward white: start clearly blue so the bank never goes peach
 	var v := detail.get_noise_2d(p.x * 3.0, p.z * 3.0) * 0.035
 	col = Color(col.r + v, col.g + v, col.b + v * 0.5)
 	var e := edge_at(p.x, p.z)

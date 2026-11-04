@@ -97,10 +97,11 @@ static func auger(body: Node3D, tc: Color, tier: int) -> Dictionary:
 	body.add_child(spin)
 	# shaft and the flights that wind around it (flattened blades, each turned a little more than the last, narrowing to the bit)
 	rod_seg(spin, -0.02, -0.78, 0.016, 0.014, STEEL, 0.0, 0.8)
-	for i in 8:
-		var w := lerpf(0.15, 0.08, float(i) / 7.0)
-		var blade := box(spin, Vector3(0, 0, -0.13 - i * 0.085), Vector3(w, 0.013, 0.05), STEEL_DARK.lerp(tc, 0.25), 0.1, 0.4, 0.5)   # dark flights read against the white ice
-		blade.rotation.z = i * 0.95
+	for i in 14:   # a tight helix: each flight is a small blade turned a quarter step from the last, so it reads as a spiral and not crossbars
+		var w := lerpf(0.11, 0.06, float(i) / 13.0)
+		var a := i * 0.62
+		var blade := box(spin, Vector3(cos(a) * w * 0.5, sin(a) * w * 0.5, -0.12 - i * 0.05), Vector3(w, 0.02, 0.045), STEEL_DARK.lerp(tc, 0.3), 0.1, 0.4, 0.5)
+		blade.rotation.z = a
 	var tip_mesh := CylinderMesh.new()
 	tip_mesh.top_radius = 0.0
 	tip_mesh.bottom_radius = 0.04
