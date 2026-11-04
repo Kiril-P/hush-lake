@@ -257,6 +257,7 @@ func _ready() -> void:
 			await get_tree().process_frame
 		get_viewport().get_texture().get_image().save_png("res://renders/shot_ui_card.png")
 		g.test_capture = false
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE   # (the game captures the mouse itself when the window has focus)
 		g.card_panel.visible = false
 		for i in 12:
 			await get_tree().process_frame
