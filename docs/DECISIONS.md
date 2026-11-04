@@ -198,3 +198,6 @@ Complaint: sectors were hard to spot and ugly (blurry frost discs that did not m
 
 ### Sector display, independent review (Opus 5.5): easy to spot 8/10, clean/pretty 6/10, cohesion 6/10, "clearly better than discs and labels: yes"
 Applied its three fixes: the hatch is finer (0.45 vs 0.16 frequency), softer, and fades out beyond ~18-45 m from the camera (it was a "striped tablecloth" from above); the cleared fill is teal water (0.06, 0.32, 0.42 at alpha 0.34) instead of muddy slate, with a paler gold edge (gold stays off the amber accent); locked border 0.30 m (was 0.46), fill alpha 0.48, curtain 0.8 m at alpha 0.3. Judged from renders again; no human has seen it in play.
+
+### Sector display, second independent review: easy to spot 8.5, clean/pretty 7.5 (was 6), cohesion 7 (was 6); "stop iterating, the next opinion should be a human playtest"
+Applied its last tweaks: cleared water clearly teal (0.08, 0.42, 0.50 at 0.42) with a wider gold edge; the locked sheet is fainter and darker at night; the hatch fades out earlier (10-28 m) so it no longer bands on low views. This is the final state until someone plays it.

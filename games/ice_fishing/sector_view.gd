@@ -17,7 +17,7 @@ const COL_LOCKED_FILL := Color(0.82, 0.91, 0.99)
 const COL_LOCKED_LINE := Color(0.96, 0.99, 1.0)
 const COL_GATE := Color(0.6, 0.92, 1.0)
 const COL_OPEN_LINE := Color(0.42, 0.9, 0.88)
-const COL_CLEARED_FILL := Color(0.06, 0.32, 0.42)   # thawed water: teal, not slate
+const COL_CLEARED_FILL := Color(0.08, 0.42, 0.50)   # thawed water: clearly teal
 const COL_CLEARED_LINE := Color(0.95, 0.84, 0.55)   # a softer, paler gold: the strong amber stays for what you can act on
 
 const FILL_SHADER := """
@@ -28,16 +28,17 @@ uniform float alpha = 0.6;
 uniform float stripes = 1.0;
 uniform float fade = 1.0;
 uniform float dim = 1.0;
+uniform float night = 0.0;
 varying vec3 wpos;
 void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
 void fragment() {
 	// a quiet diagonal hatch, so a closed sector is also readable as a pattern and not only as a colour
 	float band = step(0.5, fract((wpos.x + wpos.z) * 0.45));
 	float k = smoothstep(11.0, 14.0, length(wpos.xz));   // never over the Eye's own pupil
-	float near = 1.0 - smoothstep(18.0, 45.0, distance(wpos, CAMERA_POSITION_WORLD));   // the hatch fades out with distance: it is a close-up texture
+	float near = 1.0 - smoothstep(10.0, 28.0, distance(wpos, CAMERA_POSITION_WORLD));   // the hatch fades out with distance: it is a close-up texture
 	float st = stripes * near;
 	ALBEDO = tint * dim * mix(1.0, 0.96 + 0.04 * band, st);
-	ALPHA = alpha * mix(1.0, 0.86 + 0.14 * band, st) * fade * k;
+	ALPHA = alpha * mix(1.0, 0.86 + 0.14 * band, st) * fade * k * mix(1.0, 0.6, night);   // at night the sheet is fainter, not only darker
 }
 """
 
@@ -180,7 +181,7 @@ func _make_patch(id: Vector2i) -> void:
 	thaw.mesh = fm
 	var tmat := _mat(_fill_shader)
 	tmat.set_shader_parameter("tint", COL_CLEARED_FILL)
-	tmat.set_shader_parameter("alpha", 0.34)
+	tmat.set_shader_parameter("alpha", 0.42)
 	tmat.set_shader_parameter("stripes", 0.0)
 	thaw.material_override = tmat
 	thaw.position.y = 0.004
@@ -223,10 +224,12 @@ func _process(delta: float) -> void:
 		return
 	_dim_t = 0.25
 	var night: float = game.scenery._night
-	var d := lerpf(1.0, 0.42, night)   # unshaded white would glare at night: it follows the light of the day
+	var d := lerpf(1.0, 0.36, night)   # unshaded white would glare at night: it follows the light of the day
 	for id in patches:
 		for k in ["frost", "thaw", "line"]:
-			((patches[id][k] as MeshInstance3D).material_override as ShaderMaterial).set_shader_parameter("dim", d)
+			var sm := (patches[id][k] as MeshInstance3D).material_override as ShaderMaterial
+			sm.set_shader_parameter("dim", d)
+			sm.set_shader_parameter("night", night)
 
 func refresh(first := false) -> void:
 	var model = game.model
@@ -248,7 +251,7 @@ func _rebuild_lines(id: Vector2i, s: int) -> void:
 	line_st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var gate_st := SurfaceTool.new()
 	gate_st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var w := 0.14 if s == 1 else (0.3 if s == 0 else 0.24)
+	var w := 0.14 if s == 1 else (0.3 if s == 0 else 0.32)
 	var n_line := 0
 	var n_gate := 0
 	for e in owned_edges(id):
