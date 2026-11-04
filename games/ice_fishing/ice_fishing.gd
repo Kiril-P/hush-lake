@@ -333,7 +333,8 @@ var carry_bar: ProgressBar
 var eye_bar: ProgressBar
 var eye_label: Label
 var eye_next_label: Label
-var start_panel: PanelContainer
+var start_panel: Control
+var menu: MenuUI
 var guide: Guide
 var yard: FishYard
 var kick_charge := -1.0       # right mouse held: 0..1, or -1 when not charging
@@ -346,7 +347,17 @@ var ever_captured := false
 var sim_paused := false       # the mouse is free (Esc): the lake stops, the settings card shows
 var fov_base := BASE_FOV
 var rig_serial := 0
-var settings_ctrls: Array = []
+var fx_shake := 1.0
+var fx_bob := 1.0
+var fx_punch := 1.0
+var sun_light: DirectionalLight3D
+var vignette_rect: ColorRect
+var saved_label: Label
+var saved_t := 0.0
+var coins_shown := -1.0
+var coins_target := 0.0
+var hotbar_last_tool := -1
+var eye_pulse_t := 0.0
 var test_capture := false     # headless tools cannot capture the mouse: they ask the game to behave as if it were
 var kick_rings: Array = []
 var hold_block := false
@@ -448,6 +459,8 @@ func _ready() -> void:
 	_setup_belt_fish()
 	eye_seen_stage = eye_stage()
 	_refresh()
+	sector_hud_t = 0.0
+	_update_sector_hud(1.0)
 	sfx.start_ambient()
 	_log("--- session start (resumed=%s) ---" % resumed)
 	if resumed:
@@ -538,6 +551,7 @@ func _build_world() -> void:
 	we.environment = env
 	add_child(we)
 	var sun := DirectionalLight3D.new()
+	sun_light = sun
 	sun.light_color = Color(1.0, 0.75, 0.6)
 	sun.shadow_enabled = true
 	add_child(sun)
@@ -980,6 +994,7 @@ func _build_ui() -> void:
 	var vig := ColorRect.new()
 	vig.set_anchors_preset(Control.PRESET_FULL_RECT)
 	vig.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vignette_rect = vig
 	var vsh := Shader.new()
 	vsh.code = """
 shader_type canvas_item;
@@ -1031,6 +1046,18 @@ void fragment() {
 	left.add_child(pill_row)   # a row in the left card, so it can never overlap it
 	sector_hud = pill_row
 	left.move_child(lake_label, left.get_child_count() - 1)   # facts last, the sector row above them
+	saved_label = Label.new()   # a small "Saved" tick in the corner after each autosave
+	saved_label.text = "saved"
+	saved_label.add_theme_font_size_override("font_size", 14)
+	saved_label.add_theme_color_override("font_color", Style.MUTED)
+	saved_label.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	saved_label.offset_left = -90.0
+	saved_label.offset_top = -34.0
+	saved_label.offset_right = -20.0
+	saved_label.offset_bottom = -12.0
+	saved_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	saved_label.modulate.a = 0.0
+	ui.add_child(saved_label)
 	msg_label = Label.new()
 	msg_label.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	msg_label.anchor_top = 1.0
@@ -1124,20 +1151,6 @@ void fragment() {
 	jbox.add_child(jhint)
 	journal_panel = _center_panel(ui, jbox)
 	journal_panel.visible = false
-	# title card shown whenever the mouse is free
-	var sbox := VBoxContainer.new()
-	sbox.add_theme_constant_override("separation", 6)
-	var title := _plain(sbox, 46, Style.AMBER)
-	title.text = "HUSH LAKE"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	start_label = _plain(sbox, 20)
-	start_label.text = "Click to play   (Esc pauses)\n\nDrill a hole (1), fish it (2). Your catch drops onto the ice.\nClick a fish to GRAB it, click again to drop it, hold right\nmouse and let go to THROW it (aim a lob at the Eye).\nWalk into fish or kick them (right mouse, nothing in hand).\nE: stow in bucket / sweep up   Z: take one out\nLost? Press H and Olga points the way.\n\nWASD walk   V snowmobile   Tab journal   R refreeze\nM mute   N twice (paused): start over"
-	start_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_build_settings(sbox)
-	var start_center := CenterContainer.new()   # the card always sits in the middle of the screen, however tall it grows
-	start_center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	ui.add_child(start_center)
-	start_panel = _panel(start_center, sbox)
 	map_ctrl = Control.new()
 	map_ctrl.set_script(LakeMapScript)
 	map_ctrl.game = self
@@ -1232,59 +1245,57 @@ void fragment() {
 	add_child(guide)
 	guide.build(ui)
 	_ignore_mouse(ui)
-	for c in settings_ctrls:   # the pause card's sliders must take clicks (everything else lets them through to resume)
-		c.mouse_filter = Control.MOUSE_FILTER_STOP
+	menu = MenuUI.new()   # the title / pause menu sits on top of everything and takes clicks
+	ui.add_child(menu)
+	menu.build(self)
+	start_panel = menu
+	menu.resume_requested.connect(func(): Input.mouse_mode = Input.MOUSE_MODE_CAPTURED)
+	menu.new_run_requested.connect(_new_game)
+	menu.quit_requested.connect(func():
+		GameState.save_game()
+		get_tree().quit())
 
-## Settings on the pause card: mouse sensitivity, volume, field of view, invert Y. Saved with the profile.
-func _build_settings(parent: Node) -> void:
-	var sv: Dictionary = GameState.meta.get("settings", {})
-	var rows := [["Mouse", "sens", 0.0005, 0.006, float(sv.get("sens", 0.002))], ["Volume", "vol", 0.0, 1.0, float(sv.get("vol", 1.0))],
-		["Field of view", "fov", 60.0, 100.0, float(sv.get("fov", BASE_FOV))]]
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 4)
-	parent.add_child(box)
-	for r in rows:
-		var hb := HBoxContainer.new()
-		box.add_child(hb)
-		var l := _plain(hb, 17)
-		l.text = r[0]
-		l.custom_minimum_size = Vector2(130, 0)
-		var sl := HSlider.new()
-		sl.min_value = r[2]
-		sl.max_value = r[3]
-		sl.step = (r[3] - r[2]) / 100.0
-		sl.value = r[4]
-		sl.custom_minimum_size = Vector2(260, 22)
-		sl.set_meta("key", r[1])
-		sl.value_changed.connect(func(v: float): _set_setting(r[1], v))
-		hb.add_child(sl)
-		settings_ctrls.append(sl)
-	var cb := CheckBox.new()
-	cb.text = "Invert look (Y)"
-	cb.button_pressed = bool(sv.get("inv", false))
-	cb.toggled.connect(func(on: bool): _set_setting("inv", 1.0 if on else 0.0))
-	box.add_child(cb)
-	settings_ctrls.append(cb)
-	var rb := Button.new()
-	rb.text = "Resume"
-	rb.pressed.connect(func(): Input.mouse_mode = Input.MOUSE_MODE_CAPTURED)
-	box.add_child(rb)
-	settings_ctrls.append(rb)
+## Writes the settings to disk right away (they live in the permanent meta, so they survive starting a new run).
+func save_settings() -> void:
+	if GameState.autosave:
+		GameState.save_game(false)
+
+func _fmt_num(v: float) -> String:   # 12345 -> "12,345"
+	var n := int(v)
+	var t := str(absi(n))
+	var out := ""
+	for i in t.length():
+		if i > 0 and (t.length() - i) % 3 == 0:
+			out += ","
+		out += t[i]
+	return ("-" if n < 0 else "") + out
 
 func _set_setting(key: String, v: float) -> void:
-	var sv: Dictionary = GameState.meta.get("settings", {})
-	sv[key] = v
-	GameState.meta["settings"] = sv
+	GameSettings.set_value(key, v)
 	_apply_settings()
 
 func _apply_settings() -> void:
-	var sv: Dictionary = GameState.meta.get("settings", {})
 	var pl: Node = get_node_or_null("Player")
 	if pl:
-		pl.sensitivity = float(sv.get("sens", 0.002))
-		pl.invert_y = float(sv.get("inv", 0.0)) > 0.5
-	fov_base = float(sv.get("fov", BASE_FOV))
-	AudioServer.set_bus_volume_db(0, linear_to_db(maxf(float(sv.get("vol", 1.0)), 0.0001)))
+		pl.sensitivity = GameSettings.get_value("sens")
+		pl.invert_y = GameSettings.on("inv")
+	fov_base = GameSettings.get_value("fov")
+	fx_shake = GameSettings.get_value("shake")
+	fx_bob = GameSettings.get_value("bob")
+	fx_punch = GameSettings.get_value("punch")
+	AudioServer.set_bus_volume_db(0, linear_to_db(maxf(GameSettings.get_value("vol"), 0.0001)))
+	if sfx:
+		sfx.set_levels(GameSettings.get_value("sfx"), GameSettings.get_value("amb"))
+	get_window().content_scale_factor = GameSettings.get_value("ui")
+	if DisplayServer.get_name() != "headless":
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN if GameSettings.on("full") else DisplayServer.WINDOW_MODE_WINDOWED)
+		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if GameSettings.on("vsync") else DisplayServer.VSYNC_DISABLED)
+	if sun_light:
+		sun_light.shadow_enabled = GameSettings.on("shadows")
+	if scenery and scenery.snow_node:
+		scenery.snow_node.visible = GameSettings.on("snow")
+	if vignette_rect:
+		vignette_rect.visible = GameSettings.on("vignette")
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
@@ -1521,6 +1532,7 @@ func _check_goals() -> void:
 			sfx.play("goal")
 			shake = maxf(shake, 0.04)
 			_banner("GOAL COMPLETE: %s  +%d" % [g.text, g.reward], Color(1, 0.9, 0.4))
+			_pulse(goals_label, 1.08)
 			_say(String(g.line))   # (the banner already says what was done: the bottom line is just Olga)
 
 func _goals_text() -> String:
@@ -1565,7 +1577,10 @@ func _upgrade_desc(id: String) -> String:
 
 func _refresh() -> void:
 	_check_goals()
-	coins_label.text = "%d" % floor(GameState.currency)
+	coins_target = floor(GameState.currency)
+	if coins_shown < 0.0:
+		coins_shown = coins_target
+		coins_label.text = _fmt_num(coins_shown)
 	carry_label.text = "Bucket %d / %d   worth %d%s" % [carry.size(), capacity(), floor(carry_worth()), ("   |   %d on the ice" % yard.count()) if yard.count() > 0 else ""]
 	carry_bar.value = float(carry.size()) / maxf(1.0, float(capacity()))
 	eye_label.text = "The Eye   stage %d / %d   %d fed" % [eye_stage(), EYE_STAGES.size(), stats.eye_fed]
@@ -1602,6 +1617,10 @@ func _refresh() -> void:
 		hotbar[i].text = "%d  %s%s" % [i + 1, label, suffix]
 		hotbar[i].add_theme_color_override("font_color", Style.AMBER if i == tool else (Style.CREAM if _tool_unlocked(i) else Style.MUTED))
 		hotbar_panels[i].add_theme_stylebox_override("panel", Style.slot(i == tool, not _tool_unlocked(i)))
+		if i == tool and hotbar_last_tool != tool:
+			hotbar_panels[i].pivot_offset = hotbar_panels[i].size * 0.5
+			hotbar_panels[i].scale = Vector2.ONE * 1.12
+			hotbar_panels[i].create_tween().tween_property(hotbar_panels[i], "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		hotbar_icons[i].lit = _tool_unlocked(i)
 		hotbar_icons[i].active = i == tool
 		hotbar_icons[i].queue_redraw()
@@ -1614,6 +1633,7 @@ func _refresh() -> void:
 		_update_journal()
 	map_ctrl.queue_redraw()
 	_sync_tool_view()
+	hotbar_last_tool = tool
 
 func _update_journal() -> void:
 	journal_label.text = "FIELD JOURNAL    %d / %d found" % [journal.size(), SPECIES.size()]
@@ -1861,7 +1881,30 @@ func _order_progress(f: Dictionary) -> void:
 		_new_order()
 	_refresh()
 
+## The coin counter rolls up (or down) to the real value and pops a little when you earn; "Saved" fades after an autosave.
+func _tick_hud_feel(delta: float) -> void:
+	eye_pulse_t -= delta
+	if coins_shown >= 0.0 and absf(coins_shown - coins_target) > 0.4:
+		var gap := coins_target - coins_shown
+		var step := maxf(absf(gap) * minf(1.0, delta * 9.0), 1.0 * delta * 60.0 * 0.2)
+		var before := int(coins_shown)
+		coins_shown = move_toward(coins_shown, coins_target, step)
+		if int(coins_shown) != before:
+			coins_label.text = _fmt_num(coins_shown)
+		if gap > 0.0:
+			coins_label.pivot_offset = Vector2(0, coins_label.size.y * 0.5)
+			coins_label.scale = coins_label.scale.lerp(Vector2.ONE * 1.12, minf(1.0, delta * 18.0))
+	else:
+		if coins_shown >= 0.0 and coins_label.text != _fmt_num(coins_target):
+			coins_shown = coins_target
+			coins_label.text = _fmt_num(coins_target)
+		coins_label.scale = coins_label.scale.lerp(Vector2.ONE, minf(1.0, delta * 12.0))
+	if saved_t > 0.0:
+		saved_t -= delta
+		saved_label.modulate.a = clampf(saved_t / 0.8, 0.0, 1.0) if saved_t < 0.8 else 1.0
+
 func _process(delta: float) -> void:
+	_tick_hud_feel(delta)
 	tithe_armed_t = maxf(tithe_armed_t - delta, 0.0)
 	reset_armed_t = maxf(reset_armed_t - delta, 0.0)
 	var cap_now := _cap()
@@ -1873,7 +1916,7 @@ func _process(delta: float) -> void:
 		sim_paused = want_pause
 		_on_pause_changed()
 	if sim_paused:
-		start_panel.visible = true
+		menu.set_open(true)
 		if msg_time > 0.0:
 			msg_time -= delta
 			if msg_time <= 0.0:
@@ -1905,7 +1948,7 @@ func _process(delta: float) -> void:
 		eye_pending = 0.0
 		eye_pending_t = 0.7
 	var captured := _cap()
-	start_panel.visible = not captured
+	menu.set_open(not captured and not guide.intro_active)
 	_walk(delta)
 	var raw := _aim_raw()
 	var a := raw if _in_range(raw) else ""
@@ -1932,6 +1975,8 @@ func _process(delta: float) -> void:
 	if kick_charge >= 0.0:
 		work_bar.visible = true
 		work_bar.value = kick_charge
+	if not GameSettings.on("prompts"):
+		prompt_label.text = ""
 	_update_crosshair(a, captured)
 	view.position.y = -0.4 + sin(Time.get_ticks_msec() * 0.002) * 0.005
 	_animate(delta)
@@ -1945,14 +1990,14 @@ func _animate(delta: float) -> void:
 		sky_t = 0.2
 		scenery.set_time(day_t)
 	shake = move_toward(shake, 0.0, delta * 0.25)
-	cam.h_offset = randf_range(-1.0, 1.0) * shake
-	cam.v_offset = randf_range(-1.0, 1.0) * shake
+	cam.h_offset = randf_range(-1.0, 1.0) * shake * fx_shake
+	cam.v_offset = randf_range(-1.0, 1.0) * shake * fx_shake
 	# walking: a soft head bob, the tool sways with it, and each footfall kicks up a pinch of snow
 	if moving and not riding and not guide.intro_active:
 		var prev_phase := sin(bob_t)
 		bob_t += delta * 9.5
-		cam.v_offset += sin(bob_t * 2.0) * 0.006
-		cam.h_offset += sin(bob_t) * 0.004
+		cam.v_offset += sin(bob_t * 2.0) * 0.006 * fx_bob
+		cam.h_offset += sin(bob_t) * 0.004 * fx_bob
 		if prev_phase > 0.0 and sin(bob_t) <= 0.0:
 			var pw: Vector3 = $Player.global_position
 			_snow_fx(Vector3(pw.x, 0.03, pw.z) + (-$Player.global_basis.z) * 0.2, 2, 0.35)
@@ -1972,7 +2017,7 @@ func _animate(delta: float) -> void:
 			cam.rotation.x = lerpf(cam.rotation.x, deg_to_rad(-12.0), minf(1.0, delta * 2.0))
 	else:
 		reveal_fov = 0.0
-	cam.fov = fov_base + fov_kick + ride_fov + reveal_fov + cine_fov
+	cam.fov = fov_base + fov_kick * fx_punch + ride_fov + reveal_fov + cine_fov
 	tool_kick = move_toward(tool_kick, 0.0, delta * 3.0)
 	var any_cast := false
 	for h in holes:
@@ -1984,7 +2029,7 @@ func _animate(delta: float) -> void:
 	tool_view.position = Vector3(0.38 + sin(tm * 1.3) * 0.004, -0.36 + sin(tm * 2.1) * 0.004 - swap_drop, -0.65)
 	tool_view.rotation.x = swap_drop * 1.1
 	if moving and not riding:
-		tool_view.position += Vector3(sin(bob_t) * 0.012, absf(sin(bob_t)) * -0.012, 0.0)
+		tool_view.position += Vector3(sin(bob_t) * 0.012, absf(sin(bob_t)) * -0.012, 0.0) * fx_bob
 	if working and tool == 0:
 		tool_view.position += Vector3(randf_range(-1, 1), randf_range(-1, 1), 0) * 0.004
 	var fight_target := 0.0
@@ -2122,7 +2167,7 @@ func _boot_swing(power: float) -> void:
 ## An amber ring on the ice under every fish a kick would hit right now (brighter while you charge).
 func _update_kick_rings(captured: bool) -> void:
 	var want: Array = []
-	if captured and yard.count() > 0 and not guide.intro_active:
+	if captured and yard.count() > 0 and not guide.intro_active and GameSettings.on("rings"):
 		var pl: Node3D = $Player
 		var fwd := -pl.global_basis.z
 		fwd.y = 0.0
@@ -2333,7 +2378,7 @@ func _update_hand(delta: float) -> void:
 
 ## The throw preview: dots along the arc and a ring where it will come down (aqua when that is the Eye's pull).
 func _update_arc() -> void:
-	var show := not held.is_empty() and kick_charge >= 0.0 and _cap() and not guide.intro_active
+	var show := not held.is_empty() and kick_charge >= 0.0 and _cap() and not guide.intro_active and GameSettings.on("arc")
 	while arc_dots.size() < 14:
 		var m := MeshInstance3D.new()
 		var sm := SphereMesh.new()
@@ -2929,12 +2974,23 @@ func _feed_eye(f: Dictionary, mult: float, hand := false) -> void:
 		eye_burst_t = 0.12
 		sfx.play("coin", 0.0, randf_range(0.7, 0.95))
 	scenery.eye_catch(f.color, clampf(worth / 25.0 + (0.05 * feed_streak if hand else 0.0), 0.0, 1.0))
+	if eye_pulse_t <= 0.0:   # the Eye's progress bar nudges when it eats (not on every single belt fish)
+		eye_pulse_t = 0.22
+		eye_bar.pivot_offset = eye_bar.size * 0.5
+		eye_bar.scale = Vector2(1.0, 1.9)
+		eye_bar.create_tween().tween_property(eye_bar, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	var st := eye_stage()
 	if st > eye_seen_stage:
 		eye_seen_stage = st
 		_eye_stage_up(st)
 
 ## The swallow itself: each fish in a hand-fed streak rings a higher note, and the Eye answers bigger and bigger.
+## A quick pulse on a HUD control (scale up, ease back).
+func _pulse(c: Control, amount := 1.1) -> void:
+	c.pivot_offset = c.size * 0.5
+	c.scale = Vector2.ONE * amount
+	c.create_tween().tween_property(c, "scale", Vector2.ONE, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
 func _hand_feed_fx(worth: float) -> void:
 	var step := mini(feed_streak - 1, FEED_NOTES.size() - 1)
 	sfx.play("coin", -1.0, 0.8 * pow(2.0, FEED_NOTES[step] / 12.0))
@@ -3711,6 +3767,8 @@ func _fish_from(d: Dictionary) -> Dictionary:
 	return f
 
 func _on_about_to_save() -> void:
+	if saved_label:
+		saved_t = 2.0
 	var hl := []
 	for t in holes:
 		hl.append({"p": [t.pos.x, t.pos.z], "s": t.state, "st": t.stash.map(_fish_to), "sl": t.slot.map(_fish_to),

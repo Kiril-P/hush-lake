@@ -9,6 +9,9 @@ var streams := {}
 var players: Array[AudioStreamPlayer] = []
 var _next := 0
 var muted := false
+var sfx_db := 0.0
+var amb_db := 0.0
+var _pad_player: AudioStreamPlayer
 
 func _ready() -> void:
 	for i in POOL:
@@ -88,7 +91,7 @@ func _process(delta: float) -> void:
 		return
 	# the wind breathes slowly, and now and then the ice creaks or a gust rolls across the lake
 	var tm := Time.get_ticks_msec() * 0.001
-	_wind_player.volume_db = -17.0 + sin(tm * 0.21) * 2.5 + sin(tm * 0.067) * 1.5
+	_wind_player.volume_db = -17.0 + amb_db + sin(tm * 0.21) * 2.5 + sin(tm * 0.067) * 1.5
 	_creak_t -= delta
 	if _creak_t <= 0.0:
 		_creak_t = randf_range(14.0, 34.0)
@@ -100,7 +103,7 @@ func _process(delta: float) -> void:
 
 func start_ambient() -> void:
 	_wind_player = _play_loop("wind", -17.0)
-	_play_loop("pad", -24.0)
+	_pad_player = _play_loop("pad", -24.0 + amb_db)
 
 func _play_loop(name: String, db: float) -> AudioStreamPlayer:
 	var p := AudioStreamPlayer.new()
@@ -116,9 +119,16 @@ func play(name: String, db := 0.0, pitch := 1.0) -> void:
 	var p := players[_next]
 	_next = (_next + 1) % POOL
 	p.stream = streams[name]
-	p.volume_db = db - 6.0
+	p.volume_db = db - 6.0 + sfx_db
 	p.pitch_scale = pitch
 	p.play()
+
+## Effects and ambience have their own volumes (0..1) on top of the master volume.
+func set_levels(effects: float, ambience: float) -> void:
+	sfx_db = linear_to_db(maxf(effects, 0.0001)) if effects > 0.0 else -80.0
+	amb_db = linear_to_db(maxf(ambience, 0.0001)) if ambience > 0.0 else -80.0
+	if _pad_player:
+		_pad_player.volume_db = -24.0 + amb_db
 
 func toggle_mute() -> bool:
 	muted = not muted

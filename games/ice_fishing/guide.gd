@@ -457,7 +457,7 @@ func tick(delta: float, captured: bool) -> void:
 	else:
 		stuck_t += delta
 	var show: bool = captured and not intro_active and not game.journal_panel.visible and not game.refreeze_panel.visible \
-		and not game.ending_panel.visible and not game.riding and cine_t <= 0.0
+		and not game.ending_panel.visible and not game.riding and cine_t <= 0.0 and GameSettings.on("hints")
 	strip_alpha = move_toward(strip_alpha, 1.0 if show else 0.0, delta * 4.0)
 	strip.modulate.a = strip_alpha
 	strip_tag.text = "NEXT"
@@ -475,7 +475,7 @@ func tick(delta: float, captured: bool) -> void:
 	strip_hint.text = hint
 	strip_hint.visible = hint != ""
 	_tick_marker(delta, to, show)
-	_tick_tips(delta, captured and not intro_active and cine_t <= 0.0)
+	_tick_tips(delta, captured and not intro_active and cine_t <= 0.0 and GameSettings.on("hints"))
 
 func _pop() -> void:
 	strip.pivot_offset = strip.size * 0.5

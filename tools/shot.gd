@@ -229,6 +229,26 @@ func _ready() -> void:
 			await get_tree().process_frame
 		get_viewport().get_texture().get_image().save_png("res://renders/shot_olga.png")
 		print("saved olga")
+	# the menu pages
+	if only == "menu":
+		g.goal_done.fill(true)
+		g.stats.eye_fed = 1234
+		g.stats.caught = 1300
+		g.stats.earned = 54321
+		g.stats.holes = 12
+		g.play_time = 3725.0
+		g.test_capture = false
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		g.ever_captured = true
+		for pg in [["main", 0], ["settings", 0], ["settings", 1], ["settings", 2], ["settings", 3], ["controls", 0], ["howto", 0], ["stats", 0], ["confirm_new", 0]]:
+			g.menu.page = pg[0]
+			g.menu.tab = pg[1]
+			g.menu.set_open(true)
+			g.menu._rebuild()
+			for i in 14:
+				await get_tree().process_frame
+			get_viewport().get_texture().get_image().save_png("res://renders/shot_menu_%s%d.png" % [pg[0], pg[1]])
+		print("saved menu")
 	# sectors: the border of the open Shallows seen from the ice, a cleared sector next to a locked one, and at night
 	if only == "sectors":
 		var pz: Node3D = g.get_node("Player")
