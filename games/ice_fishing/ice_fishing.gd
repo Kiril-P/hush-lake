@@ -334,6 +334,7 @@ var rig_serial := 0
 var settings_ctrls: Array = []
 var test_capture := false     # headless tools cannot capture the mouse: they ask the game to behave as if it were
 var kick_rings: Array = []
+var hold_block := false
 var work_bar: ProgressBar
 
 func _ready() -> void:
@@ -1182,6 +1183,8 @@ func _cap() -> bool:
 	return test_capture or Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
 
 func _on_pause_changed() -> void:
+	if not sim_paused:
+		hold_block = true   # the press that resumed play is still down: it must not drill or work a table until released
 	for tw in get_tree().get_processed_tweens():   # fish in flight must not land (and pay) while the lake is frozen
 		if sim_paused:
 			tw.pause()
@@ -1661,6 +1664,19 @@ func _species_held(sp: String) -> int:
 		for f in t.stash:
 			if f.name == sp:
 				n += 1
+		if t.state == "hole" and t.cast == 3:
+			for f in t.hooked:
+				if f.name == sp:
+					n += 1
+	for e in yard.fish:   # fish on the ice, in the air toward the Eye, or riding a belt are out of the lake but not yet delivered
+		if e.f.name == sp:
+			n += 1
+	for rec in flying:
+		if rec.f.name == sp:
+			n += 1
+	for it in belt_fish:
+		if it.f.name == sp:
+			n += 1
 	return n
 
 ## Orders must stay finishable in a finite lake: only ask for species that are still out there.
@@ -1985,7 +2001,7 @@ func _pick_up_fish() -> void:
 
 ## More than MAX_LOOSE fish on the ice: the oldest is taken for half pay, no streak, and fades where it lay.
 func _on_fish_overflow(f: Dictionary, holder: Node3D, _pos: Vector3) -> void:
-	_settle_fish(f, EYE_MULT * 0.5)
+	_settle_fish(f, EYE_MULT * 0.5, false)   # (a live stage-up gets its full reveal below)
 	var tw := create_tween()
 	tw.tween_property(holder, "scale", Vector3.ONE * 0.05, 0.6)
 	tw.tween_callback(holder.queue_free)
@@ -3011,6 +3027,11 @@ func _prompt_for(a: String) -> String:
 
 func _update_hold(a: String, delta: float) -> void:
 	var holding := Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and _cap()
+	if hold_block:
+		if holding:
+			holding = false
+		else:
+			hold_block = false
 	work_bar.visible = false
 	if drill_marker:
 		drill_marker.visible = false
@@ -3265,6 +3286,13 @@ func _restore(d: Dictionary) -> bool:
 		journal[k] = int(d.journal[k])
 	for fd in d.get("carry", []):
 		carry.append(_fish_from(fd))
+	var od0: Dictionary = d.get("order", {})   # the open order is back before any restored fish is delivered
+	if not od0.is_empty():
+		order = od0
+		order.have = int(order.get("have", 0))
+		order.need = int(order.get("need", 3))
+		order.reward = int(order.get("reward", 10))
+	orders_done = int(d.get("orders_done", 0))
 	for ld in d.get("loose", []):
 		if yard.count() >= FishYard.MAX_LOOSE:   # a save can hold more than the ice does (fights, old saves): the rest are paid in full
 			_settle_fish(_fish_from(ld.f), EYE_MULT)
@@ -3297,13 +3325,6 @@ func _restore(d: Dictionary) -> bool:
 	tool = clampi(int(d.get("tool", 0)), 0, TOOLS.size() - 1)
 	day_t = d.get("day", 0.0)
 	play_time = float(d.get("time", 0.0))
-	orders_done = int(d.get("orders_done", 0))
-	var od: Dictionary = d.get("order", {})
-	if not od.is_empty():
-		order = od
-		order.have = int(order.get("have", 0))
-		order.need = int(order.get("need", 3))
-		order.reward = int(order.get("reward", 10))
 	for pd in d.get("pending", []):   # paid now, quietly: they were already out of the lake when the game was saved (orders first, so they count)
 		_settle_fish(_fish_from(pd.f), float(pd.m))
 	_reward_stages_quietly(st_saved, eye_stage())
@@ -3314,15 +3335,15 @@ func _restore(d: Dictionary) -> bool:
 	return true
 
 ## A fish that reaches the Eye with no ceremony (a save/restore or offline delivery): pays and counts, nothing more.
-func _settle_fish(f: Dictionary, mult: float) -> float:
+func _settle_fish(f: Dictionary, mult: float, quiet := true) -> float:
 	var before := eye_stage()
 	stats.eye_fed += 1
 	var worth: float = f.base * f.mult * sale_mult() * mult
+	_order_progress(f)   # first: paying coins refreshes the goals, which may drop an order this very fish completes
 	GameState.add(worth)
 	stats.earned += worth
-	if eye_stage() > before:   # price the next fish with whatever this one just woke (the awakened bonus, for one)
+	if quiet and eye_stage() > before:   # price the next fish with whatever this one just woke (the awakened bonus, for one)
 		_reward_stages_quietly(before, eye_stage())
-	_order_progress(f)
 	return worth
 
 ## Eye stages crossed without being there to see them (offline, a restored save) still pay out exactly once.

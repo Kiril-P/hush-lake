@@ -200,7 +200,15 @@ func _ready() -> void:
 	for i in yard.MAX_LOOSE:
 		yard.spawn(g._make_fish(g.SPECIES[0]), Vector3(-60 + (i % 10) * 1.3, yard.GROUND, 62 + floorf(i / 10.0) * 1.3), Vector3.ZERO)
 	check("the 61st fish takes the oldest off the ice", yard.count() == yard.MAX_LOOSE)
+
 	check("overflow pays exactly half the Eye rate and does not touch the streak", absf(g.stats.earned - earned0 - half) < 0.001 and g.feed_streak == streak0)
+	yard.clear_all()
+	g.stats.eye_fed = g.eye_stage_at(0) - 1
+	g.eye_seen_stage = 0
+	g.reveal_t = 0.0
+	for i in yard.MAX_LOOSE + 1:
+		yard.spawn(g._make_fish(g.SPECIES[0]), Vector3(-60 + (i % 10) * 1.3, yard.GROUND, 62 + floorf(i / 10.0) * 1.3), Vector3.ZERO)
+	check("an overflow that wakes the Eye still gets its full stage reveal", g.eye_seen_stage == 1 and g.reveal_t > 0.0)
 	yard.clear_all()
 
 	# --- the kick is forgiving and shows what it hits

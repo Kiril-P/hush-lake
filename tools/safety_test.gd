@@ -135,6 +135,18 @@ func _ready() -> void:
 	g._settle_fish(g._make_fish(g.SPECIES[0]), g.EYE_MULT)
 	check("a fish settled on load counts toward the open order", g.orders_done >= 1 or int(g.order.get("have", 0)) == 2 or GameState.currency >= coins_o + 7.0)
 
+	# --- the last fish of a species still completes the order that asked for it
+	for c in g.model.stock:
+		g.model.stock[c].erase("Perch")
+	g.order = {"type": "species", "species": "Perch", "need": 1, "have": 0, "reward": 5}
+	var od_c: int = g.orders_done
+	var pf: Dictionary = g._make_fish(g.SPECIES[1])
+	g._settle_fish(pf, 1.0)
+	check("the lake's last Perch delivered from outside still completes a Perch order", g.orders_done == od_c + 1)
+	g.yard.spawn(g._make_fish(g.SPECIES[1]), Vector3(-20, 0.05, 20), Vector3.ZERO)
+	check("fish lying on the ice count as 'held' for orders", g._species_held("Perch") == 1)
+	g.yard.clear_all()
+
 	# --- fish delivered after the Eye wakes mid-batch are paid with the awakened bonus
 	g.stats.awakened = 0
 	g.stats.eye_fed = g.eye_stage_at(4) - 1
@@ -195,9 +207,11 @@ func _ready() -> void:
 	th.cast = 3
 	th.hooked = [g._make_fish(g.SPECIES[1])]
 	var fed_b: int = g.stats.eye_fed
-	g._on_about_to_save()
+	g.order = {"type": "any", "need": 2, "have": 1, "reward": 9, "species": ""}
+	var od_b: int = g.orders_done
 	g = await reload(g, slot)
 	check("restoring 60 loose fish plus a hooked one: the ice holds 60, the extra is paid, no stage reveal", g.yard.count() == g.yard.MAX_LOOSE and g.stats.eye_fed == fed_b + 1 and g.reveal_t <= 0.0)
+	check("...and the excess fish still counts toward the open order (orders come back first)", g.orders_done == od_b + 1)
 	g.yard.clear_all()
 
 	# --- a depot sled in flight is saved too
@@ -210,6 +224,13 @@ func _ready() -> void:
 	check("a sled run is tracked until it pays", g.flying.size() == 1)
 	g = await reload(g, slot)
 	check("a quit mid-sled: the fish is paid on load, once", g.stats.eye_fed == fed_d + 1 and g.flying.is_empty())
+
+	# --- the click that resumes play does not also drill
+	g.sim_paused = false
+	g._on_pause_changed()
+	check("resuming blocks the held button until it is released", g.hold_block)
+	g._update_hold("", 0.01)
+	check("...and lets go once it is up", not g.hold_block)
 
 	# --- tithe and reset need confirming
 	g.yard.clear_all()
