@@ -314,6 +314,8 @@ var journal_panel: PanelContainer
 var journal_label: Label
 var hotbar: Array[Label] = []
 var hotbar_panels: Array[PanelContainer] = []
+var hotbar_icons: Array = []
+var crosshair: HudWidgets.Crosshair
 var carry_bar: ProgressBar
 var eye_bar: ProgressBar
 var eye_label: Label
@@ -335,6 +337,7 @@ var settings_ctrls: Array = []
 var test_capture := false     # headless tools cannot capture the mouse: they ask the game to behave as if it were
 var kick_rings: Array = []
 var hold_block := false
+var bob_t := 0.0
 var quiet_notice := ""         # an Eye stage reached out of sight: told to the player with the welcome-back line
 var work_bar: ProgressBar
 
@@ -634,8 +637,10 @@ func _make_sector_labels() -> void:
 	for id in model.sectors:
 		var sec: Dictionary = model.sectors[id]
 		var pos: Vector3 = _hex_pos(sec.center) + Vector3(0, 4.5, 0)
-		var l := _label3d(self, pos, "", 0.02)
-		l.outline_size = 12
+		var l := _label3d(self, pos, "", 0.0011)
+		l.fixed_size = true   # a sector's name is the same readable size wherever you stand
+		l.font_size = 30
+		l.outline_size = 8
 		sector_labels[id] = {"label": l, "pos": pos}
 
 ## Locked sectors lie under a soft frost; cleared ones have thawed into dark open water. Both are feathered discs.
@@ -890,6 +895,24 @@ func _build_ui() -> void:
 	ui.set_anchors_preset(Control.PRESET_FULL_RECT)
 	ui.theme = Style.theme()
 	ui_layer.add_child(ui)
+	# a soft vignette, cold at the corners, under everything else: it frames the view and quiets the screen edges
+	var vig := ColorRect.new()
+	vig.set_anchors_preset(Control.PRESET_FULL_RECT)
+	vig.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var vsh := Shader.new()
+	vsh.code = """
+shader_type canvas_item;
+void fragment() {
+	vec2 p = UV - 0.5;
+	p.x *= 1.15;
+	float d = smoothstep(0.38, 0.95, length(p));
+	COLOR = vec4(0.03, 0.06, 0.16, d * 0.42);
+}
+"""
+	var vmat := ShaderMaterial.new()
+	vmat.shader = vsh
+	vig.material = vmat
+	ui.add_child(vig)
 	# top-left: coins, bucket, the Eye's progress, lake facts
 	var left := VBoxContainer.new()
 	left.add_theme_constant_override("separation", 3)
@@ -949,22 +972,18 @@ func _build_ui() -> void:
 	prompt_label.add_theme_font_size_override("font_size", 20)
 	prompt_label.add_theme_constant_override("outline_size", 8)
 	ui.add_child(prompt_label)
-	var ring := Panel.new()  # crosshair: a small cream ring
-	var rsb := StyleBoxFlat.new()
-	rsb.bg_color = Color(0, 0, 0, 0)
-	rsb.set_border_width_all(2)
-	rsb.border_color = Color(Style.CREAM.r, Style.CREAM.g, Style.CREAM.b, 0.85)
-	rsb.set_corner_radius_all(8)
-	ring.add_theme_stylebox_override("panel", rsb)
-	ring.set_anchors_preset(Control.PRESET_CENTER)
-	ring.size = Vector2(14, 14)
-	ring.position = Vector2(-7, -7)
-	ui.add_child(ring)
+	crosshair = HudWidgets.Crosshair.new()   # reactive: neutral cream ring, amber when you can act, aqua on the Eye and kickable fish
+	crosshair.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	crosshair.set_anchors_preset(Control.PRESET_CENTER)
+	crosshair.size = Vector2(80, 80)
+	crosshair.position = Vector2(-40, -40)
+	ui.add_child(crosshair)
 	work_bar = Style.bar(Style.AQUA, 10.0)
 	work_bar.set_anchors_preset(Control.PRESET_CENTER)
 	work_bar.position = Vector2(-70, 66)
 	work_bar.size = Vector2(140, 10)
 	work_bar.visible = false
+	work_bar.modulate.a = 0.0   # the crosshair's ring shows this progress now
 	ui.add_child(work_bar)
 	# bottom: one card per tool, the active one ringed in amber
 	var bar := HBoxContainer.new()
@@ -984,9 +1003,16 @@ func _build_ui() -> void:
 		sp.add_theme_stylebox_override("panel", Style.slot(false, true))
 		bar.add_child(sp)
 		hotbar_panels.append(sp)
-		var hl := _plain(sp, 17)
+		var hb := HBoxContainer.new()
+		hb.add_theme_constant_override("separation", 4)
+		sp.add_child(hb)
+		var icon := HudWidgets.ToolIcon.new(i)
+		hb.add_child(icon)
+		hotbar_icons.append(icon)
+		var hl := _plain(hb, 17)
 		hl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		hl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		hl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		hotbar.append(hl)
 	journal_label = Label.new()
 	journal_label.add_theme_font_size_override("font_size", 20)
@@ -1477,6 +1503,9 @@ func _refresh() -> void:
 		hotbar[i].text = "%d  %s%s" % [i + 1, label, suffix]
 		hotbar[i].add_theme_color_override("font_color", Style.AMBER if i == tool else (Style.CREAM if _tool_unlocked(i) else Style.MUTED))
 		hotbar_panels[i].add_theme_stylebox_override("panel", Style.slot(i == tool, not _tool_unlocked(i)))
+		hotbar_icons[i].lit = _tool_unlocked(i)
+		hotbar_icons[i].active = i == tool
+		hotbar_icons[i].queue_redraw()
 	if scenery:
 		scenery.set_eye_glow(float(model.cleared_count()) / model.sectors.size() * 1.4)
 		scenery.set_eye_open(minf(eye_open_frac(), 0.8) if awaken_hold else eye_open_frac())
@@ -1771,6 +1800,7 @@ func _process(delta: float) -> void:
 	if kick_charge >= 0.0:
 		work_bar.visible = true
 		work_bar.value = kick_charge
+	_update_crosshair(a, captured)
 	view.position.y = -0.4 + sin(Time.get_ticks_msec() * 0.002) * 0.005
 	_animate(delta)
 
@@ -1785,6 +1815,18 @@ func _animate(delta: float) -> void:
 	shake = move_toward(shake, 0.0, delta * 0.25)
 	cam.h_offset = randf_range(-1.0, 1.0) * shake
 	cam.v_offset = randf_range(-1.0, 1.0) * shake
+	# walking: a soft head bob, the tool sways with it, and each footfall kicks up a pinch of snow
+	if moving and not riding and not guide.intro_active:
+		var prev_phase := sin(bob_t)
+		bob_t += delta * 9.5
+		cam.v_offset += sin(bob_t * 2.0) * 0.006
+		cam.h_offset += sin(bob_t) * 0.004
+		if prev_phase > 0.0 and sin(bob_t) <= 0.0:
+			var pw: Vector3 = $Player.global_position
+			_snow_fx(Vector3(pw.x, 0.03, pw.z) + (-$Player.global_basis.z) * 0.2, 2, 0.35)
+			sfx.play("tick", -16.0, randf_range(0.5, 0.65))
+	else:
+		bob_t = lerpf(bob_t, round(bob_t / PI) * PI, minf(1.0, delta * 8.0))
 	fov_kick = lerpf(fov_kick, 0.0, delta * 6.0)
 	ride_fov = lerpf(ride_fov, 8.0 if (riding and moving) else 0.0, delta * 3.0)
 	if reveal_t > 0.0:
@@ -1806,6 +1848,8 @@ func _animate(delta: float) -> void:
 			any_cast = true
 			break
 	tool_view.position = Vector3(0.38 + sin(tm * 1.3) * 0.004, -0.36 + sin(tm * 2.1) * 0.004, -0.65)
+	if moving and not riding:
+		tool_view.position += Vector3(sin(bob_t) * 0.012, absf(sin(bob_t)) * -0.012, 0.0)
 	if working and tool == 0:
 		tool_view.position += Vector3(randf_range(-1, 1), randf_range(-1, 1), 0) * 0.004
 	var fight_target := 0.0
@@ -1841,7 +1885,10 @@ func _animate(delta: float) -> void:
 	for id in sector_labels:
 		var sp: Vector3 = sector_labels[id].pos
 		var dist := Vector2(sp.x - pp.x, sp.z - pp.z).length()
-		sector_labels[id].label.visible = reveal_t <= 0.0 and not guide.intro_active and dist < (62.0 if model.sectors[id].unlocked else 22.0)
+		var lim: float = 62.0 if model.sectors[id].unlocked else 26.0
+		var lab: Label3D = sector_labels[id].label
+		lab.visible = reveal_t <= 0.0 and not guide.intro_active and dist < lim
+		lab.modulate.a = (0.6 if not model.sectors[id].unlocked else 1.0) * (1.0 - smoothstep(lim * 0.55, lim, dist))
 
 # ---------- fish on the ice ----------
 func no_kicks_yet() -> bool:
@@ -1902,7 +1949,7 @@ func _update_kick_rings(captured: bool) -> void:
 		m.mesh = tm
 		var mt := StandardMaterial3D.new()
 		mt.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		mt.albedo_color = Color(1.0, 0.62, 0.12, 0.85)
+		mt.albedo_color = Color(1.0, 0.55, 0.05, 0.95)
 		mt.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		m.material_override = mt
 		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -1915,7 +1962,25 @@ func _update_kick_rings(captured: bool) -> void:
 		if ring.visible:
 			ring.global_position = Vector3(want[i].pos.x, 0.03, want[i].pos.z)
 			ring.scale = Vector3.ONE * (want[i].r / 0.5) * (1.0 + 0.25 * maxf(kick_charge, 0.0)) * pulse
-			(ring.material_override as StandardMaterial3D).albedo_color.a = 0.45 + 0.5 * maxf(kick_charge, 0.0)
+			(ring.material_override as StandardMaterial3D).albedo_color.a = 0.7 + 0.3 * maxf(kick_charge, 0.0)
+
+func _update_crosshair(a: String, captured: bool) -> void:
+	var kind := 0
+	if captured and not guide.intro_active:
+		if a == "eye":
+			kind = 2
+		elif a.begins_with("hole:") or a.begins_with("buy:") or a == "olga" or a.begins_with("depot:") or a.begins_with("rig:"):
+			kind = 1
+		elif a == "ice" and tool == 0 and _can_drill_at(Vector3(aim_pos.x, 0.0, aim_pos.z)):
+			kind = 1
+		if kind == 0 and yard.count() > 0:
+			var pl: Node3D = $Player
+			var fwd := -pl.global_basis.z
+			fwd.y = 0.0
+			if not yard.targets(pl.global_position, fwd.normalized(), KICK_REACH).is_empty():
+				kind = 3
+	crosshair.kind = kind
+	crosshair.progress = work_bar.value if work_bar.visible else -1.0
 
 func _start_kick() -> void:
 	kick_charge = 0.0

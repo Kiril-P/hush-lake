@@ -104,6 +104,9 @@ func build(env: Environment, sun: DirectionalLight3D, hut: Node3D) -> void:
 	env.glow_enabled = true
 	env.glow_intensity = 0.8
 	env.glow_bloom = 0.1
+	env.adjustment_enabled = true   # a gentle grade that ties sky, ice and lamps together: a touch more contrast and colour
+	env.adjustment_contrast = 1.06
+	env.adjustment_saturation = 1.12
 	# sun disc low on the horizon, light aimed from it
 	var sun_dir := Vector3(sin(deg_to_rad(25.0)), 0.045, -cos(deg_to_rad(25.0))).normalized()
 	var sun_pos := sun_dir * 700.0
