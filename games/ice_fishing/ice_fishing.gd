@@ -2088,15 +2088,17 @@ func _update_kick_rings(captured: bool) -> void:
 	while kick_rings.size() < mini(want.size(), 8):
 		var m := MeshInstance3D.new()
 		var tm := TorusMesh.new()
-		tm.inner_radius = 0.62
-		tm.outer_radius = 0.74
+		tm.inner_radius = 0.7
+		tm.outer_radius = 0.76
 		tm.rings = 24
 		tm.ring_segments = 6
 		m.mesh = tm
 		var mt := StandardMaterial3D.new()
 		mt.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		mt.albedo_color = Color(1.0, 0.55, 0.05, 0.95)
+		mt.albedo_color = Color(1.0, 0.62, 0.1, 1.0)   # the old pale rings were fog washing them out, not the colour
 		mt.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mt.disable_fog = true
+		mt.render_priority = 2
 		m.material_override = mt
 		m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(m)
@@ -2107,8 +2109,8 @@ func _update_kick_rings(captured: bool) -> void:
 		ring.visible = i < want.size()
 		if ring.visible:
 			ring.global_position = Vector3(want[i].pos.x, 0.03, want[i].pos.z)
-			ring.scale = Vector3.ONE * (want[i].r / 0.5) * (1.0 + 0.25 * maxf(kick_charge, 0.0)) * pulse
-			(ring.material_override as StandardMaterial3D).albedo_color.a = 0.7 + 0.3 * maxf(kick_charge, 0.0)
+			ring.scale = Vector3.ONE * (want[i].r / 0.5) * 0.85 * (1.0 + 0.25 * maxf(kick_charge, 0.0)) * pulse
+			(ring.material_override as StandardMaterial3D).albedo_color.a = 0.85 + 0.15 * maxf(kick_charge, 0.0)
 
 func _update_crosshair(a: String, captured: bool) -> void:
 	var kind := 0

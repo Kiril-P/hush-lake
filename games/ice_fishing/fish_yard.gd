@@ -43,9 +43,10 @@ func spawn(f: Dictionary, pos: Vector3, vel: Vector3) -> Dictionary:
 	var holder := Node3D.new()
 	add_child(holder)
 	var lenk := float(f.get("lenk", 1.0))
-	var fm := FishModel.build(f.name, f.color, 0.34 * 2.2 * lenk)
+	var fm := FishModel.build(f.name, f.color, 0.34 * 2.4 * lenk)
 	holder.add_child(fm)
-	var e := {"f": f, "node": holder, "fm": fm, "pos": pos, "vel": vel, "r": clampf(0.52 * lenk, 0.35, 1.1),
+	_lift(fm)
+	var e := {"f": f, "node": holder, "fm": fm, "pos": pos, "vel": vel, "r": clampf(0.56 * lenk, 0.38, 1.15),
 		"puff_t": 0.0, "yaw": randf() * TAU, "roll": 0.0, "flop": 0.0, "flop_t": randf_range(1.0, 3.0), "still": 0.0, "spin": randf_range(-6.0, 6.0)}
 	holder.position = pos
 	fish.append(e)
@@ -202,6 +203,22 @@ func _pose(e: Dictionary, dt: float) -> void:
 	node.position = e.pos
 	node.basis = Basis(Vector3.UP, e.yaw) * Basis(Vector3.RIGHT, e.roll)
 	(e.fm as FishNode).amp = clampf(0.2 + sp * 0.25 + e.flop * 5.0 + (1.0 if airborne else 0.0), 0.2, 3.0)
+
+static var _lift_mat: StandardMaterial3D
+
+## Fish lie on their side in their own shadow on white ice and read as dark slivers: a faint additive lift keeps their colours alive.
+static func _lift(n: Node) -> void:
+	if _lift_mat == null:
+		_lift_mat = StandardMaterial3D.new()
+		_lift_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_lift_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		_lift_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_lift_mat.albedo_color = Color(0.1, 0.13, 0.17, 1.0)
+		_lift_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	for c in n.get_children():
+		if c is MeshInstance3D and (c as MeshInstance3D).mesh is ArrayMesh:
+			(c as MeshInstance3D).material_overlay = _lift_mat
+		_lift(c)
 
 func _swallow(e: Dictionary) -> void:
 	fish.erase(e)
