@@ -120,3 +120,10 @@ Two-provider council (GPT-6.1 Sol + Claude Opus 5.5) reviewed the plan and cross
 - Orders: a restore puts the open order back before any fish is settled; `_settle_fish` credits the order BEFORE paying coins (paying refreshes the goals, which used to drop an order the very fish completed); `_species_held` now counts every fish already out of the lake (on the ice, hooked, in the air toward the Eye, on a belt), so a species order is not declared impossible while its last fish is on its way.
 - A live overflow that crosses an Eye stage gets the full stage reveal again (`_settle_fish(..., quiet=false)`); only restore/offline settle quietly.
 - The click that resumes play is also ignored by the hold-to-drill poll until the button is released (`hold_block`).
+
+### Level 1, council round 2 (Opus 7/10, CHANGES) fixes
+- Offline deliveries no longer feed Olga's orders (`_settle_fish(..., count_order=false)`): no burst of banners/sounds/particles on load, and offline order rewards were never an announced feature. Restored in-flight fish (pending) still count.
+- "The Eye woke while you were away" is kept in `quiet_notice` and appended to the welcome-back line (it used to be overwritten).
+- Yard substeps are capped at 8 per frame (a long hitch cannot turn into hundreds of steps).
+- Opus N4 (guide cinematic timer counting while paused) checked and not a bug: `guide.tick` runs only from the un-paused `_process`.
+- The bot now buys an upgrade named on the NEXT strip when it can pay, and explores nearer after seeing a LOCKED prompt: 95 fish fed, 0 stalls in 10 minutes.

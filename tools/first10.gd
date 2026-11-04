@@ -263,7 +263,7 @@ func drill_at(spot: Vector3) -> void:
 func do_far_hole() -> void:
 	# head out a random way and drill where the prompt allows it (a locked sector says so and we simply try another way)
 	var a := randf() * TAU
-	var r := randf_range(22.0, 34.0)
+	var r := randf_range(14.0, 20.0) if locked_seen else randf_range(22.0, 34.0)   # (learned from a "LOCKED" prompt: the outer ring is not open yet)
 	var cand := Vector3(cos(a) * r, 0, sin(a) * r)
 	await walk_to(cand, 3.0, 40.0)
 	await do_drill_near()
@@ -393,6 +393,16 @@ func do_buy(id: String) -> void:
 	await aim_click(board, "buy:" + id, 5.0)
 
 func do_generic(st: Dictionary) -> void:
+	# the NEXT strip names an upgrade ("Buy a Snowmobile"): if we can pay for it, walk to its stall like a person would
+	for id in g.UPGRADES:
+		var u0: Dictionary = g.UPGRADES[id]
+		if g.unlocked.get(id, false) and String(st.title).contains(u0.name) and GameState.level(id) < u0.max \
+				and GameState.currency >= GameState.cost(id, u0.base, u0.growth):
+			var lv0 := GameState.level(id)
+			await do_buy(id)
+			if GameState.level(id) > lv0:
+				rep.buys.append("%s@%d" % [id, int(T)])
+			return
 	# unlocked upgrades worth a walk (cheap, early): buy in a fixed order when affordable
 	for id in ["bait", "kick", "boots", "drill"]:
 		var u: Dictionary = g.UPGRADES[id]

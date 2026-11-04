@@ -91,7 +91,11 @@ func _ready() -> void:
 	var rg_pos: Vector3 = g._hex_pos(Vector2i(1, 0)) + Vector3(0, 0, 3)
 	g._build_rig(rg_pos, false)
 	var pearls1: int = int(GameState.meta.get("pearls", 0))
+	g.order = {"type": "any", "need": 50, "have": 0, "reward": 99, "species": ""}
+	g.quiet_notice = ""
 	g._offline(3600.0)
+	check("offline deliveries leave Olga's order alone (no burst of banners on load)", g.order.get("have", -1) == 0)
+	check("the welcome-back line tells you the Eye woke while you were away", g.msg_label.text.contains("woke while you were away"))
 	check("a rig feeding the Eye offline across stage 5 pays the awakening bonus", g.eye_stage() >= 5 and g.stats.awakened == 1 and int(GameState.meta.get("pearls", 0)) == pearls1 + g.AWAKEN_PEARLS)
 
 	# --- pause freezes the lake

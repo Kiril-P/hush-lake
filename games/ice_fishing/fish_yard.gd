@@ -50,7 +50,7 @@ func spawn(f: Dictionary, pos: Vector3, vel: Vector3) -> Dictionary:
 ## Everything moves here. `player` is the player's position, `look` the flat direction they face.
 func step(delta: float, player: Vector3) -> void:
 	if delta > 0.025:   # a long frame (or a sped-up test) is several short physics steps, so fish move the same at any frame rate
-		var n := ceili(delta / 0.0167)
+		var n := mini(ceili(delta / 0.0167), 8)
 		for i in n:
 			_step(delta / n, player)
 		return

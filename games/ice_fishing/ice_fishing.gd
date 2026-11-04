@@ -335,6 +335,7 @@ var settings_ctrls: Array = []
 var test_capture := false     # headless tools cannot capture the mouse: they ask the game to behave as if it were
 var kick_rings: Array = []
 var hold_block := false
+var quiet_notice := ""         # an Eye stage reached out of sight: told to the player with the welcome-back line
 var work_bar: ProgressBar
 
 func _ready() -> void:
@@ -404,7 +405,7 @@ func _ready() -> void:
 	sfx.start_ambient()
 	_log("--- session start (resumed=%s) ---" % resumed)
 	if resumed:
-		_say("Welcome back!")
+		_say_notice("Welcome back!")
 		_offline(away)
 	else:
 		if _meta_int("lakes") > 0:
@@ -1178,6 +1179,11 @@ func _apply_settings() -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+## One message line plus anything the Eye did while we were not looking.
+func _say_notice(text: String) -> void:
+	_say(text + ("\n" + quiet_notice if quiet_notice != "" else ""))
+	quiet_notice = ""
 
 func _cap() -> bool:
 	return test_capture or Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
@@ -3335,11 +3341,12 @@ func _restore(d: Dictionary) -> bool:
 	return true
 
 ## A fish that reaches the Eye with no ceremony (a save/restore or offline delivery): pays and counts, nothing more.
-func _settle_fish(f: Dictionary, mult: float, quiet := true) -> float:
+func _settle_fish(f: Dictionary, mult: float, quiet := true, count_order := true) -> float:
 	var before := eye_stage()
 	stats.eye_fed += 1
 	var worth: float = f.base * f.mult * sale_mult() * mult
-	_order_progress(f)   # first: paying coins refreshes the goals, which may drop an order this very fish completes
+	if count_order:   # (offline deliveries do not feed Olga's orders: no burst of banners and sounds on load)
+		_order_progress(f)   # first: paying coins refreshes the goals, which may drop an order this very fish completes
 	GameState.add(worth)
 	stats.earned += worth
 	if quiet and eye_stage() > before:   # price the next fish with whatever this one just woke (the awakened bonus, for one)
@@ -3357,7 +3364,7 @@ func _reward_stages_quietly(from_stage: int, to_stage: int) -> void:
 			GameState.meta.pearls = _meta_int("pearls") + AWAKEN_PEARLS
 			_log("EYE AWAKE (quiet)")
 			GameState.meta["awaken_seen"] = true
-			_say("The Eye woke while you were away!  +%d%% fish value, +%d pearls." % [int(AWAKEN_BONUS * 100.0), AWAKEN_PEARLS])
+			quiet_notice = "The Eye woke while you were away!  +%d%% fish value, +%d pearls." % [int(AWAKEN_BONUS * 100.0), AWAKEN_PEARLS]
 	eye_seen_stage = to_stage
 	scenery.set_eye_stage(to_stage)
 	scenery.set_eye_open(eye_open_frac())
@@ -3380,7 +3387,7 @@ func _offline(away: float) -> void:
 			var rf := _draw_fish(pseudo)
 			if rf.is_empty():
 				break
-			earned += _settle_fish(rf, _belt_mult() * _belt_flag_mult(rg.belt, rf))
+			earned += _settle_fish(rf, _belt_mult() * _belt_flag_mult(rg.belt, rf), true, false)
 			_after_draw(pseudo)
 			rb -= (RIG_INTERVAL * model.wait_factor(best) * 0.6 + 0.6) * 2.5
 	for t in holes:
@@ -3393,7 +3400,7 @@ func _offline(away: float) -> void:
 				var f := _draw_fish(t)
 				if f.is_empty():
 					break
-				earned += _settle_fish(f, _belt_mult() * _belt_flag_mult(t.belt, f))
+				earned += _settle_fish(f, _belt_mult() * _belt_flag_mult(t.belt, f), true, false)
 				_after_draw(t)
 			elif t.stash.size() < STASH_MAX:
 				var f2 := _draw_fish(t)
@@ -3405,9 +3412,9 @@ func _offline(away: float) -> void:
 			else:
 				break
 	if earned > 0.0:   # (each delivery was already paid by _settle_fish)
-		_say("Welcome back! Your belts and rigs fed the Eye while you were away: +%d coins." % floor(earned))
+		_say_notice("Welcome back! Your belts and rigs fed the Eye while you were away: +%d coins." % floor(earned))
 	elif stashed > 0:
-		_say("Welcome back! Your auto-rods stashed %d fish while you were away." % stashed)
+		_say_notice("Welcome back! Your auto-rods stashed %d fish while you were away." % stashed)
 	_reward_stages_quietly(st0, eye_stage())
 	eye_seen_stage = eye_stage()
 	scenery.set_eye_open(eye_open_frac())
