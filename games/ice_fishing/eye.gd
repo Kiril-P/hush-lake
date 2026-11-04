@@ -354,7 +354,7 @@ func _build_petals() -> void:
 			pivot.position = Vector3(sin(a) * rg[1], 0.05, -cos(a) * rg[1])
 			pivot.rotation = Vector3(0.1, PI - a, 0)
 			var mi := MeshInstance3D.new()
-			mi.mesh = _petal_mesh(len * 0.8, float(rg[3]) * rng.randf_range(0.8, 1.2), 0.45)
+			mi.mesh = _petal_mesh(len * 0.62, float(rg[3]) * rng.randf_range(0.8, 1.2), 0.45)
 			mi.material_override = petal_mat
 			pivot.add_child(mi)
 			add_child(pivot)

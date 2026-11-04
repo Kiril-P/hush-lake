@@ -556,22 +556,22 @@ func _build_world() -> void:
 		_box(s, Vector3.ZERO, Vector3(3.4, 1.7, 0.15), Color(0.18, 0.2, 0.3), "buy:" + id)
 		var l := Label3D.new()   # name, level and price: big enough to read from the next stall
 		l.pixel_size = 0.0068
-		l.font_size = 60
-		l.width = 480.0
-		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		l.outline_size = 12
-		l.line_spacing = -6.0
-		l.position = Vector3(0, 0.3, 0.1)
+		l.font_size = 46
+		l.autowrap_mode = TextServer.AUTOWRAP_OFF   # a title never wraps into the price row
+		l.outline_size = 10
+		l.line_spacing = -2.0
+		l.position = Vector3(0, 0.42, 0.1)
 		s.add_child(l)
 		sign_labels[id] = l
 		var ld := Label3D.new()   # the small print
 		ld.pixel_size = 0.0068
-		ld.font_size = 30
-		ld.width = 480.0
+		ld.font_size = 24
+		ld.width = 520.0
 		ld.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		ld.outline_size = 8
 		ld.modulate = Color(0.85, 0.88, 0.96)
-		ld.position = Vector3(0, -0.4, 0.1)
+		ld.line_spacing = -4.0
+		ld.position = Vector3(0, -0.56, 0.1)
 		s.add_child(ld)
 		sign_descs[id] = ld
 		scenery.decorate_stall(s, id)
@@ -672,6 +672,7 @@ func _make_sector_labels() -> void:
 		var pos: Vector3 = _hex_pos(sec.center) + Vector3(0, 4.5, 0)
 		var l := _label3d(self, pos, "", 0.0011)
 		l.fixed_size = true   # a sector's name is the same readable size wherever you stand
+		l.no_depth_test = false   # ...but a label behind a building stays hidden by it
 		l.font_size = 30
 		l.outline_size = 8
 		sector_labels[id] = {"label": l, "pos": pos}
@@ -1996,7 +1997,7 @@ func _animate(delta: float) -> void:
 	for id in sector_labels:
 		var sp: Vector3 = sector_labels[id].pos
 		var dist := Vector2(sp.x - pp.x, sp.z - pp.z).length()
-		var lim: float = 62.0 if model.sectors[id].unlocked else 16.0
+		var lim: float = 62.0 if model.sectors[id].unlocked else 12.0
 		var lab: Label3D = sector_labels[id].label
 		lab.visible = reveal_t <= 0.0 and not guide.intro_active and dist < lim
 		lab.modulate.a = (0.6 if not model.sectors[id].unlocked else 1.0) * (1.0 - smoothstep(lim * 0.55, lim, dist))
@@ -2119,12 +2120,27 @@ func _update_kick_rings(captured: bool) -> void:
 		add_child(m)
 		kick_rings.append(m)
 	var pulse := 0.8 + 0.2 * sin(Time.get_ticks_msec() * 0.012)
+	var prime := -1   # the fish most in front of you gets the full ring; the others a small one (five big rings made one blob)
+	if not want.is_empty():
+		var pl2: Node3D = $Player
+		var fw2 := -pl2.global_basis.z
+		fw2.y = 0.0
+		fw2 = fw2.normalized()
+		var best_d := -2.0
+		for i in mini(want.size(), kick_rings.size()):
+			var off: Vector3 = want[i].pos - pl2.global_position
+			off.y = 0.0
+			var dd := off.normalized().dot(fw2) - off.length() * 0.05
+			if dd > best_d:
+				best_d = dd
+				prime = i
 	for i in kick_rings.size():
 		var ring: MeshInstance3D = kick_rings[i]
 		ring.visible = i < want.size()
 		if ring.visible:
 			ring.global_position = Vector3(want[i].pos.x, 0.03, want[i].pos.z)
-			ring.scale = Vector3.ONE * (want[i].r / 0.5) * 0.85 * (1.0 + 0.25 * maxf(kick_charge, 0.0)) * pulse
+			var big := 1.0 if i == prime else 0.5
+			ring.scale = Vector3.ONE * (want[i].r / 0.5) * 0.85 * big * (1.0 + 0.25 * maxf(kick_charge, 0.0)) * pulse
 			(ring.material_override as StandardMaterial3D).albedo_color.a = 0.85 + 0.15 * maxf(kick_charge, 0.0)
 
 func _update_crosshair(a: String, captured: bool) -> void:
@@ -2823,11 +2839,13 @@ func _build_machine_visual(belt: Dictionary, kind: String) -> void:
 		MachineModels.cannery(m)
 		var l := _label3d(m, Vector3(0, 4.7, 0), "CANNERY x1.5", 0.012)
 		l.visibility_range_end = 20.0
+		l.no_depth_test = false
 		l.modulate = Color(1.0, 0.9, 0.7)
 	else:
 		MachineModels.sorter(m)
 		var l2 := _label3d(m, Vector3(0, 3.7, 0), "SORTER x1.6 (5+)", 0.012)
 		l2.visibility_range_end = 20.0
+		l2.no_depth_test = false
 		l2.modulate = Color(0.7, 1.0, 0.85)
 
 func _install_machine(t: Dictionary, kind: String, pay := true) -> void:
@@ -2860,6 +2878,7 @@ func _build_depot(pos: Vector3, pay := true) -> void:
 	_pop_in(node)
 	var l := _label3d(node, Vector3(0, 3.6, 0), "DEPOT", 0.014)
 	l.visibility_range_end = 22.0
+	l.no_depth_test = false
 	l.modulate = Color(1.0, 0.9, 0.7)
 	depots.append(d)
 	scenery.obstacles.append(Vector3(pos.x, pos.z, 2.2))

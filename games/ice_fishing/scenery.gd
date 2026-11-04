@@ -264,7 +264,7 @@ func _ice_and_eye() -> void:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var factors := [0.0, 0.45, 0.88, 1.0]   # the pale shore band is wider now, so the ice meets the bank softly
-	var cols := [Color(0.5, 0.68, 0.85, 1.0), Color(0.58, 0.75, 0.9, 1.0), Color(0.7, 0.85, 0.95, 1.0), Color(0.84, 0.94, 0.99, 1.0)]   # less saturated: it read as ocean
+	var cols := [Color(0.44, 0.7, 0.84, 1.0), Color(0.52, 0.77, 0.88, 1.0), Color(0.67, 0.88, 0.95, 1.0), Color(0.84, 0.95, 0.99, 1.0)]   # hue pulled from periwinkle toward teal   # less saturated: it read as ocean
 	var rings := []
 	for k in factors.size():
 		var ring := []
