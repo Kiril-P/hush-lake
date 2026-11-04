@@ -338,6 +338,10 @@ var settings_ctrls: Array = []
 var test_capture := false     # headless tools cannot capture the mouse: they ask the game to behave as if it were
 var kick_rings: Array = []
 var hold_block := false
+var tool_swap := 0.0
+var pickup_from: Array = []
+var restoring := false
+var slide_snd_t := 0.0
 var kick_boot: Node3D
 var boot_tween: Tween
 const BOOT_ROT := Vector3(-6, 38, 6)   # turned to show its side, toe forward
@@ -399,9 +403,13 @@ func _ready() -> void:
 	yard.overflowed.connect(_on_fish_overflow)
 	yard.edge_fn = scenery.edge_at
 	yard.touched.connect(func(pos: Vector3, impact: float): _snow_fx(pos, 4 + int(impact), 0.5 + impact * 0.12))
-	yard.trail.connect(func(pos: Vector3, speed: float): _snow_fx(pos + Vector3(0, 0.05, 0), 2, 0.4 + speed * 0.04))
+	yard.trail.connect(func(pos: Vector3, speed: float):
+		_snow_fx(pos + Vector3(0, 0.05, 0), 2, 0.4 + speed * 0.04)
+		if slide_snd_t <= 0.0:
+			slide_snd_t = 0.18
+			sfx.play("slide", -10.0 + minf(speed, 14.0) * 0.4, randf_range(0.9, 1.15)))
 	yard.kicked.connect(func(pos: Vector3, dir: Vector3, power: float): _snow_fx(pos - dir * 0.3, 7, 0.9 + power * 0.06))
-	yard.landed.connect(func(_f, impact): sfx.play("plop", -10.0 + minf(impact, 8.0) * 0.5, randf_range(0.8, 1.2)))
+	yard.landed.connect(func(_f, impact): sfx.play("thud", -12.0 + minf(impact, 9.0) * 0.8, randf_range(0.85, 1.25)))
 	_build_ui()
 	for c in model.tile_sector:
 		_make_tile(c)
@@ -884,6 +892,7 @@ func _build_auto(t: Dictionary, count := true) -> void:
 	_update_shadows(t)
 	var parts: Dictionary = MachineModels.auto_rod(t.extra)   # a little drill derrick with a pumping beam and a stash crate
 	t.arm = parts.arm
+	_pop_in(t.extra)
 	t.tag = _label3d(t.node, Vector3(0, 3.0, 0), "", 0.012)
 
 func _build_smoker(t: Dictionary) -> void:
@@ -893,6 +902,7 @@ func _build_smoker(t: Dictionary) -> void:
 	t.extra.scale = Vector3.ONE * 1.5
 	var sp: Dictionary = MachineModels.smoker(t.extra)
 	t.smoke_fx = sp.smoke
+	_pop_in(t.extra)
 	t.tag = _label3d(t.node, Vector3(0, 3.0, 0), "Smoker", 0.012)
 
 func _build_table(t: Dictionary) -> void:
@@ -901,6 +911,7 @@ func _build_table(t: Dictionary) -> void:
 	t.node.add_child(t.extra)
 	t.extra.scale = Vector3.ONE * 1.5
 	MachineModels.gut_table(t.extra)
+	_pop_in(t.extra)
 	t.tag = _label3d(t.node, Vector3(0, 2.6, 0), "Gut Table", 0.012)
 
 # ---------- UI ----------
@@ -1637,6 +1648,9 @@ func _sync_tool_view() -> void:
 	var sig := "%d-%d-%d" % [tool, GameState.level("drill"), GameState.level("lines")]
 	if sig == tool_sig:
 		return
+	if tool_sig != "":   # not on the first build: the old tool drops away, the new one swings up
+		tool_swap = 1.0
+		sfx.play("tick", -8.0, 0.8 + 0.06 * tool)
 	tool_sig = sig
 	for c in tool_view.get_children():
 		c.queue_free()
@@ -1903,7 +1917,7 @@ func _animate(delta: float) -> void:
 		if prev_phase > 0.0 and sin(bob_t) <= 0.0:
 			var pw: Vector3 = $Player.global_position
 			_snow_fx(Vector3(pw.x, 0.03, pw.z) + (-$Player.global_basis.z) * 0.2, 2, 0.35)
-			sfx.play("tick", -16.0, randf_range(0.5, 0.65))
+			sfx.play("step", -8.0, randf_range(0.8, 1.2))
 	else:
 		bob_t = lerpf(bob_t, round(bob_t / PI) * PI, minf(1.0, delta * 8.0))
 	fov_kick = lerpf(fov_kick, 0.0, delta * 6.0)
@@ -1926,7 +1940,10 @@ func _animate(delta: float) -> void:
 		if h.state == "hole" and h.cast > 0:
 			any_cast = true
 			break
-	tool_view.position = Vector3(0.38 + sin(tm * 1.3) * 0.004, -0.36 + sin(tm * 2.1) * 0.004, -0.65)
+	tool_swap = move_toward(tool_swap, 0.0, delta * 3.2)
+	var swap_drop := pow(tool_swap, 2.0) * 0.45   # eases back up: quick drop, soft arrival
+	tool_view.position = Vector3(0.38 + sin(tm * 1.3) * 0.004, -0.36 + sin(tm * 2.1) * 0.004 - swap_drop, -0.65)
+	tool_view.rotation.x = swap_drop * 1.1
 	if moving and not riding:
 		tool_view.position += Vector3(sin(bob_t) * 0.012, absf(sin(bob_t)) * -0.012, 0.0)
 	if working and tool == 0:
@@ -1976,6 +1993,36 @@ func no_kicks_yet() -> bool:
 var snow_fx_budget := 0
 
 ## A throttled puff of powder snow (many fish can slide at once; only a few puffs per frame).
+## Picked-up fish hop from where they lay into your hand.
+func _fly_to_hand(fs: Array) -> void:
+	for i in fs.size():
+		var from: Vector3 = pickup_from[i] if i < pickup_from.size() else $Player.global_position
+		var holder := Node3D.new()
+		add_child(holder)
+		var fm := _fish_mesh(fs[i], holder, 1.7)
+		(fm as FishNode).amp = 2.0
+		holder.global_position = from
+		var tw := create_tween()
+		tw.tween_interval(0.05 * i)
+		tw.tween_method(func(k: float):
+			var tgt := _hand_point()
+			holder.global_position = from.lerp(tgt, k) + Vector3(0, sin(k * PI) * 0.8, 0)
+			holder.rotation.z = k * 5.0
+			holder.scale = Vector3.ONE * lerpf(1.0, 0.4, k), 0.0, 1.0, 0.3).set_trans(Tween.TRANS_SINE)
+		tw.tween_callback(holder.queue_free)
+	pickup_from.clear()
+
+## A new thing on the ice grows in with a little overshoot, so building feels like something happened.
+func _pop_in(n: Node3D) -> void:
+	if restoring or n == null:
+		return
+	var target := n.scale
+	n.scale = target * 0.25
+	var tw := n.create_tween()
+	tw.tween_property(n, "scale", target * 1.08, 0.22).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(n, "scale", target, 0.14).set_trans(Tween.TRANS_SINE)
+	_snow_fx(n.global_position + Vector3(0, 0.1, 0), 9, 1.2)
+
 func _snow_fx(pos: Vector3, amount: int, power: float) -> void:
 	if snow_fx_budget <= 0:
 		return
@@ -2000,6 +2047,7 @@ func _tick_yard(delta: float, captured: bool) -> void:
 	yard.player_vel = Vector3(ppos.x - player_prev.x, 0.0, ppos.z - player_prev.z) / maxf(delta, 0.0001) if player_prev != Vector3.ZERO else Vector3.ZERO
 	player_prev = ppos
 	snow_fx_budget = 5
+	slide_snd_t -= delta
 	yard.pull = 3.8 + 0.9 * eye_stage()
 	yard.step(delta, ppos)
 	_update_kick_rings(captured)
@@ -2100,8 +2148,7 @@ func _release_kick() -> void:
 	view_pop = 0.5
 	if hit > 0:
 		kicks += 1
-		sfx.play("cast", -3.0, 0.7 + power * 0.03)
-		sfx.play("plop", -6.0, 0.7)
+		sfx.play("kick", -2.0, 0.85 + power * 0.015)
 		shake = maxf(shake, 0.01 + 0.002 * power)
 		fov_kick = maxf(fov_kick, 2.0)
 	else:
@@ -2118,8 +2165,10 @@ func _pick_up_fish() -> void:
 		sfx.play("deny")
 		return
 	var got := yard.collect(pp, PICKUP_RADIUS, free_space())
+	pickup_from = yard.last_collected.duplicate()
 	for f in got:
 		_add_carry(f)
+	_fly_to_hand(got)
 	sfx.play("plop", -2.0, 1.4)
 	view_pop = 1.0
 	_refresh_view()
@@ -2651,20 +2700,17 @@ func _setup_belt_fish() -> void:
 	belt_mm = MultiMesh.new()
 	belt_mm.transform_format = MultiMesh.TRANSFORM_3D
 	belt_mm.use_colors = true
-	var sp := SphereMesh.new()
-	sp.radius = 0.5
-	sp.height = 1.0
-	sp.radial_segments = 8
-	sp.rings = 4
-	belt_mm.mesh = sp
+	belt_mm.mesh = FishModel.bead_mesh()   # little real fish (body, tail, fins), not spheres
 	belt_mm.instance_count = BELT_MAX_FISH
 	belt_mm.visible_instance_count = 0
 	var m := StandardMaterial3D.new()
 	m.vertex_color_use_as_albedo = true
+	m.vertex_color_is_srgb = true
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
 	m.roughness = 0.35
 	m.emission_enabled = true
 	m.emission = Color(0.3, 0.35, 0.4)
-	m.emission_energy_multiplier = 0.35
+	m.emission_energy_multiplier = 0.25
 	var mi := MultiMeshInstance3D.new()
 	mi.multimesh = belt_mm
 	mi.material_override = m
@@ -2701,6 +2747,7 @@ func _build_belt(t: Dictionary, pay := true) -> void:
 	var mid := (a + b) * 0.5
 	node.look_at_from_position(Vector3(mid.x, 0.55, mid.z), Vector3(b.x, 0.55, b.z), Vector3.UP)
 	MachineModels.belt(node, blen, _belt_speed())
+	_pop_in(node)
 	var belt := {"hole": t, "a": a, "b": b, "len": blen, "dir": dir, "node": node, "cost": cost}
 	belts.append(belt)
 	t.belt = belt
@@ -2754,6 +2801,7 @@ func _build_machine_visual(belt: Dictionary, kind: String) -> void:
 	var m := Node3D.new()
 	node.add_child(m)
 	m.position = Vector3(0, 0, mid_z)
+	_pop_in(m)
 	if kind == "cannery":
 		MachineModels.cannery(m)
 		var l := _label3d(m, Vector3(0, 4.7, 0), "CANNERY x1.5", 0.012)
@@ -2790,6 +2838,7 @@ func _build_depot(pos: Vector3, pay := true) -> void:
 	var hit := _box(node, Vector3(0, 0.6, 0), Vector3(2.8, 1.2, 1.8), Color.WHITE, "depot:%d" % d.idx)   # the click target (the model is MachineModels.depot)
 	hit.visible = false
 	MachineModels.depot(node)
+	_pop_in(node)
 	var l := _label3d(node, Vector3(0, 3.6, 0), "DEPOT", 0.014)
 	l.modulate = Color(1.0, 0.9, 0.7)
 	depots.append(d)
@@ -2839,6 +2888,7 @@ func _build_rig(pos: Vector3, pay := true) -> void:
 	hit.visible = false
 	var rp: Dictionary = MachineModels.rig(node)
 	rig.beacon = rp.beacon
+	_pop_in(node)
 	rig.tag = _label3d(node, Vector3(0, 8.4, 0), "ICE-BREAKER", 0.016)
 	rig.tag.modulate = Color(0.9, 0.95, 1.0)
 	rigs.append(rig)
@@ -2960,8 +3010,8 @@ func _update_belt_fish(delta: float) -> void:
 		var it2: Dictionary = belt_fish[k]
 		var b: Dictionary = it2.belt
 		var pos: Vector3 = b.a.lerp(b.b, it2.d / b.len) + Vector3(0, 0.78 + sin(it2.d * 3.0 + k) * 0.02, 0)
-		var yaw := atan2(-b.dir.z, b.dir.x)
-		belt_mm.set_instance_transform(k, Transform3D(Basis.from_euler(Vector3(0, yaw, 0)).scaled(Vector3(0.75, 0.26, 0.3)), pos))
+		var yaw := atan2(-b.dir.z, b.dir.x) + sin(it2.d * 4.0 + k * 1.7) * 0.12   # a little wriggle as it rides
+		belt_mm.set_instance_transform(k, Transform3D(Basis.from_euler(Vector3(0, yaw, 0)).scaled(Vector3.ONE * 0.95), pos))
 		belt_mm.set_instance_color(k, it2.f.color)
 	belt_mm.visible_instance_count = belt_fish.size()
 
@@ -3364,6 +3414,12 @@ func _on_about_to_save() -> void:
 		"order": order, "orders_done": orders_done, "lake": model.to_dict()}
 
 func _restore(d: Dictionary) -> bool:
+	restoring = true
+	var ok := _restore_inner(d)
+	restoring = false
+	return ok
+
+func _restore_inner(d: Dictionary) -> bool:
 	if d.is_empty():
 		return false
 	if d.has("lake"):

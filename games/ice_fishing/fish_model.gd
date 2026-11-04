@@ -49,6 +49,21 @@ static func build(species: String, color: Color, length: float) -> Node3D:
 	root.scale = Vector3.ONE * length * spec.size
 	return root
 
+## One small low-poly fish (body, tail, dorsal and belly fins) for the instanced fish on belts. White vertex colours: the
+## instance colour tints it, a lighter belly and darker back give it form. Nose at +X, about 1 unit long.
+static var _bead: ArrayMesh
+static func bead_mesh() -> ArrayMesh:
+	if _bead != null:
+		return _bead
+	var spec: Dictionary = {"prof": [[0.0, 0.03, 0.025], [0.15, 0.09, 0.06], [0.4, 0.15, 0.1], [0.68, 0.14, 0.09], [0.9, 0.08, 0.05], [1.0, 0.025, 0.025]],
+		"back": Color(0.78, 0.8, 0.84), "belly": Color(1.0, 1.0, 1.0), "pattern": "none", "pat": Color.WHITE}
+	_bead = ArrayMesh.new()
+	var parts := [_body_mesh(spec), _poly(_tail_points("fork").map(func(q): return q + Vector2(-0.5, 0.0)), Color(0.95, 0.95, 0.95)), _poly(_dorsal_points("soft", spec), Color(0.9, 0.9, 0.92))]
+	for pm in parts:
+		var arrs: Array = (pm as ArrayMesh).surface_get_arrays(0)
+		_bead.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrs)
+	return _bead
+
 static func size_mult(species: String) -> float:
 	return SPECS.get(species, SPECS["Minnow"]).size
 
@@ -133,8 +148,12 @@ static func _poly(points: Array, col: Color, plane := "xy") -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for i in range(1, points.size() - 1):
-		for p in [points[0], points[i], points[i + 1]]:
-			st.set_color(col)
+		var ray := 0.9 + 0.14 * float(i % 2)   # alternate triangles read as fin rays
+		for j in 3:
+			var p: Vector2 = [points[0], points[i], points[i + 1]][j]
+			var tip := clampf(Vector2(p.x - points[0].x, p.y - points[0].y).length() / 0.3, 0.0, 1.0)   # base darker, tip lighter
+			var c2 := col.darkened(0.18).lerp(col.lightened(0.18), tip)
+			st.set_color(Color(c2.r * ray, c2.g * ray, c2.b * ray, c2.a))
 			st.add_vertex(Vector3(p.x, p.y, 0) if plane == "xy" else Vector3(p.x, 0, p.y))
 	st.generate_normals()
 	return st.commit()
@@ -199,6 +218,8 @@ static func _build_fish(root: FishNode, species: String, spec: Dictionary) -> vo
 		c.tail = _poly(_tail_points(spec.tail), spec.fin)
 		c.dorsal = _poly(_dorsal_points(spec.dorsal, spec), spec.fin)
 		c.pec = _poly([Vector2(0, 0), Vector2(-0.16, 0.08), Vector2(-0.06, 0.14), Vector2(0.03, 0.05)], spec.fin, "xz")
+		var ph := _profile(spec.prof, 0.28).x
+		c.anal = _poly([Vector2(-0.06, -ph * 0.85), Vector2(-0.2, -ph - 0.09), Vector2(-0.3, -ph * 0.9), Vector2(-0.24, -ph * 0.7)], spec.fin)
 		c.mat = _mat(spec.shine)
 		c.fin_mat = _mat(spec.shine * 0.8, true)
 		var eye := SphereMesh.new()
@@ -228,6 +249,10 @@ static func _build_fish(root: FishNode, species: String, spec: Dictionary) -> vo
 	dorsal.mesh = c.dorsal
 	dorsal.material_override = c.fin_mat
 	sway.add_child(dorsal)
+	var anal := MeshInstance3D.new()
+	anal.mesh = c.anal
+	anal.material_override = c.fin_mat
+	sway.add_child(anal)
 	var prof: Array = spec.prof
 	for side in [1.0, -1.0]:
 		var pivot := Node3D.new()

@@ -79,6 +79,23 @@ func _ready() -> void:
 	root.add_child(bl)
 	bl.rotation_degrees.y = 90
 	MachineModels.belt(bl, 8.0, 2.0)
+	var mmi := MultiMeshInstance3D.new()   # the instanced fish that ride the belts
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	mm.mesh = FishModel.bead_mesh()
+	mm.instance_count = 6
+	var bmat := StandardMaterial3D.new()
+	bmat.vertex_color_use_as_albedo = true
+	bmat.vertex_color_is_srgb = true
+	bmat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mmi.material_override = bmat
+	var cols := [Color(0.75, 0.8, 0.85), Color(0.6, 0.8, 0.5), Color(0.85, 0.9, 1.0), Color(1.0, 0.8, 0.25), Color(0.4, 1.0, 0.8), Color(0.6, 0.8, 0.5)]
+	for i in 6:
+		mm.set_instance_transform(i, Transform3D(Basis.from_euler(Vector3(0, PI * 0.5, 0)).scaled(Vector3.ONE * 0.95), Vector3(5.5, 0.78, -3.0 + i * 1.1)))
+		mm.set_instance_color(i, cols[i])
+	mmi.multimesh = mm
+	add_child(mmi)
 	var c := Node3D.new()
 	c.position = Vector3(-6, 0, 12)
 	root.add_child(c)
@@ -115,6 +132,7 @@ func _ready() -> void:
 	# tools
 	await get_tree().process_frame
 	await _shoot("olga", Vector3(-10.4, 1.5, 3.4), Vector3(-12, 1.1, 0), cam)
+	await _shoot("belt_fish", Vector3(7.2, 2.0, 0.5), Vector3(5.5, 0.7, 0.5), cam)
 	await _shoot("machines_a", Vector3(-1, 3.2, 8), Vector3(-1, 1.0, 0), cam)
 	await _shoot("machines_b", Vector3(0, 4.5, 24), Vector3(0, 1.8, 12), cam)
 	await _shoot("rig", Vector3(8, 6, 44), Vector3(0, 2.5, 32), cam)

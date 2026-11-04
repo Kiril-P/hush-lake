@@ -181,6 +181,7 @@ func _ready() -> void:
 	mouse(false)
 	await frames(3)
 	check("click builds a depot on open ice", g.depots.size() == 1)
+	await get_tree().create_timer(0.6).timeout   # (new buildings grow in for a third of a second)
 	g.carry.append(g.roll_fish())
 	aim_at(g.depots[0].pos + Vector3(0, 1.0, 0)) if g.depots.size() > 0 else null
 	await frames(3)

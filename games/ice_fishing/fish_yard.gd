@@ -30,6 +30,7 @@ var player_speed := 0.0
 var player_vel := Vector3.ZERO       # flat velocity of the player: a walk-push goes the way you are moving
 var edge_fn := Callable()            # (x, z) -> the shoreline radius in that direction
 var swallow_enabled := true
+var last_collected: Array = []      # where the fish of the last collect() lay (for the pickup flight)
 
 func count() -> int:
 	return fish.size()
@@ -265,6 +266,7 @@ func nearest(pos: Vector3) -> Variant:
 
 ## Picks up to `limit` fish within `radius` (nearest first) and removes them from the ice.
 func collect(pos: Vector3, radius: float, limit: int) -> Array:
+	last_collected.clear()
 	var cands := []
 	for e in fish:
 		var d := Vector2(e.pos.x - pos.x, e.pos.z - pos.z).length()
@@ -278,6 +280,7 @@ func collect(pos: Vector3, radius: float, limit: int) -> Array:
 		var e: Dictionary = c[1]
 		fish.erase(e)
 		e.node.queue_free()
+		last_collected.append(e.pos)
 		got.append(e.f)
 	return got
 

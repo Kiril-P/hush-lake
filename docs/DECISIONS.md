@@ -131,3 +131,9 @@ Two-provider council (GPT-6.1 Sol + Claude Opus 5.5) reviewed the plan and cross
 ## Visual and feel pass (council set aside; goal: one style, one vibe)
 Built: living ice shader, new tool models with mittens and a kick boot, snow puffs, all machines remodelled in one language (see docs/STYLE.md "Assets"), animated belt chevrons, steaming cannery, sweeping sorter scanner, spinning rig beacon, Olga as a figure, reactive crosshair and drawn tool icons, round minimap, field journal, centred cards (CenterContainer, so tall cards never run off screen), themed sliders/buttons, a cold vignette and a gentle colour grade, sector labels that stay readable at distance, hole water and lip, walk bob with footstep snow, fish colours fixed (vertex colours are sRGB) so fins keep their colour.
 Judging method: renders by `tools/showroom.sh` and `tools/shot.sh`; headless suites (yard, safety, guide, smoke) and the windowed bot stay green.
+
+### Polish round 2 (stop-hook gaps closed)
+- Belt and rig fish are real instanced fish (`FishModel.bead_mesh`), not spheres; every fish has ray-shaded fins and a belly fin; trees carry snow and a few are dead.
+- Audio mix pass: per-role loudness table, limiter, living ambience, new physical sounds; `tools/run_audio.sh` (levels, clipping, loop clicks, limiter).
+- Smoothness: tool-swap dip, build pop-in (skipped while restoring a save), pickup hop to the hand. `tools/perf_render.sh` measures rendered frame time on a busy late-game lake with vsync off: ~7-9 ms average (110-150 fps), p95 < 11 ms, worst 16 ms, 4-6k draw calls. Startup (audio synthesis + scene) is about 0.5 s.
+- New buildings take a third of a second to grow in: a click during that window hits a smaller collider (the bot waits).

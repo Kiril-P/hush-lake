@@ -689,6 +689,9 @@ func _forest(clear: Array[Vector3]) -> void:
 	fnoise.frequency = 0.02
 	var trunks := []
 	var tiers := [[], [], []]
+	var caps := [[], [], []]   # snow lying on each tier
+	var bare := []             # a few dead trees and stumps
+	var bare_branches := []
 	for k in 3400:
 		var a := rng.randf() * TAU
 		var r := rng.randf_range(112.0, 400.0)
@@ -701,12 +704,24 @@ func _forest(clear: Array[Vector3]) -> void:
 			continue
 		var y := ground_h(x, z)
 		var sc := rng.randf_range(1.9, 3.2) * (1.0 + r / 260.0)
+		if rng.randf() < 0.05 and r < 260.0:   # a dead tree: grey trunk, a few bare branches
+			var h0 := rng.randf_range(3.5, 6.5) * (1.0 + r / 400.0)
+			bare.append([_xf(Vector3(x, y + h0 * 0.5, z), Vector3(0.28, h0, 0.28)), Color(0.34, 0.3, 0.38)])
+			for b in 4:
+				var ang := rng.randf() * TAU
+				var by := y + h0 * rng.randf_range(0.45, 0.95)
+				var bl := rng.randf_range(1.2, 2.4)
+				bare_branches.append([Transform3D(Basis.from_euler(Vector3(0.0, ang, 0.9 + rng.randf() * 0.3)).scaled(Vector3(bl, 0.12, 0.12)), Vector3(x + cos(ang) * bl * 0.3, by, z - sin(ang) * bl * 0.3)), Color(0.34, 0.3, 0.38)])
+			continue
 		var tint := Color(0.09, 0.26, 0.30).lerp(Color(0.14, 0.2, 0.38), rng.randf() * 0.7)
 		trunks.append([_xf(Vector3(x, y + 0.4 * sc, z), Vector3(0.3, 0.8, 0.3) * sc), Color(0.2, 0.15, 0.15)])
 		for t in 3:
 			var rad := (1.5 - t * 0.4) * sc
 			var h := 1.8 * sc
-			tiers[t].append([_xf(Vector3(x, y + (0.7 + t) * sc + h * 0.5, z), Vector3(rad, h, rad), rng.randf() * TAU), tint])
+			var yaw := rng.randf() * TAU
+			tiers[t].append([_xf(Vector3(x, y + (0.7 + t) * sc + h * 0.5, z), Vector3(rad, h, rad), yaw), tint])
+			# the upper two thirds of every tier carry snow: a smaller, paler cone sitting on top of it
+			caps[t].append([_xf(Vector3(x, y + (0.7 + t) * sc + h * 0.68, z), Vector3(rad * 0.7, h * 0.66, rad * 0.7), yaw), Color(0.88, 0.94, 1.0)])
 	var bm := BoxMesh.new()
 	_multi(bm, trunks)
 	var cone := CylinderMesh.new()
@@ -717,6 +732,9 @@ func _forest(clear: Array[Vector3]) -> void:
 	cone.rings = 1
 	for t in 3:
 		_multi(cone, tiers[t])
+		_multi(cone, caps[t])
+	_multi(bm, bare)
+	_multi(bm, bare_branches)
 
 func _shore_clutter(clear: Array[Vector3]) -> void:
 	var rng := RandomNumberGenerator.new()

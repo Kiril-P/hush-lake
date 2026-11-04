@@ -33,19 +33,76 @@ func _ready() -> void:
 	streams["swell"] = _wav(_swell(110.0, 330.0, 3.5, 0.4))
 	streams["awaken"] = _wav(_mix([_tone(110.0, 110.0, 3.2, 1.0, 0.32), _tone(220.0, 220.0, 3.0, 1.2, 0.26), _tone(330.0, 330.0, 2.8, 1.4, 0.2),
 		_tone(440.0, 440.0, 2.6, 1.6, 0.17), _tone(660.0, 660.0, 2.2, 2.0, 0.12), _tone(1320.0, 1320.0, 1.6, 3.0, 0.08), _noise(0.7, 0.25, 4.0, 0.45)]))
+	# physical sounds of the new fish-on-ice play
+	streams["kick"] = _wav(_mix([_tone(150.0, 55.0, 0.18, 22.0, 0.7), _noise(0.22, 0.1, 12.0, 0.45)]))
+	streams["thud"] = _wav(_mix([_tone(190.0, 75.0, 0.13, 28.0, 0.7), _noise(0.06, 0.25, 40.0, 0.25)]))
+	streams["step"] = _wav(_noise(0.07, 0.2, 38.0, 0.5))
+	streams["slide"] = _wav(_noise(0.3, 0.06, 7.0, 0.3))
+	streams["creak"] = _wav(_creak(1.3))
+	streams["gust"] = _wav(_swell_noise(4.5))
 	streams["wind"] = _wav(_wind(6.0), true)
 	streams["pad"] = _wav(_pad(8.0), true)
+	_mix_pass()
+	# the master bus gets a limiter so a stack of simultaneous sounds can never clip
+	var lim := AudioEffectLimiter.new()
+	lim.ceiling_db = -1.0
+	AudioServer.add_bus_effect(0, lim)
+
+## Loudness targets (peak, 0..1) by role, so nothing is accidentally ten times louder than its neighbours:
+## quiet UI ticks < everyday action sounds < impacts < stingers. The ambient loops are set far below all of them.
+const PEAK := {"tick": 0.28, "reel": 0.3, "drill": 0.32, "step": 0.18, "slide": 0.2, "coin": 0.38, "deny": 0.4, "buy": 0.45, "bite": 0.5,
+	"cast": 0.42, "plop": 0.5, "thud": 0.55, "kick": 0.65, "hook": 0.55, "splash": 0.6, "catch": 0.55, "rare": 0.62, "goal": 0.62,
+	"rumble": 0.7, "swell": 0.6, "awaken": 0.8, "creak": 0.3, "gust": 0.35, "wind": 0.5, "pad": 0.3}
+
+func _mix_pass() -> void:
+	for n in PEAK:
+		if streams.has(n):
+			streams[n] = _renormalise(streams[n], PEAK[n])
+
+## Rescales a 16-bit mono stream so its loudest sample is `peak` (0..1).
+func _renormalise(w: AudioStreamWAV, peak: float) -> AudioStreamWAV:
+	var data: PackedByteArray = w.data
+	var m := 1
+	for i in range(0, data.size(), 2):
+		m = maxi(m, absi(data.decode_s16(i)))
+	var k := peak * 32000.0 / float(m)
+	var out := PackedByteArray()
+	out.resize(data.size())
+	for i in range(0, data.size(), 2):
+		out.encode_s16(i, clampi(int(data.decode_s16(i) * k), -32767, 32767))
+	w.data = out
+	return w
+
+var _creak_t := 12.0
+var _gust_t := 6.0
+var _wind_player: AudioStreamPlayer
+
+func _process(delta: float) -> void:
+	if _wind_player == null or muted:
+		return
+	# the wind breathes slowly, and now and then the ice creaks or a gust rolls across the lake
+	var tm := Time.get_ticks_msec() * 0.001
+	_wind_player.volume_db = -17.0 + sin(tm * 0.21) * 2.5 + sin(tm * 0.067) * 1.5
+	_creak_t -= delta
+	if _creak_t <= 0.0:
+		_creak_t = randf_range(14.0, 34.0)
+		play("creak", -10.0, randf_range(0.7, 1.3))
+	_gust_t -= delta
+	if _gust_t <= 0.0:
+		_gust_t = randf_range(20.0, 50.0)
+		play("gust", -12.0, randf_range(0.85, 1.1))
 
 func start_ambient() -> void:
-	_play_loop("wind", -14.0)
-	_play_loop("pad", -20.0)
+	_wind_player = _play_loop("wind", -17.0)
+	_play_loop("pad", -24.0)
 
-func _play_loop(name: String, db: float) -> void:
+func _play_loop(name: String, db: float) -> AudioStreamPlayer:
 	var p := AudioStreamPlayer.new()
 	p.stream = streams[name]
 	p.volume_db = db
 	add_child(p)
 	p.play()
+	return p
 
 func play(name: String, db := 0.0, pitch := 1.0) -> void:
 	if muted or not streams.has(name):
@@ -159,4 +216,33 @@ func _pad(dur: float) -> PackedFloat32Array:
 			s += sin(TAU * f * t) * 0.18
 		var env := sin(PI * t / dur)
 		out[i] = s * env * env
+	return out
+
+## The long groan of ice under stress: a falling, wobbling tone with a bit of grit.
+func _creak(dur: float) -> PackedFloat32Array:
+	var n := int(dur * RATE)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	var phase := 0.0
+	for i in n:
+		var t := float(i) / RATE
+		var k := t / dur
+		var f := lerpf(520.0, 190.0, k) * (1.0 + 0.06 * sin(TAU * 9.0 * t) + 0.03 * sin(TAU * 23.0 * t))
+		phase += TAU * f / RATE
+		var env := sin(PI * k)
+		out[i] = (sin(phase) * 0.6 + sin(phase * 2.01) * 0.25 + randf_range(-0.08, 0.08)) * env * env * 0.5
+	return out
+
+## A gust: filtered noise that swells and fades (not a loop).
+func _swell_noise(dur: float) -> PackedFloat32Array:
+	var n := int(dur * RATE)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	var y := 0.0
+	var y2 := 0.0
+	for i in n:
+		var t := float(i) / n
+		y += (randf_range(-1.0, 1.0) - y) * 0.045
+		y2 += (y - y2) * 0.2
+		out[i] = y2 * sin(PI * t) * sin(PI * t) * 2.4
 	return out
