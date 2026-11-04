@@ -63,7 +63,41 @@ static func theme() -> Theme:
 	fill.shadow_size = 0
 	t.set_stylebox("background", "ProgressBar", bg)
 	t.set_stylebox("fill", "ProgressBar", fill)
+	# sliders (the pause card): a thin dark rail, an amber fill and a round amber knob
+	var rail := box(Color(0, 0, 0, 0.5), 4, Color(1, 1, 1, 0.1), 1, Vector2(0, 0))
+	rail.content_margin_top = 4.0
+	rail.content_margin_bottom = 4.0
+	var rail_fill := box(AMBER.darkened(0.1), 4, Color(0, 0, 0, 0), 0, Vector2(0, 0))
+	rail_fill.content_margin_top = 4.0
+	rail_fill.content_margin_bottom = 4.0
+	t.set_stylebox("slider", "HSlider", rail)
+	t.set_stylebox("grabber_area", "HSlider", rail_fill)
+	t.set_stylebox("grabber_area_highlight", "HSlider", rail_fill)
+	t.set_icon("grabber", "HSlider", _knob(AMBER, 9))
+	t.set_icon("grabber_highlight", "HSlider", _knob(Color(1.0, 0.9, 0.6), 10))
+	t.set_icon("grabber_disabled", "HSlider", _knob(MUTED, 9))
+	# buttons and check boxes in the same ink-and-amber look
+	t.set_stylebox("normal", "Button", box(Color(INK_SOFT.r, INK_SOFT.g, INK_SOFT.b, 0.9), 10, Color(1, 1, 1, 0.12), 1, Vector2(16, 6)))
+	t.set_stylebox("hover", "Button", box(Color(0.2, 0.17, 0.2, 0.95), 10, AMBER, 2, Vector2(16, 6)))
+	t.set_stylebox("pressed", "Button", box(Color(0.25, 0.2, 0.2, 0.95), 10, AMBER, 2, Vector2(16, 6)))
+	t.set_stylebox("focus", "Button", box(Color(0, 0, 0, 0), 10, AMBER, 2, Vector2(16, 6)))
+	t.set_color("font_color", "Button", CREAM)
+	t.set_color("font_hover_color", "Button", AMBER)
+	t.set_color("font_color", "CheckBox", CREAM)
 	return t
+
+static func _knob(c: Color, r: int) -> ImageTexture:
+	var d := r * 2 + 2
+	var img := Image.create(d, d, false, Image.FORMAT_RGBA8)
+	var ctr := Vector2(d, d) * 0.5
+	for y in d:
+		for x in d:
+			var dist := Vector2(x + 0.5, y + 0.5).distance_to(ctr)
+			if dist <= r:
+				img.set_pixel(x, y, c if dist <= r - 1.5 else Color(0.1, 0.07, 0.04, 0.9))
+			elif dist <= r + 1.0:
+				img.set_pixel(x, y, Color(c.r, c.g, c.b, 0.35))
+	return ImageTexture.create_from_image(img)
 
 ## A thin themed bar (carry / Eye progress / drill progress).
 static func bar(color := AMBER, h := 8.0) -> ProgressBar:

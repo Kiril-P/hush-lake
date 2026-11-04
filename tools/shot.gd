@@ -253,6 +253,12 @@ func _ready() -> void:
 		for i in 20:
 			await get_tree().process_frame
 		get_viewport().get_texture().get_image().save_png("res://renders/shot_ui_card.png")
+		g.test_capture = false
+		g.card_panel.visible = false
+		for i in 12:
+			await get_tree().process_frame
+		get_viewport().get_texture().get_image().save_png("res://renders/shot_ui_pause.png")
+		g.test_capture = true
 		print("saved ui")
 	# every machine up close, in daylight
 	if only == "machines2":

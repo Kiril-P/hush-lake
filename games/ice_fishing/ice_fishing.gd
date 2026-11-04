@@ -538,7 +538,12 @@ func _build_world() -> void:
 		s.look_at(Vector3(0, 1.6, 0), Vector3.UP, true)
 		_box(s, Vector3.ZERO, Vector3(3.4, 1.7, 0.15), Color(0.18, 0.2, 0.3), "buy:" + id)
 		var l := Label3D.new()
-		l.pixel_size = 0.0072
+		l.pixel_size = 0.0068
+		l.font_size = 36
+		l.width = 470.0   # the board is 3.4 m wide: long descriptions wrap onto the next line instead of running off the sign
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.outline_size = 10
+		l.line_spacing = -2.0
 		l.position = Vector3(0, 0, 0.1)
 		s.add_child(l)
 		sign_labels[id] = l
@@ -753,6 +758,33 @@ func _hole_near(p: Vector3, radius: float) -> bool:
 	return false
 
 ## Drills a hole at p. A hole is a "tile-like" dict: same keys the old per-tile code used, plus a position and index.
+const HOLE_WATER := """
+shader_type spatial;
+render_mode cull_disabled;
+void fragment() {
+	vec2 p = UV - 0.5;
+	float r = length(p) * 2.0;
+	float deep = smoothstep(1.0, 0.0, r);
+	float rip = sin(r * 22.0 - TIME * 1.8) * 0.5 + 0.5;
+	rip *= smoothstep(1.0, 0.2, r) * 0.18;
+	vec3 shallow = vec3(0.1, 0.4, 0.5);
+	vec3 deepc = vec3(0.01, 0.05, 0.12);
+	ALBEDO = mix(shallow, deepc, deep);
+	EMISSION = vec3(0.1, 0.45, 0.55) * (rip + (1.0 - deep) * 0.12);
+	ROUGHNESS = 0.08;
+	SPECULAR = 0.8;
+}
+"""
+var hole_water_mat: ShaderMaterial
+
+func _hole_water_material() -> ShaderMaterial:
+	if hole_water_mat == null:
+		var sh := Shader.new()
+		sh.code = HOLE_WATER
+		hole_water_mat = ShaderMaterial.new()
+		hole_water_mat.shader = sh
+	return hole_water_mat
+
 func _make_hole(pos: Vector3, count := true) -> Dictionary:
 	var c := _cell_at(pos)
 	if not tiles.has(c) or tiles[c].state == "platform":
@@ -778,9 +810,21 @@ func _make_hole(pos: Vector3, count := true) -> Dictionary:
 	dc.height = 0.04
 	dc.radial_segments = 14
 	disc.mesh = dc
-	disc.material_override = _mat(Color(0.03, 0.1, 0.22))
+	disc.material_override = _hole_water_material()
 	disc.position = Vector3(0, 0.07, 0)
 	node.add_child(disc)
+	var lip := TorusMesh.new()   # the beaten rim of the hole: a pale lip of ice around the dark water
+	lip.inner_radius = 0.66
+	lip.outer_radius = 0.82
+	lip.rings = 20
+	lip.ring_segments = 5
+	var lip_mi := MeshInstance3D.new()
+	lip_mi.mesh = lip
+	lip_mi.material_override = _mat(Color(0.82, 0.93, 1.0))
+	lip_mi.position = Vector3(0, 0.07, 0)
+	lip_mi.scale = Vector3(1.0, 0.45, 1.0)
+	lip_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	node.add_child(lip_mi)
 	var cyl := CylinderShape3D.new()
 	cyl.radius = 0.9
 	cyl.height = 0.8
