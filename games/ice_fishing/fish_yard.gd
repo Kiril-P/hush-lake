@@ -8,6 +8,9 @@ signal swallowed(f: Dictionary, holder: Node3D, pos: Vector3)
 signal landed(f: Dictionary, impact: float)
 signal bumped(f: Dictionary)
 signal overflowed(f: Dictionary, holder: Node3D, pos: Vector3)
+signal touched(pos: Vector3, impact: float)   # a fish hit the ice (for the landing puff)
+signal trail(pos: Vector3, speed: float)       # a fish is sliding fast (for the snow it kicks up)
+signal kicked(pos: Vector3, dir: Vector3, power: float)
 
 const GROUND := 0.05
 const GRAVITY := 18.0
@@ -42,7 +45,7 @@ func spawn(f: Dictionary, pos: Vector3, vel: Vector3) -> Dictionary:
 	var fm := FishModel.build(f.name, f.color, 0.34 * 2.2 * lenk)
 	holder.add_child(fm)
 	var e := {"f": f, "node": holder, "fm": fm, "pos": pos, "vel": vel, "r": clampf(0.52 * lenk, 0.35, 1.1),
-		"yaw": randf() * TAU, "roll": 0.0, "flop": 0.0, "flop_t": randf_range(1.0, 3.0), "still": 0.0, "spin": randf_range(-6.0, 6.0)}
+		"puff_t": 0.0, "yaw": randf() * TAU, "roll": 0.0, "flop": 0.0, "flop_t": randf_range(1.0, 3.0), "still": 0.0, "spin": randf_range(-6.0, 6.0)}
 	holder.position = pos
 	fish.append(e)
 	return e
@@ -75,6 +78,7 @@ func _step(delta: float, player: Vector3) -> void:
 					v.x *= 0.8
 					v.z *= 0.8
 					landed.emit(e.f, impact)
+					touched.emit(p, impact)
 				else:
 					v.y = 0.0
 		else:
@@ -179,6 +183,11 @@ func _pose(e: Dictionary, dt: float) -> void:
 		e.still += dt
 	if airborne:
 		e.yaw += e.spin * dt
+	if sp > 3.5 and not airborne:
+		e.puff_t -= dt
+		if e.puff_t <= 0.0:
+			e.puff_t = 0.09
+			trail.emit(e.pos, sp)
 	var roll_target := 0.25 if (sp > 1.5 or airborne) else 1.35   # lies on its side once it stops
 	e.roll = lerpf(e.roll, roll_target, minf(1.0, dt * 6.0))
 	e.flop_t -= dt
@@ -205,6 +214,7 @@ func kick(origin: Vector3, dir: Vector3, power: float, reach := 3.4, cone := 0.5
 		e.vel = spread * power * randf_range(0.92, 1.08) + Vector3(0, 1.6 + power * 0.1, 0)
 		e.spin = randf_range(-9.0, 9.0)
 		e.pos.y = maxf(e.pos.y, GROUND + 0.02)
+		kicked.emit(e.pos, dir, power)
 		hit += 1
 	return hit
 

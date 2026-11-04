@@ -56,6 +56,51 @@ static func ripple(parent: Node3D, pos: Vector3, radius: float, color := Color(0
 		m.set_shader_parameter("a", (1.0 - k) * power), 0.0, 1.0, dur)
 	tw.tween_callback(mi.queue_free)
 
+static var _snow_mesh: SphereMesh
+static var _snow_mat: StandardMaterial3D
+static var _snow_ramp: Gradient
+
+## A puff of powder snow: soft white specks that billow up and settle (landings, kicks, sliding fish).
+static func snow_puff(parent: Node3D, pos: Vector3, amount := 6, power := 1.0, size := 0.14) -> void:
+	if not is_instance_valid(parent) or not parent.is_inside_tree():
+		return
+	if _snow_mesh == null:
+		_snow_mesh = SphereMesh.new()
+		_snow_mesh.radius = 0.5
+		_snow_mesh.height = 1.0
+		_snow_mesh.radial_segments = 6
+		_snow_mesh.rings = 3
+		_snow_mat = StandardMaterial3D.new()
+		_snow_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_snow_mat.vertex_color_use_as_albedo = true
+		_snow_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_snow_ramp = Gradient.new()
+		_snow_ramp.offsets = PackedFloat32Array([0.0, 0.25, 1.0])
+		_snow_ramp.colors = PackedColorArray([Color(1, 1, 1, 0.0), Color(0.96, 0.99, 1.0, 0.8), Color(0.88, 0.95, 1.0, 0.0)])
+	var pt := CPUParticles3D.new()
+	pt.one_shot = true
+	pt.amount = amount
+	pt.lifetime = 0.8
+	pt.explosiveness = 0.95
+	pt.direction = Vector3.UP
+	pt.spread = 75.0
+	pt.initial_velocity_min = 0.5 * power
+	pt.initial_velocity_max = 1.7 * power
+	pt.gravity = Vector3(0, -1.6, 0)
+	pt.damping_min = 1.0
+	pt.damping_max = 2.5
+	pt.scale_amount_min = 0.6 * size
+	pt.scale_amount_max = 1.5 * size
+	pt.color_ramp = _snow_ramp
+	pt.mesh = _snow_mesh
+	pt.material_override = _snow_mat
+	pt.local_coords = false
+	pt.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(pt)
+	pt.global_position = pos
+	pt.emitting = true
+	pt.create_tween().tween_callback(pt.queue_free).set_delay(1.3)
+
 ## A burst of droplets thrown up from the water.
 static func splash(parent: Node3D, pos: Vector3, amount := 14, power := 1.0, color := Color(0.8, 0.94, 1.0)) -> void:
 	if not is_instance_valid(parent) or not parent.is_inside_tree():

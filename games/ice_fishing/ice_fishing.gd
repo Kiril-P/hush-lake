@@ -386,6 +386,9 @@ func _ready() -> void:
 	yard.swallowed.connect(_on_fish_swallowed)
 	yard.overflowed.connect(_on_fish_overflow)
 	yard.edge_fn = scenery.edge_at
+	yard.touched.connect(func(pos: Vector3, impact: float): _snow_fx(pos, 4 + int(impact), 0.5 + impact * 0.12))
+	yard.trail.connect(func(pos: Vector3, speed: float): _snow_fx(pos + Vector3(0, 0.05, 0), 2, 0.4 + speed * 0.04))
+	yard.kicked.connect(func(pos: Vector3, dir: Vector3, power: float): _snow_fx(pos - dir * 0.3, 7, 0.9 + power * 0.06))
 	yard.landed.connect(func(_f, impact): sfx.play("plop", -10.0 + minf(impact, 8.0) * 0.5, randf_range(0.8, 1.2)))
 	_build_ui()
 	for c in model.tile_sector:
@@ -1014,14 +1017,13 @@ func _build_ui() -> void:
 	title.text = "HUSH LAKE"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	start_label = _plain(sbox, 20)
-	start_label.text = "Click to play   (Esc pauses)\n\nDrill a hole (1), fish it (2). Your catch drops onto the ice: push it into the Eye\nWalk into fish, or hold right mouse and let go to kick them. E picks them up.\nLost? Press H and Olga points the way\n\nWASD walk   V snowmobile   Tab journal   R refreeze\nM mute   F kick (or right mouse)   (N twice while paused: start over)"
+	start_label.text = "Click to play   (Esc pauses)\n\nDrill a hole (1), fish it (2). Your catch drops onto the ice:\npush it into the Eye. Walk into fish, or hold right mouse\nand let go to kick them. E picks them up.\nLost? Press H and Olga points the way.\n\nWASD walk   V snowmobile   Tab journal   R refreeze\nM mute   F kick   N twice (paused): start over"
 	start_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_build_settings(sbox)
-	start_panel = _panel(ui, sbox)
-	start_panel.set_anchors_preset(Control.PRESET_CENTER)
-	start_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	start_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
-	start_panel.position.y = -150
+	var start_center := CenterContainer.new()   # the card always sits in the middle of the screen, however tall it grows
+	start_center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	ui.add_child(start_center)
+	start_panel = _panel(start_center, sbox)
 	map_ctrl = Control.new()
 	map_ctrl.set_script(LakeMapScript)
 	map_ctrl.game = self
@@ -1410,7 +1412,6 @@ func _check_goals() -> void:
 			shake = maxf(shake, 0.04)
 			_banner("GOAL COMPLETE: %s  +%d" % [g.text, g.reward], Color(1, 0.9, 0.4))
 			_say("GOAL DONE: %s  (+%d coins)\n%s" % [g.text, g.reward, g.line])
-			_float_text($Player.global_position + Vector3(0, 0, -3), "GOAL! +%d" % g.reward, Color(1, 0.9, 0.3))
 
 func _goals_text() -> String:
 	var lines_out := []
@@ -1549,64 +1550,21 @@ func _sync_tool_view() -> void:
 	tool_spin = null
 	tool_line = null
 	tool_tip = null
-	var steel := Color(0.6, 0.62, 0.68)
-	var wood := Color(0.45, 0.3, 0.2)
 	match tool:
 		0:  # auger: spins while you hold click
 			var tier := mini(GameState.level("drill"), TIER_COLORS.size() - 1)
-			var tc: Color = TIER_COLORS[tier]
 			tool_base_x = deg_to_rad(-22)
-			_box(tool_body, Vector3(0, 0, 0.1), Vector3(0.2, 0.035, 0.035), wood)
-			tool_spin = Node3D.new()
-			tool_body.add_child(tool_spin)
-			var shaft := MeshInstance3D.new()
-			var cm := CylinderMesh.new()
-			cm.top_radius = 0.02
-			cm.bottom_radius = 0.02
-			cm.height = 0.7
-			shaft.mesh = cm
-			shaft.material_override = _mat(steel)
-			shaft.rotation_degrees.x = 90
-			shaft.position.z = -0.3
-			tool_spin.add_child(shaft)
-			for i in 6:
-				_box(tool_spin, Vector3(0, 0, -0.08 - i * 0.1), Vector3(0.11, 0.012, 0.045), tc, "", 0.3).rotation.z = i * 1.05
-			var tip := MeshInstance3D.new()
-			var tm := CylinderMesh.new()
-			tm.top_radius = 0.0
-			tm.bottom_radius = 0.035
-			tm.height = 0.12
-			tip.mesh = tm
-			tip.material_override = _mat(tc, 0.5)
-			tip.rotation_degrees.x = -90
-			tip.position.z = -0.71
-			tool_spin.add_child(tip)
-			if tier >= 2:
-				_box(tool_body, Vector3(0, 0.0, 0.0), Vector3(0.1, 0.1, 0.16), tc, "", 0.6)
+			var parts: Dictionary = ToolModels.auger(tool_body, TIER_COLORS[tier], tier)
+			tool_spin = parts.spin
 		1:  # rod, its line shows while a cast is active
 			var tier := mini(GameState.level("lines"), TIER_COLORS.size() - 1)
-			var tc: Color = wood if tier == 0 else TIER_COLORS[tier]
 			tool_base_x = deg_to_rad(30)
-			_box(tool_body, Vector3(0, 0, 0.05), Vector3(0.035, 0.045, 0.22), wood)
-			_box(tool_body, Vector3(0, 0, -0.45), Vector3(0.016, 0.016, 0.95), tc, "", 0.2 if tier > 0 else 0.0)
-			var reel := MeshInstance3D.new()
-			var rm := CylinderMesh.new()
-			rm.top_radius = 0.035
-			rm.bottom_radius = 0.035
-			rm.height = 0.04
-			reel.mesh = rm
-			reel.material_override = _mat(steel)
-			reel.rotation_degrees.z = 90
-			reel.position = Vector3(0.04, -0.03, 0.0)
-			tool_body.add_child(reel)
-			tool_tip = Node3D.new()
-			tool_tip.position = Vector3(0, 0, -0.93)
-			tool_body.add_child(tool_tip)
-			tool_line = null
-		_:  # building hammer
+			var parts: Dictionary = ToolModels.rod(tool_body, TIER_COLORS[tier], tier)
+			tool_tip = parts.tip
+		_:  # the builder's kit: the accent says what you are placing
 			tool_base_x = deg_to_rad(-10)
-			_box(tool_body, Vector3(0, 0, -0.18), Vector3(0.035, 0.035, 0.42), wood)
-			_box(tool_body, Vector3(0, 0, -0.42), Vector3(0.15, 0.09, 0.09), steel)
+			var accents := [Color(1.0, 0.78, 0.35), Color(0.95, 0.5, 0.2), Color(0.55, 0.9, 0.95), Color(0.3, 0.75, 0.85), Color(1.0, 0.9, 0.6)]
+			ToolModels.builder(tool_body, accents[clampi(tool - 2, 0, accents.size() - 1)])
 	tool_body.rotation.x = tool_base_x
 
 ## First-person snowmobile: hood, windshield, handlebars and gloves at the bottom of the screen.
@@ -1902,6 +1860,15 @@ func _animate(delta: float) -> void:
 func no_kicks_yet() -> bool:
 	return kicks == 0
 
+var snow_fx_budget := 0
+
+## A throttled puff of powder snow (many fish can slide at once; only a few puffs per frame).
+func _snow_fx(pos: Vector3, amount: int, power: float) -> void:
+	if snow_fx_budget <= 0:
+		return
+	snow_fx_budget -= 1
+	FishingFX.snow_puff(self, pos, amount, power)
+
 func _kick_max() -> float:
 	return KICK_BASE_MAX + 3.0 * GameState.level("kick")
 
@@ -1919,6 +1886,7 @@ func _tick_yard(delta: float, captured: bool) -> void:
 	yard.player_speed = minf(yard.player_speed, 14.0)
 	yard.player_vel = Vector3(ppos.x - player_prev.x, 0.0, ppos.z - player_prev.z) / maxf(delta, 0.0001) if player_prev != Vector3.ZERO else Vector3.ZERO
 	player_prev = ppos
+	snow_fx_budget = 5
 	yard.pull = 3.8 + 0.9 * eye_stage()
 	yard.step(delta, ppos)
 	_update_kick_rings(captured)

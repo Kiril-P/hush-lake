@@ -194,6 +194,66 @@ func _shore_pts(offset: float, y: float, segs := 96) -> Array:
 		pts.append(Vector3(sin(a) * r, y, -cos(a) * r))
 	return pts
 
+## The lake's ice: the vertex colour (pale at the shore, deep in the middle) plus a living surface: soft mottling, fine
+## cracks, drifting frost, a sky sheen toward the horizon and tiny glints that twinkle near you.
+const ICE_SHADER := """
+shader_type spatial;
+render_mode cull_disabled, specular_schlick_ggx;
+uniform vec3 sky_tint : source_color = vec3(0.62, 0.74, 0.95);
+uniform float glint_amount = 1.0;
+varying vec3 wpos;
+void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
+float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+vec2 hash2(vec2 p) { return vec2(hash(p), hash(p + 17.3)); }
+float vnoise(vec2 p) {
+	vec2 i = floor(p); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y);
+}
+float fbm(vec2 p) { float a = 0.5; float s = 0.0; for (int i = 0; i < 4; i++) { s += a * vnoise(p); p *= 2.03; a *= 0.5; } return s; }
+// distance to the nearest cell edge of a jittered grid: thin crack lines
+float cracks(vec2 p) {
+	vec2 g = floor(p); vec2 f = fract(p);
+	float d1 = 8.0; float d2 = 8.0;
+	for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+		vec2 o = vec2(float(x), float(y));
+		vec2 r = o + hash2(g + o) - f;
+		float d = dot(r, r);
+		if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) { d2 = d; }
+	}
+	return sqrt(d2) - sqrt(d1);
+}
+void fragment() {
+	vec2 w = wpos.xz;
+	float cdist = length(VERTEX);
+	float mott = fbm(w * 0.09) * 0.7 + fbm(w * 0.5) * 0.3;
+	vec3 base = COLOR.rgb * (0.88 + 0.22 * mott);
+	// big slow frost clouds lighten some areas, deep blue shows in others
+	float frost = smoothstep(0.52, 0.82, fbm(w * 0.035 + 7.0));
+	base = mix(base, vec3(0.7, 0.86, 1.0), frost * 0.2);
+	// fine cracks, strongest close up and in the paler ice
+	float cr = cracks(w * 0.11);
+	float crack = (1.0 - smoothstep(0.0, 0.035, cr)) * 0.35;
+	float cr2 = cracks(w * 0.42 + 3.1);
+	crack += (1.0 - smoothstep(0.0, 0.04, cr2)) * 0.16 * (1.0 - smoothstep(10.0, 40.0, cdist));
+	base = mix(base, vec3(0.85, 0.95, 1.0), crack * (0.4 + 0.6 * mott));
+	// sky sheen toward grazing angles
+	float fres = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 6.0);
+	ALBEDO = pow(base, vec3(1.9));   // the mesh colours are chosen as screen colours: darken to linear like the old material did
+	ROUGHNESS = 0.4 - 0.1 * mott;
+	SPECULAR = 0.12;
+	EMISSION = sky_tint * fres * 0.10;
+	// glints: tiny stars that twinkle on the ice near the camera
+	vec2 gp = w * 3.2;
+	vec2 gc = floor(gp);
+	float h = hash(gc);
+	float tw = smoothstep(0.9, 1.0, sin(TIME * (1.5 + 2.0 * h) + h * 40.0) * 0.5 + 0.5);
+	float spot = smoothstep(0.28, 0.0, length(fract(gp) - 0.5)) * step(0.93, h);
+	float near = 1.0 - smoothstep(6.0, 34.0, length(VERTEX));
+	EMISSION += vec3(0.9, 0.97, 1.0) * spot * tw * near * glint_amount;
+}
+"""
+var ice_mat: ShaderMaterial
+
 func _ice_and_eye() -> void:
 	# glassy ice with a lobed shoreline: pale and cool at the edges, deeper blue toward the middle
 	var segs := 96
@@ -217,15 +277,14 @@ func _ice_and_eye() -> void:
 				st.set_normal(Vector3.UP)
 				st.set_color(cols[v[0]])
 				st.add_vertex(rings[v[0]][v[1]])
-	var im := StandardMaterial3D.new()
-	im.vertex_color_use_as_albedo = true
-	im.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	im.roughness = 0.35
-	im.metallic_specular = 0.12
-	im.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var ish := Shader.new()
+	ish.code = ICE_SHADER
+	var im := ShaderMaterial.new()
+	im.shader = ish
 	var mi := MeshInstance3D.new()
 	mi.mesh = st.commit()
 	mi.material_override = im
+	ice_mat = im
 	add_child(mi)
 	# basin walls + floor under the ice
 	var top := _shore_pts(0.3, -0.1, segs)

@@ -21,6 +21,7 @@ func _ready() -> void:
 	var g = load("res://games/ice_fishing/ice_fishing.tscn").instantiate()
 	add_child(g)
 	await get_tree().process_frame
+	g.test_capture = true   # no pause card over the pictures
 	var only := OS.get_environment("SHOT_ONLY")
 	for v in VIEWS:
 		if only != "" and v[0] != only:
@@ -79,7 +80,7 @@ func _ready() -> void:
 			print("saved yard ", step[0])
 		g.kick_charge = 1.0
 		g._release_kick()
-		for step in [["c", 0.5], ["d", 1.0]]:
+		for step in [["c", 0.18], ["d", 0.4]]:
 			await get_tree().create_timer(step[1]).timeout
 			get_viewport().get_texture().get_image().save_png("res://renders/shot_yard_%s.png" % step[0])
 			print("saved yard ", step[0])
@@ -208,6 +209,25 @@ func _ready() -> void:
 				await get_tree().process_frame
 			get_viewport().get_texture().get_image().save_png("res://renders/shot_%s.png" % v3[0])
 			print("saved ", v3[0])
+	# the tools in hand, big: auger tiers, rod tiers, builder kit
+	if only == "tools":
+		var pt: Node3D = g.get_node("Player")
+		pt.position = Vector3(-8.2, 1.7, 14.3)
+		pt.rotation.y = deg_to_rad(-30)
+		g.cam.rotation.x = deg_to_rad(-10)
+		g.day_t = 0.0
+		g.scenery.set_time(0.0)
+		g.unlocked["t_auto"] = true
+		g.unlocked["t_build"] = true
+		for combo in [["tool_auger0", 0, 0], ["tool_auger3", 0, 3], ["tool_rod0", 1, 0], ["tool_rod3", 1, 3], ["tool_build", 6, 0]]:
+			g.tool = combo[1]
+			GameState.upgrades["drill"] = combo[2] if combo[1] == 0 else 0
+			GameState.upgrades["lines"] = combo[2] if combo[1] == 1 else 0
+			g._sync_tool_view()
+			for i in 12:
+				await get_tree().process_frame
+			get_viewport().get_texture().get_image().save_png("res://renders/shot_%s.png" % combo[0])
+			print("saved ", combo[0])
 	# the whole fishing sequence, frame by frame
 	if only == "fishing":
 		var pf2: Node3D = g.get_node("Player")
