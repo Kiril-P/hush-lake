@@ -83,5 +83,73 @@ func _ready() -> void:
 		p.rotation.y = deg_to_rad(v[2])
 		g.cam.rotation.x = deg_to_rad(v[3])
 		await measure(v[0], g)
+	await action_phase(g, p)
 	print("PERF %s (%d failures)" % ["PASS" if fails == 0 else "FAIL", fails])
 	get_tree().quit(1 if fails > 0 else 0)
+
+func key_down(code: int, pressed: bool) -> void:
+	var ev := InputEventKey.new()
+	ev.keycode = code
+	ev.physical_keycode = code
+	ev.pressed = pressed
+	Input.parse_input_event(ev)
+
+## Hitch hunt: walk, switch tools, kick a pile, build things and pick fish up, timing every frame. Spikes (first-time effects,
+## shader compiles, spawn bursts) show up as frames far above the average.
+func action_phase(g: Node, p: Node3D) -> void:
+	p.position = Vector3(-30.0, 1.7, 14.0)
+	p.rotation.y = deg_to_rad(-90.0)
+	g.cam.rotation.x = deg_to_rad(-12.0)
+	g.yard.clear_all()
+	for i in 30:
+		g.yard.spawn(g._make_fish(g.SPECIES[i % 4]), Vector3(-34 - (i % 6) * 0.9, 0.05, 14 + floorf(i / 6.0) * 0.9), Vector3.ZERO)
+	var times: Array = []
+	var labels: Array = []
+	var step := func(label: String, frames: int):
+		for i in frames:
+			await get_tree().process_frame
+			times.append(get_process_delta_time() * 1000.0)
+			labels.append(label)
+	await step.call("settle", 30)
+	key_down(KEY_W, true)
+	await step.call("walk", 90)
+	key_down(KEY_W, false)
+	for tk in [KEY_2, KEY_1, KEY_3, KEY_6, KEY_7, KEY_1]:
+		g.unlocked["t_auto"] = true
+		key_down(tk, true)
+		key_down(tk, false)
+		await step.call("tool swap", 12)
+	g._start_kick()
+	await step.call("kick charge", 20)
+	g.kick_charge = 1.0
+	g._release_kick()
+	await step.call("kick + 30 fish sliding", 90)
+	g._pick_up_fish()
+	await step.call("pickup", 20)
+	var h: Dictionary = g._make_hole(Vector3(-20, 0, 30))
+	await step.call("drill hole", 6)
+	g._build_auto(h)
+	await step.call("build auto-rod", 20)
+	g._build_belt(h, false)
+	await step.call("build belt", 20)
+	g._install_machine(h, "cannery", false)
+	await step.call("build cannery", 20)
+	g._build_depot(Vector3(-50, 0, 10), false)
+	await step.call("build depot", 20)
+	for i in 70:   # overflow burst: more fish than the ice holds, each one fading out
+		g.yard.spawn(g._make_fish(g.SPECIES[i % 4]), Vector3(-40 + (i % 10) * 1.1, 0.05, 40 + floorf(i / 10.0) * 1.1), Vector3(0, 6, 0))
+	await step.call("70-fish burst", 60)
+	var sorted := times.duplicate()
+	sorted.sort()
+	var worst := 0.0
+	var worst_label := ""
+	var spikes := 0
+	for i in times.size():
+		if times[i] > worst:
+			worst = times[i]
+			worst_label = labels[i]
+		if times[i] > 25.0:
+			spikes += 1
+	print("PERF actions  frames %d  p99 %.2f ms  worst %.2f ms during '%s'  frames over 25 ms: %d" % [times.size(), sorted[int(sorted.size() * 0.99)], worst, worst_label, spikes])
+	check("actions: no frame over 50 ms (a visible hitch)", worst <= 50.0)
+	check("actions: at most 3 frames over 25 ms", spikes <= 3)

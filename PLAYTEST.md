@@ -49,3 +49,7 @@ The save is `ice_fishing.save.json` in the same folder.
 19. The ice-breaker: when did you build it, and did it feel like a payoff or like it played the game for you?
 20. Did anything stop you from knowing what to do next (goals, prompts, the Q key)?
 
+
+
+## What to judge by hand (nothing else can)
+Play 10-15 minutes with a real mouse and speakers or headphones, then write down: (1) does walking into fish and kicking them feel good, or fiddly? (2) is the kick charge (0.9 s) and range right? (3) are any sounds annoying when repeated (fight reel, drill, footsteps)? is the wind/ice ambience pleasant or distracting? (4) does anything feel janky: camera, tool swap, build pop-in, the snow puffs? (5) is it clear what to do at every moment? (6) where did you get bored? Tools that already cover the measurable side: tools/run_yard.sh, run_safety.sh, run_guide.sh, run_audio.sh, run_smoke.sh, first10.sh, play_bot.sh, perf_render.sh.

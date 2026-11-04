@@ -137,3 +137,8 @@ Judging method: renders by `tools/showroom.sh` and `tools/shot.sh`; headless sui
 - Audio mix pass: per-role loudness table, limiter, living ambience, new physical sounds; `tools/run_audio.sh` (levels, clipping, loop clicks, limiter).
 - Smoothness: tool-swap dip, build pop-in (skipped while restoring a save), pickup hop to the hand. `tools/perf_render.sh` measures rendered frame time on a busy late-game lake with vsync off: ~7-9 ms average (110-150 fps), p95 < 11 ms, worst 16 ms, 4-6k draw calls. Startup (audio synthesis + scene) is about 0.5 s.
 - New buildings take a third of a second to grow in: a click during that window hits a smaller collider (the bot waits).
+
+### Polish round 3: what can be measured without a human
+- `tools/perf_render.sh` now also runs an action phase (walk, tool swaps, kick charge, a kick into 30 sliding fish, pickup, drilling, building auto-rod/belt/cannery/depot, a 70-fish overflow burst) and reports p99 and the worst frame with its label. Latest: p99 12.6 ms, worst about 29 ms (during the artificial 70-fish spawn burst), 1 frame over 25 ms in 468.
+- Audio was analysed offline (`tools/audio_dump.tscn` + a numpy script): the repeating sounds (fight reel click, drill, step) were shrill (reel: 45% of energy above 5 kHz) and the wind loop was almost pure 40 Hz (inaudible on laptop speakers). Reel/drill/step/slide were re-synthesised with a softer click plus a mid tone, wind and gusts moved to a ~400 Hz howl with a slow swell, thud and kick got a mid knock, and a small reverb sits before the master limiter. `tools/run_audio.sh` now asserts these spectral properties too.
+- Still only a human can judge: whether any of it FEELS good. See PLAYTEST.md for what to look at.

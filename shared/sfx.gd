@@ -23,27 +23,33 @@ func _ready() -> void:
 	streams["goal"] = _wav(_arp([523.0, 659.0, 784.0, 1047.0], 0.12, 0.45))
 	streams["buy"] = _wav(_tone(520.0, 780.0, 0.18, 10.0, 0.45))
 	streams["deny"] = _wav(_tone(200.0, 150.0, 0.16, 12.0, 0.4))
-	streams["drill"] = _wav(_noise(0.1, 0.35, 28.0, 0.35))
+	streams["drill"] = _wav(_mix([_noise(0.1, 0.22, 26.0, 0.35), _tone(240.0, 200.0, 0.1, 30.0, 0.18)]))
 	streams["tick"] = _wav(_tone(1900.0, 1500.0, 0.035, 60.0, 0.5))
 	streams["splash"] = _wav(_mix([_noise(0.4, 0.45, 8.0, 0.55), _tone(300.0, 140.0, 0.22, 14.0, 0.25)]))
 	streams["plop"] = _wav(_tone(420.0, 160.0, 0.16, 18.0, 0.6))
 	streams["hook"] = _wav(_mix([_noise(0.16, 0.5, 20.0, 0.45), _tone(500.0, 1100.0, 0.1, 22.0, 0.35)]))
-	streams["reel"] = _wav(_noise(0.04, 0.8, 70.0, 0.55))
+	streams["reel"] = _wav(_mix([_noise(0.045, 0.3, 60.0, 0.5), _tone(520.0, 440.0, 0.045, 55.0, 0.3)]))   # a soft ratchet click, not a hiss: it repeats all fight long
 	streams["rumble"] = _wav(_mix([_noise(3.4, 0.012, 0.25, 0.55), _tone(48.0, 38.0, 3.4, 0.3, 0.4)]))
 	streams["swell"] = _wav(_swell(110.0, 330.0, 3.5, 0.4))
 	streams["awaken"] = _wav(_mix([_tone(110.0, 110.0, 3.2, 1.0, 0.32), _tone(220.0, 220.0, 3.0, 1.2, 0.26), _tone(330.0, 330.0, 2.8, 1.4, 0.2),
 		_tone(440.0, 440.0, 2.6, 1.6, 0.17), _tone(660.0, 660.0, 2.2, 2.0, 0.12), _tone(1320.0, 1320.0, 1.6, 3.0, 0.08), _noise(0.7, 0.25, 4.0, 0.45)]))
 	# physical sounds of the new fish-on-ice play
-	streams["kick"] = _wav(_mix([_tone(150.0, 55.0, 0.18, 22.0, 0.7), _noise(0.22, 0.1, 12.0, 0.45)]))
-	streams["thud"] = _wav(_mix([_tone(190.0, 75.0, 0.13, 28.0, 0.7), _noise(0.06, 0.25, 40.0, 0.25)]))
-	streams["step"] = _wav(_noise(0.07, 0.2, 38.0, 0.5))
-	streams["slide"] = _wav(_noise(0.3, 0.06, 7.0, 0.3))
+	streams["kick"] = _wav(_mix([_tone(150.0, 55.0, 0.18, 22.0, 0.6), _tone(320.0, 160.0, 0.08, 30.0, 0.3), _noise(0.22, 0.14, 12.0, 0.45)]))
+	streams["thud"] = _wav(_mix([_tone(190.0, 75.0, 0.13, 28.0, 0.7), _tone(340.0, 240.0, 0.06, 45.0, 0.3), _noise(0.06, 0.3, 40.0, 0.25)]))   # the mid knock keeps it audible on laptop speakers
+	streams["step"] = _wav(_mix([_noise(0.07, 0.45, 34.0, 0.45), _tone(170.0, 120.0, 0.05, 50.0, 0.25)]))
+	streams["slide"] = _wav(_noise(0.3, 0.2, 6.0, 0.3))
 	streams["creak"] = _wav(_creak(1.3))
 	streams["gust"] = _wav(_swell_noise(4.5))
 	streams["wind"] = _wav(_wind(6.0), true)
 	streams["pad"] = _wav(_pad(8.0), true)
 	_mix_pass()
 	# the master bus gets a limiter so a stack of simultaneous sounds can never clip
+	var rv := AudioEffectReverb.new()   # a hint of open cold air around everything
+	rv.room_size = 0.35
+	rv.damping = 0.7
+	rv.wet = 0.1
+	rv.dry = 1.0
+	AudioServer.add_bus_effect(0, rv)
 	var lim := AudioEffectLimiter.new()
 	lim.ceiling_db = -1.0
 	AudioServer.add_bus_effect(0, lim)
@@ -198,10 +204,12 @@ func _wind(dur: float) -> PackedFloat32Array:
 	var out := PackedFloat32Array()
 	out.resize(n)
 	var y := 0.0
+	var y2 := 0.0
 	for i in n:
 		var t := float(i) / n
-		y += (randf_range(-1.0, 1.0) - y) * 0.03
-		out[i] = y * (0.5 - 0.5 * cos(TAU * t)) * 2.2
+		y += (randf_range(-1.0, 1.0) - y) * 0.11   # a howl around 350 Hz, not a 40 Hz rumble that small speakers drop
+		y2 += (y - y2) * 0.25
+		out[i] = y2 * (0.5 - 0.5 * cos(TAU * t)) * (0.7 + 0.3 * sin(TAU * 3.0 * t)) * 3.6
 	return out
 
 func _pad(dur: float) -> PackedFloat32Array:
@@ -242,7 +250,7 @@ func _swell_noise(dur: float) -> PackedFloat32Array:
 	var y2 := 0.0
 	for i in n:
 		var t := float(i) / n
-		y += (randf_range(-1.0, 1.0) - y) * 0.045
-		y2 += (y - y2) * 0.2
-		out[i] = y2 * sin(PI * t) * sin(PI * t) * 2.4
+		y += (randf_range(-1.0, 1.0) - y) * 0.13
+		y2 += (y - y2) * 0.3
+		out[i] = y2 * sin(PI * t) * sin(PI * t) * 3.4
 	return out
