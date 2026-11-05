@@ -31,6 +31,7 @@ var camp: Dictionary = {}     # piece name -> Node3D
 var flames: Array = []
 var fire_light: OmniLight3D
 var dog: Node3D
+var dog_body: MeshInstance3D
 var dog_breath := 0.0
 var night := 0.0
 var wind_dir := Vector2(1.0, 0.25).normalized()
@@ -178,16 +179,28 @@ func _spawn_crack(player: Vector3) -> void:
 			c = k
 	if c.is_empty():
 		return
-	var a := rng.randf() * TAU
-	var d := rng.randf_range(10.0, 32.0)
-	var pos := Vector3(player.x + cos(a) * d, 0.04, player.z + sin(a) * d)
-	var flat := Vector2(pos.x, pos.z)
-	var lim: float = scenery.edge_at(pos.x, pos.z) - 6.0
-	if flat.length() > lim:
-		flat = flat.normalized() * lim
-	if flat.length() < 15.0:
-		flat = (flat.normalized() if flat.length() > 0.1 else Vector2.RIGHT) * 15.0
-	pos = Vector3(flat.x, 0.04, flat.y)
+	var pos := Vector3.ZERO
+	var ok := false
+	for attempt in 8:   # a spot on open ice: clear of the Eye (the zig-zag reaches 9 m either way) and of every stall, hut and machine
+		var a := rng.randf() * TAU
+		var d := rng.randf_range(10.0, 32.0)
+		var flat := Vector2(player.x + cos(a) * d, player.z + sin(a) * d)
+		var lim: float = scenery.edge_at(flat.x, flat.y) - 10.0
+		if flat.length() > lim:
+			flat = flat.normalized() * lim
+		if flat.length() < 22.0:
+			continue
+		var clear := true
+		for o in scenery.obstacles:
+			if flat.distance_to(Vector2(o.x, o.y)) < o.z + 10.0:
+				clear = false
+				break
+		if clear:
+			pos = Vector3(flat.x, 0.04, flat.y)
+			ok = true
+			break
+	if not ok:
+		return
 	var n: Node3D = c.node
 	n.position = pos
 	n.rotation.y = rng.randf() * TAU
@@ -341,13 +354,11 @@ func _build_string_lights(animate: bool) -> void:
 			bead.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			scenery.glow_mats.append([bm, 0.5, 3.4])
 		prev = pt
-	scenery.obstacles.append(Vector3(pole_pos.x, pole_pos.z, 0.5))
-	if animate:
-		_pop(root)
+	scenery.obstacles.append(Vector3(pole_pos.x, pole_pos.z, 0.5))   # (no scale pop: this root's children are in world coordinates and would fly in from the Eye)
 
 func _build_woodpile_sled_dog(animate: bool) -> void:
 	var root := Node3D.new()
-	root.position = _hut_point(Vector3(4.2, 0.0, 4.6))
+	root.position = _hut_point(Vector3(-7.0, 0.0, 0.8))   # the far side of the hut from the tool rack
 	root.rotation.y = hut.rotation.y
 	add_child(root)
 	camp["yard"] = root
@@ -370,6 +381,7 @@ func _build_woodpile_sled_dog(animate: bool) -> void:
 	var fur2 := Color(0.9, 0.84, 0.74)
 	var body = scenery._mesh(dog, _ball_mesh(), scenery._mat(fur), Vector3(0, 0.3, 0))
 	body.scale = Vector3(1.1, 0.55, 0.7)
+	dog_body = body
 	var head = scenery._mesh(dog, _ball_mesh(), scenery._mat(fur2), Vector3(0.62, 0.26, 0.12))
 	head.scale = Vector3(0.42, 0.34, 0.36)
 	for s in [-1.0, 1.0]:
@@ -412,8 +424,6 @@ func _build_lantern_posts(animate: bool) -> void:
 		root.add_child(light)
 		camp["post_light_%d" % camp.size()] = light
 		scenery.obstacles.append(Vector3(pos.x, pos.z, 0.4))
-	if animate:
-		_pop(root)
 
 # ---------- every frame ----------
 ## `night` is the sky's darkness 0..1, `player` the player's position, `cutscene` freezes birds and cracks quietly.
@@ -517,7 +527,7 @@ func _update_camp(delta: float, player: Vector3) -> void:
 	if dog:
 		dog_breath += delta
 		var near := Vector2(player.x - dog.position.x, player.z - dog.position.z).length() < 7.0
-		dog.scale.y = 1.0 + 0.04 * sin(dog_breath * (2.6 if near else 1.6))
+		dog_body.scale.y = 0.55 * (1.0 + 0.06 * sin(dog_breath * (2.6 if near else 1.6)))
 		dog.rotation.y = lerp_angle(dog.rotation.y, atan2(player.x - dog.position.x, player.z - dog.position.z) - PI * 0.5 if near else dog.rotation.y, minf(1.0, delta * 1.5))
 	for k in camp:   # lantern posts glow with the night
 		if String(k).begins_with("post_light_"):

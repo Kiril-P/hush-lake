@@ -38,6 +38,7 @@ var vals: Dictionary = {}     # the live, blended numbers (see KEYS)
 var from_vals: Dictionary = {}
 var aurora := false           # an aurora night is on (set once per night)
 var aurora_decided := false
+var always_aurora := false    # the Eye is awake (stage 5): every night under a quiet sky has an aurora
 var was_night := false
 var enabled := true
 var rng := RandomNumberGenerator.new()
@@ -105,20 +106,20 @@ func tick(delta: float, night: float, allow_change := true) -> void:
 		aurora_decided = false
 	if is_night and not aurora_decided:
 		aurora_decided = true
-		aurora = enabled and (cur in ["clear", "flurry"]) and rng.randf() < 0.55
+		aurora = enabled and (cur in ["clear", "flurry"]) and (always_aurora or rng.randf() < 0.55)
 	if not is_night and night < 0.3:
 		aurora = false
 		aurora_decided = false
 	was_night = is_night
 
 func aurora_on() -> bool:
-	return aurora and enabled
+	return aurora and enabled and cur in ["clear", "flurry"]   # a storm that rolls in puts it out (the curtains are hidden, so is the bonus)
 
 func rare_mult() -> float:
 	return float(vals.rare) * (AURORA_RARE if aurora_on() else 1.0)
 
 func to_dict() -> Dictionary:
-	return {"cur": cur, "hold": hold, "blend": blend, "from": from_vals, "aurora": aurora, "decided": aurora_decided, "el": elapsed}
+	return {"cur": cur, "hold": hold, "blend": blend, "from": from_vals, "aurora": aurora, "decided": aurora_decided, "was": was_night, "el": elapsed}
 
 func from_dict(d: Dictionary) -> void:
 	if d.is_empty():
@@ -134,6 +135,7 @@ func from_dict(d: Dictionary) -> void:
 		from_vals[key] = float(fv.get(key, STATES[cur][key]))
 	aurora = bool(d.get("aurora", false))
 	aurora_decided = bool(d.get("decided", false))
+	was_night = bool(d.get("was", false))
 	elapsed = float(d.get("el", 0.0))
 	var k := smoothstep(0.0, 1.0, blend)
 	for key in KEYS:

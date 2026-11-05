@@ -213,6 +213,76 @@ func _ready() -> void:
 	check("the campfire flickers and burns brighter at night", lv.fire_light.light_energy > 1.0)
 	check("the camp pieces are solid for fish and feet", g.scenery.obstacles.size() > 10)
 
+	# stage 5: an awake Eye gives every quiet night an aurora
+	g.stats.eye_fed = g.EYE_STAGES[4]
+	g._refresh()
+	check("with the Eye awake the aurora comes every quiet night", g.weather.always_aurora)
+	var all_nights := 0
+	g.weather.elapsed = 999.0
+	for n in 12:
+		g.weather.force("clear")
+		g.weather.tick(0.1, 0.0)
+		g.weather.tick(0.1, 0.9)
+		if g.weather.aurora_on():
+			all_nights += 1
+	check("...12 of 12 nights (%d)" % all_nights, all_nights == 12)
+	g.stats.eye_fed = g.EYE_STAGES[3]
+	g._refresh()
+	g.weather.always_aurora = false
+
+	# the review's findings: nothing overlaps, nothing flies in from the Eye, an aurora is decided once per night
+	var rack_o := Vector2(g.rack_pos.x, g.rack_pos.z)
+	var yard_p: Vector3 = lv.camp.yard.position
+	check("the sled and woodpile stand clear of the tool rack (%.1f m)" % Vector2(yard_p.x, yard_p.z).distance_to(rack_o), Vector2(yard_p.x, yard_p.z).distance_to(rack_o) > 8.0)
+	var fire_p: Vector3 = lv.camp.fire.position
+	check("...and the campfire is clear of the rack and the yard", Vector2(fire_p.x, fire_p.z).distance_to(rack_o) > 8.0 and Vector2(fire_p.x, fire_p.z).distance_to(Vector2(yard_p.x, yard_p.z)) > 4.0)
+	check("the string lights and posts are not scaled around the origin (no fly-in)", lv.camp.lights.scale == Vector3.ONE and lv.camp.posts.scale == Vector3.ONE)
+	var night_w := Weather.new(21)
+	night_w.elapsed = 999.0
+	night_w.force("clear")
+	night_w.tick(0.1, 0.0)
+	night_w.tick(0.1, 0.9)
+	var was_on := night_w.aurora_on()
+	var dec_key := night_w.to_dict()
+	var reroll := 0
+	for i in 20:
+		var nw2 := Weather.new(100 + i)
+		nw2.from_dict(dec_key)
+		nw2.tick(0.1, 0.9)
+		if nw2.aurora_on() != was_on:
+			reroll += 1
+	check("reloading in the middle of a night does not re-roll its aurora", reroll == 0)
+	var sw := Weather.new(5)
+	sw.elapsed = 999.0
+	sw.force("clear")
+	sw.tick(0.1, 0.0)
+	sw.tick(0.1, 0.9)
+	sw.aurora = true
+	sw.force("blizzard")
+	check("a storm that rolls in puts the aurora (and its rare bonus) out", not sw.aurora_on() and sw.rare_mult() < 1.4 * 1.0 + 0.01 and absf(sw.rare_mult() - sw.vals.rare) < 0.001)
+	var crack_ok := true
+	for i in 60:
+		lv.crack_t = 0.01
+		lv.update(0.05, 0.0, Vector3(randf_range(-30, 30), 1.7, randf_range(-30, 30)))
+		for cr in lv.cracks:
+			if cr.node.visible:
+				var cp: Vector3 = cr.node.position
+				if Vector2(cp.x, cp.z).length() < 20.0:
+					crack_ok = false
+				for o in g.scenery.obstacles:
+					if Vector2(cp.x, cp.z).distance_to(Vector2(o.x, o.y)) < o.z + 8.0:
+						crack_ok = false
+	check("cracks stay off the Eye, stalls and machines", crack_ok)
+	g.day_t = 0.0
+	var offline_a: float = g.bite_mult_base()
+	g.weather.force("blizzard")
+	for i in 60:
+		g.weather.tick(0.5, 0.0)
+	check("offline pacing ignores the weather (base %.3f) while live bites follow it (%.3f)" % [offline_a, g.bite_mult()], absf(g.bite_mult_base() - offline_a) < 0.0001 and g.bite_mult() < offline_a * 0.9)
+	g.weather.force("clear")
+	for i in 60:
+		g.weather.tick(0.5, 0.0)
+
 	# save and restore
 	g.weather.force("snowfall")
 	for i in 40:

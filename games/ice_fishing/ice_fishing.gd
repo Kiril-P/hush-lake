@@ -1428,7 +1428,9 @@ func sale_mult() -> float:
 func depth_value() -> float: return 1.0 + DEPTH_VALUE * _meta_int("lakes")
 func rig_cap() -> int: return RIG_BASE_CAP + maxi(eye_stage() - 1, 0)
 func tithe_cost() -> float: return ceil(TITHE_BASE * pow(TITHE_GROWTH, stats.tithe))
-func bite_mult() -> float: return pow(0.88, GameState.level("bait")) * (BAIT_MULT if bait_t > 0.0 else 1.0) * world_bite()
+func bite_mult() -> float: return bite_mult_base() * world_bite()
+## The bite pace without the sky's mood (offline progress must not depend on what the weather was when you quit).
+func bite_mult_base() -> float: return pow(0.88, GameState.level("bait")) * (BAIT_MULT if bait_t > 0.0 else 1.0)
 func ride_mult() -> float: return RIDE_SPEED[mini(GameState.level("snowmobile"), RIDE_SPEED.size() - 1)] if riding else 1.0
 func walk_speed() -> float: return (6.0 + 1.6 * GameState.level("boots")) * ride_mult()
 func work_speed() -> float: return 1.0 + 0.6 * GameState.level("drill")
@@ -1676,6 +1678,7 @@ func _refresh() -> void:
 	map_ctrl.queue_redraw()
 	if living:
 		living.set_camp_level(eye_stage(), session_t > 3.0)
+		weather.always_aurora = eye_stage() >= EYE_STAGES.size()
 	_sync_tool_view()
 	_refresh_dock()
 	_refresh_rack()
@@ -4738,7 +4741,7 @@ func _offline(away: float) -> void:
 			continue
 		var budget := away
 		while budget > 0.0 and model.tile_left(t.c) > 0:
-			budget -= (AUTO_WAIT[0] + AUTO_WAIT[1]) * 0.5 * bite_mult() * model.wait_factor(t.c)
+			budget -= (AUTO_WAIT[0] + AUTO_WAIT[1]) * 0.5 * bite_mult_base() * model.wait_factor(t.c)
 			if t.belt != null:
 				var f := _draw_fish(t)
 				if f.is_empty():
