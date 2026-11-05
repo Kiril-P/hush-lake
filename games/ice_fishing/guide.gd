@@ -717,6 +717,7 @@ func _awaken_open(instant: bool) -> void:
 		fl.tween_property(game.flash_rect, "color:a", 0.0, 2.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		game.shake = 0.3
 		game.sfx.play("awaken", 0.0)
+		game.sfx.score.hit("awaken")
 		game.sfx.play("rare", -6.0, 0.8)
 
 func skip_intro(skipped := true) -> void:

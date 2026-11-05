@@ -18,6 +18,7 @@ const DEFS := {
 	"ui":     {"label": "UI size", "kind": "slider", "def": 1.0, "min": 0.8, "max": 1.4, "step": 0.05, "tab": 1, "fmt": "pct", "hint": "Scales every card and label on screen."},
 	"vol":    {"label": "Master volume", "kind": "slider", "def": 1.0, "min": 0.0, "max": 1.0, "tab": 2, "fmt": "pct", "hint": ""},
 	"sfx":    {"label": "Effects", "kind": "slider", "def": 1.0, "min": 0.0, "max": 1.0, "tab": 2, "fmt": "pct", "hint": "Kicks, splashes, coins, drills."},
+	"music":  {"label": "Music", "kind": "slider", "def": 0.8, "min": 0.0, "max": 1.0, "tab": 2, "fmt": "pct", "hint": "The score: a piano and glass bells that follow the hour, the weather and the Eye."},
 	"amb":    {"label": "Ambience", "kind": "slider", "def": 1.0, "min": 0.0, "max": 1.0, "tab": 2, "fmt": "pct", "hint": "The wind and the soft pad underneath."},
 	"full":   {"label": "Fullscreen", "kind": "toggle", "def": 0.0, "tab": 3, "hint": ""},
 	"vsync":  {"label": "V-Sync", "kind": "toggle", "def": 1.0, "tab": 3, "hint": "Smoother picture, may add a little input delay."},

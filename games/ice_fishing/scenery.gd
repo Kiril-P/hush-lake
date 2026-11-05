@@ -58,10 +58,10 @@ var _night := 0.0
 
 # golden hour -> dusk -> night -> dawn -> golden hour
 const KEYS := [
-	{"top": Color(0.17, 0.25, 0.55), "hor": Color(1.0, 0.68, 0.52), "fog": Color(0.60, 0.66, 0.86), "sun": Color(1.0, 0.86, 0.72), "e": 1.0},
-	{"top": Color(0.10, 0.15, 0.40), "hor": Color(0.78, 0.42, 0.50), "fog": Color(0.38, 0.42, 0.64), "sun": Color(0.9, 0.55, 0.55), "e": 0.7},
-	{"top": Color(0.03, 0.05, 0.16), "hor": Color(0.10, 0.16, 0.34), "fog": Color(0.08, 0.13, 0.27), "sun": Color(0.55, 0.65, 1.0), "e": 0.55},
-	{"top": Color(0.24, 0.34, 0.62), "hor": Color(1.00, 0.72, 0.60), "fog": Color(0.66, 0.68, 0.88), "sun": Color(1.0, 0.8, 0.7), "e": 0.85},
+	{"top": Color(0.08, 0.27, 0.42), "hor": Color(1.0, 0.64, 0.40), "fog": Color(0.34, 0.56, 0.70), "sun": Color(1.0, 0.84, 0.68), "e": 1.0},
+	{"top": Color(0.03, 0.17, 0.27), "hor": Color(0.86, 0.46, 0.34), "fog": Color(0.16, 0.32, 0.46), "sun": Color(0.9, 0.55, 0.5), "e": 0.7},
+	{"top": Color(0.015, 0.045, 0.11), "hor": Color(0.05, 0.16, 0.27), "fog": Color(0.04, 0.11, 0.21), "sun": Color(0.55, 0.65, 1.0), "e": 0.55},
+	{"top": Color(0.11, 0.31, 0.47), "hor": Color(1.00, 0.70, 0.52), "fog": Color(0.38, 0.58, 0.72), "sun": Color(1.0, 0.8, 0.7), "e": 0.85},
 ]
 var crane_arm: Node3D
 var _time := 0.0
@@ -105,13 +105,15 @@ func build(env: Environment, sun: DirectionalLight3D, hut: Node3D) -> void:
 	# atmosphere
 	env.fog_enabled = true
 	env.fog_light_color = Color(0.60, 0.66, 0.86)
-	env.fog_density = 0.0009
+	env.fog_density = 0.0016   # a little more air: forest and mountains step back in blue layers (the references' biggest single win)
+	env.fog_aerial_perspective = 0.45
+	env.fog_sky_affect = 0.3
 	env.glow_enabled = true
-	env.glow_intensity = 0.8
-	env.glow_bloom = 0.1
+	env.glow_intensity = 0.6   # softer bloom: the iris rim kept turning white
+	env.glow_bloom = 0.06
 	env.adjustment_enabled = true   # a gentle grade that ties sky, ice and lamps together: a touch more contrast and colour
 	env.adjustment_contrast = 1.06
-	env.adjustment_saturation = 1.12
+	env.adjustment_saturation = 1.0
 	# sun disc low on the horizon, light aimed from it
 	var sun_dir := Vector3(sin(deg_to_rad(25.0)), 0.045, -cos(deg_to_rad(25.0))).normalized()
 	var sun_pos := sun_dir * 700.0
@@ -268,7 +270,7 @@ func _ice_and_eye() -> void:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var factors := [0.0, 0.45, 0.88, 1.0]   # the pale shore band is wider now, so the ice meets the bank softly
-	var cols := [Color(0.44, 0.7, 0.84, 1.0), Color(0.52, 0.77, 0.88, 1.0), Color(0.67, 0.88, 0.95, 1.0), Color(0.84, 0.95, 0.99, 1.0)]   # hue pulled from periwinkle toward teal   # less saturated: it read as ocean
+	var cols := [Color(0.16, 0.42, 0.55, 1.0), Color(0.24, 0.52, 0.64, 1.0), Color(0.32, 0.6, 0.72, 1.0), Color(0.46, 0.72, 0.82, 1.0)]   # hue pulled from periwinkle toward teal   # less saturated: it read as ocean
 	var rings := []
 	for k in factors.size():
 		var ring := []
@@ -304,7 +306,7 @@ func _ice_and_eye() -> void:
 		for v in [top[j], bot[j], top[j2], top[j2], bot[j], bot[j2]]:
 			ws.set_normal(Vector3.UP)
 			ws.add_vertex(v)
-	var wm := _mat(Color(0.05, 0.16, 0.28))
+	var wm := _mat(Color(0.004, 0.02, 0.045))   # the pupil is a black hole (the references: the Eye must always read as a dark pupil in a bright iris)
 	wm.cull_mode = BaseMaterial3D.CULL_DISABLED
 	var wi := MeshInstance3D.new()
 	wi.mesh = ws.commit()
@@ -315,7 +317,7 @@ func _ice_and_eye() -> void:
 	floor_m.bottom_radius = BANK_R + 3.0
 	floor_m.height = 0.4
 	floor_m.radial_segments = 48
-	_mesh(self, floor_m, _mat(Color(0.05, 0.16, 0.28)), Vector3(0, -9.0, 0))
+	_mesh(self, floor_m, _mat(Color(0.004, 0.02, 0.045)), Vector3(0, -9.0, 0))
 	_build_eye()
 
 # The Eye lives in eye.gd (iris shader, lids, petals, crystals, funnel, reactions); these are the facade calls.
@@ -618,7 +620,8 @@ func set_time(t: float) -> void:
 	sun_light.light_color = a.sun.lerp(b.sun, k)
 	sun_light.light_energy = lerpf(a.e, b.e, k)
 	_night = clampf(1.0 - absf(t - 0.5) * 4.0, 0.0, 1.0)
-	env_ref.ambient_light_energy = 1.0 + _night * 0.8
+	env_ref.ambient_light_color = (a.fog.lerp(b.fog, k)).lerp(Color(0.5, 0.72, 0.9), 0.35)
+	env_ref.ambient_light_energy = 0.62 + _night * 1.1
 	if eye:
 		eye.set_night(_night)
 	_apply_gloom()
@@ -643,12 +646,12 @@ func _apply_gloom() -> void:
 # ---------- terrain, forest, shore ----------
 func _ground_color(p: Vector3) -> Color:
 	var r := Vector2(p.x, p.z).length()
-	var col := Color(0.72, 0.85, 1.0)   # the golden sun warms it back toward white: start clearly blue so the bank never goes peach
+	var col := Color(0.4, 0.6, 0.72)   # the golden sun warms it back toward white: start clearly blue so the bank never goes peach
 	var v := detail.get_noise_2d(p.x * 3.0, p.z * 3.0) * 0.035
 	col = Color(col.r + v, col.g + v, col.b + v * 0.5)
 	var e := edge_at(p.x, p.z)
 	if r < e + 3.0:
-		col = col.lerp(Color(0.66, 0.9, 1.0), 0.85)  # packed blue-white ice on the bank (no peach: the warm tint came from the golden sun on cream snow)
+		col = col.lerp(Color(0.4, 0.64, 0.78), 0.85)  # packed blue-white ice on the bank (no peach: the warm tint came from the golden sun on cream snow)
 	col = col.lerp(Color(0.52, 0.6, 0.82), clampf((p.y - 4.0) / 14.0, 0.0, 0.8))
 	return col
 

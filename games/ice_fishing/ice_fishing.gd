@@ -274,6 +274,7 @@ var sfx: Node
 var drill_snd_t := 0.0
 var rail_mat: StandardMaterial3D
 var scenery: Node3D
+var dressing: CampDressing   # props and lamp pools round the camp (camp_dressing.gd)
 var hut_pos := Vector3.ZERO
 var hut_node: Node3D
 var weather: Weather
@@ -668,14 +669,17 @@ func _build_world() -> void:
 	var env := Environment.new()
 	var sky := Sky.new()
 	var sm := ProceduralSkyMaterial.new()
-	sm.sky_top_color = Color(0.17, 0.25, 0.55)
-	sm.sky_horizon_color = Color(1.0, 0.68, 0.52)
-	sm.ground_horizon_color = Color(0.98, 0.62, 0.55)
-	sm.ground_bottom_color = Color(0.45, 0.7, 0.88)
+	sm.sky_top_color = Color(0.08, 0.27, 0.42)
+	sm.sky_horizon_color = Color(1.0, 0.64, 0.40)
+	sm.ground_horizon_color = Color(0.98, 0.62, 0.5)
+	sm.ground_bottom_color = Color(0.2, 0.45, 0.6)
+	sm.sky_curve = 0.07          # the warm band hugs the horizon and the sky above it deepens into teal
+	sm.ground_curve = 0.1
 	sky.sky_material = sm
 	env.sky = sky
 	env.background_mode = Environment.BG_SKY
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR   # cool blue fill from the fog colour (set per hour in scenery): a sky-sourced fill took the orange horizon and turned the snow pink
+	env.ambient_light_color = Color(0.4, 0.6, 0.75)
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	var we := WorldEnvironment.new()
 	we.environment = env
@@ -700,6 +704,8 @@ func _build_world() -> void:
 	scenery = SceneryScript.new()
 	add_child(scenery)
 	scenery.build(env, sun, hut)
+	dressing = CampDressing.new()
+	dressing.build(self, scenery, hut, SceneryScript.SHOP_SPOTS)
 	# one collider for the whole sheet of ice (aim position tells us which cell) and one for the Eye
 	for spec in [["ice", 100.0, 0.4, -0.3], ["eye", EYE_R, 0.7, -0.05]]:
 		var body := StaticBody3D.new()
@@ -1437,6 +1443,7 @@ func _apply_settings() -> void:
 	AudioServer.set_bus_volume_db(0, linear_to_db(maxf(GameSettings.get_value("vol"), 0.0001)))
 	if sfx:
 		sfx.set_levels(GameSettings.get_value("sfx"), GameSettings.get_value("amb"))
+		sfx.score.set_level(GameSettings.get_value("music"))
 	get_window().content_scale_factor = GameSettings.get_value("ui")
 	if DisplayServer.get_name() != "headless":
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN if GameSettings.on("full") else DisplayServer.WINDOW_MODE_WINDOWED)
@@ -2166,11 +2173,15 @@ func _animate(delta: float) -> void:
 	if sky_t <= 0.0:  # re-lighting the sky every frame is wasteful; 5x a second is plenty
 		sky_t = 0.2
 		scenery.set_time(day_t)
+		dressing.fade(scenery._night, clampf(1.0 - minf(minf(absf(day_t - 0.25), absf(day_t - 0.75)), minf(day_t, 1.0 - day_t)) * 5.0, 0.0, 1.0))
 	weather.enabled = GameSettings.on("weather")
 	if not title_active:   # (the weather's calm start and the run timer are for play, not for the title)
 		weather.tick(delta, scenery._night, not guide.intro_active)
 	living.update(delta, scenery._night, $Player.global_position, guide.intro_active)
 	sfx.set_weather(weather.vals.wind, weather.vals.snow, scenery._night)
+	sfx.score.set_mood(scenery._night, weather.vals.gloom, weather.vals.wind, eye_stage(), eye_open_frac(), weather.aurora_on())
+	sfx.score.set_scene(guide.intro_active or reveal_t > 0.0)
+	sfx.score.set_title(title_active)
 	session_t += delta
 	world_t -= delta
 	if world_t <= 0.0:
@@ -3805,6 +3816,7 @@ func _eye_stage_up(st: int) -> void:
 
 ## The Eye wakes a stage: bars slide in, the view turns to it and pulls back, a flash, and the stage and its gift are named.
 func _stage_reveal(st: int) -> void:
+	sfx.score.hit("awaken" if st >= EYE_STAGES.size() else "stage")
 	var last := st >= EYE_STAGES.size()
 	reveal_total = 3.8 if last else 3.0
 	reveal_t = reveal_total

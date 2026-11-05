@@ -40,7 +40,7 @@ uniform float r_in = 4.8;
 uniform float r_out = 10.0;
 uniform vec3 c_deep = vec3(0.03, 0.24, 0.42);
 uniform vec3 c_mid = vec3(0.09, 0.56, 0.72);
-uniform vec3 c_rim = vec3(0.45, 0.88, 0.95);
+uniform vec3 c_rim = vec3(0.30, 0.84, 0.90);
 uniform vec3 c_gold = vec3(1.0, 0.78, 0.35);
 uniform vec3 c_lid = vec3(0.50, 0.72, 0.94);
 varying vec2 lp;
@@ -99,8 +99,9 @@ void fragment() {
 	float s = 0.5 + 0.5 * sin(a * 4.0 + depth * 11.0 - t * 1.3);
 	float band = smoothstep(0.55, 0.95, s);
 	float fine = 0.5 + 0.5 * sin(a * 11.0 - depth * 17.0 + t * 0.8);
-	vec3 col = mix(c_a, c_b * 0.55, band * (0.1 + 0.6 * depth) * (0.4 + glow));
-	col += c_b * fine * 0.06 * depth;
+	vec3 col = mix(c_a, c_b * 0.36, band * (0.1 + 0.6 * depth) * (0.4 + glow));   // darker walls: the pupil reads as a black hole from the rim
+	col += c_b * fine * 0.03 * depth;
+	col *= mix(0.3, 1.0, smoothstep(0.35, 0.95, depth));
 	col += c_g * pow(depth, 7.0) * (0.25 + glow * 0.6);
 	ALBEDO = col;
 }

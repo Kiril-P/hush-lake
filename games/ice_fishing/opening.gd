@@ -228,6 +228,7 @@ func begin(kind: String) -> void:
 	drive_t = 0.0
 	game.sfx.set_hum(0.35)
 	if kind == "intro":
+		game.sfx.score.hit("arrival")
 		_build_rig()
 		var oh: Dictionary = game.scenery.olga
 		if not oh.is_empty():
@@ -320,6 +321,7 @@ func _eye(t: float) -> void:
 		game.scenery.eye_prelude(false)
 		game.scenery.pulse_eye()
 		game.sfx.play("rumble", -8.0, 0.8)
+		game.sfx.score.hit("lid")
 		game.sfx.play("swell", -10.0, 0.7)
 		game.shake = maxf(game.shake, 0.05)
 		game.scenery.eye.wave = 0.0

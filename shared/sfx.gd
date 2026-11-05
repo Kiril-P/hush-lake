@@ -12,6 +12,7 @@ var muted := false
 var sfx_db := 0.0
 var amb_db := 0.0
 var _pad_player: AudioStreamPlayer
+var score: Score   # the adaptive music (shared/score.gd)
 
 func _ready() -> void:
 	for i in POOL:
@@ -61,6 +62,8 @@ func _ready() -> void:
 	var lim := AudioEffectLimiter.new()
 	lim.ceiling_db = -1.0
 	AudioServer.add_bus_effect(0, lim)
+	score = Score.new()
+	add_child(score)
 
 ## Loudness targets (peak, 0..1) by role, so nothing is accidentally ten times louder than its neighbours:
 ## quiet UI ticks < everyday action sounds < impacts < stingers. The ambient loops are set far below all of them.
@@ -141,9 +144,14 @@ func _play_loop(name: String, db: float) -> AudioStreamPlayer:
 	p.play()
 	return p
 
+## How much a sound makes the music speak for a moment (a rare catch, a goal, the Eye waking).
+const MUSIC_BUMP := {"catch": 0.12, "rare": 0.5, "goal": 0.4, "awaken": 0.9, "buy": 0.06}
+
 func play(name: String, db := 0.0, pitch := 1.0) -> void:
 	if muted or not streams.has(name):
 		return
+	if score != null and MUSIC_BUMP.has(name):
+		score.bump(MUSIC_BUMP[name])
 	var p := players[_next]
 	_next = (_next + 1) % POOL
 	p.stream = streams[name]

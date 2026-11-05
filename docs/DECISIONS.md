@@ -259,3 +259,19 @@ Built in layers with a headless suite (`tools/run_opening.sh`, 60+ checks), a re
 - Plumbing: the guide still owns letterbox, captions, skip, input lock and HUD hiding (`own_controls`, `hud_preset`, `cam_preset`: the home camera transform is captured before the title moves it); `Opening` owns what is in the shot. The old 13 s overhead flyover is gone.
 - Not judged by a human: pacing (41 s may be long on a second run: skippable), whether the dogs read as dogs, whether the title feels premium, whether Olga's hand-off lands.
 - Opening, independent review: found a half-started new game could be autosaved (and then loaded as a "continued" game with a sleeping Eye): autosave and the title's Quit save are now off until the opening has finished (`Opening.finish` turns it back on), so quitting early leaves no save and the title shows again; the cursor stayed captured and the player rig and every key (R, Tab, V, F2-F5, N...) still worked behind the title: the cursor is now free, the rig deaf and `_unhandled_input` returns while the title is up; Esc/focus loss during the fade to black could pause behind it (no pause while the title exists); every refreeze replayed the title and the 41 s sled run (a refrozen lake now goes straight to play, with the Eye ajar); the run timer and the weather's calm start counted the title (they wait); `smoothstep(0, 0, x)` in the frost shader at the first frame (`max(reach, 0.0001)`). All covered in `run_opening.sh`.
+
+## Art-reference pipeline and look pass (round 1)
+- **Workflow:** `tools/refshots.sh` renders 20 fixed clean frames; `delegate_task` fans one GPT-6.1-terra agent per frame (provider `codex`,
+  low effort, priority tier) to generate 3 stylised variants + a diagnosis via the built-in `image_gen`. See `docs/ART_PIPELINE.md`.
+  Two of the 20 agents generated images but could not save them to the project; they were recovered from `~/.codex/generated_images`.
+  Lesson: give agents a fallback ("if saving fails, say where the file is") and verify the count when they finish.
+- **Not Workflow:** the Workflow tool spawns Claude agents (no imagegen); GPT agents must come from `delegate_task` on the Codex provider.
+- **Look pass:** the single biggest win in all 20 sets was to stop washing everything in lavender: teal sky keys, cool-colour ambient (not
+  sky-sourced), deeper ice, aerial-perspective fog, a black pupil. Props and lamp pools in `camp_dressing.gd`. Delta list: `docs/refs/DELTA.md`.
+- **Judge by sheets:** `docs/refs/sheets/r2/*.jpg` (before | reference | after). `tools/refs_pack.py` shrinks PNGs to JPEGs for git.
+
+## The score (adaptive music)
+- `shared/score.gd`: generative A-minor piece on procedural felt-piano / pad / glass-bell voices through a `Music` bus with a long reverb.
+  Chord clock Am-F-C-G; melody random-walks the pentatonic scale with rests and phrases; mood (hour, weather gloom, Eye stage, scenes, catches)
+  sets density and layers. Voices are synthesised in 2.5 ms slices after launch (no hitch). New "Music" slider (default 80%).
+- **Open question (needs ears):** I can only test levels and behaviour, never listen. Volumes (`-12 dB` melody, `-17 dB` pad) are guesses.

@@ -13,8 +13,8 @@ const Y_FILL := 0.03
 const Y_LINE := 0.045
 const CURTAIN_H := 0.8
 
-const COL_LOCKED_FILL := Color(0.82, 0.91, 0.99)
-const COL_LOCKED_LINE := Color(0.96, 0.99, 1.0)
+const COL_LOCKED_FILL := Color(0.58, 0.74, 0.86)   # frost over a locked sector: a cold blue, not blown-out white (the art-reference pass)
+const COL_LOCKED_LINE := Color(0.82, 0.93, 1.0)
 const COL_GATE := Color(0.6, 0.92, 1.0)
 const COL_OPEN_LINE := Color(0.42, 0.9, 0.88)
 const COL_CLEARED_FILL := Color(0.08, 0.42, 0.50)   # thawed water: clearly teal
@@ -263,7 +263,7 @@ func _rebuild_lines(id: Vector2i, s: int) -> void:
 	var lm: ShaderMaterial = (p.line as MeshInstance3D).material_override
 	match s:
 		0:
-			lm.set_shader_parameter("col", Color(COL_LOCKED_LINE.r, COL_LOCKED_LINE.g, COL_LOCKED_LINE.b, 0.95))
+			lm.set_shader_parameter("col", Color(COL_LOCKED_LINE.r, COL_LOCKED_LINE.g, COL_LOCKED_LINE.b, 0.8))
 		1:
 			lm.set_shader_parameter("col", Color(COL_OPEN_LINE.r, COL_OPEN_LINE.g, COL_OPEN_LINE.b, 0.34))
 		_:

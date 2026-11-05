@@ -1,0 +1,165 @@
+{
+	"game": "Hush Lake",
+	"shots": [
+		{
+			"eye_stage": 0,
+			"file": "01_camp_noon.png",
+			"id": "01_camp_noon",
+			"time_of_day": 0.0,
+			"weather": "clear",
+			"what": "the camp on the ice beside the Eye, clear midday"
+		},
+		{
+			"eye_stage": 0,
+			"file": "02_start_view.png",
+			"id": "02_start_view",
+			"time_of_day": 0.0,
+			"weather": "clear",
+			"what": "first view of Hush Lake: Olga's hut, the lake and mountains"
+		},
+		{
+			"eye_stage": 0,
+			"file": "03_lake_aerial.png",
+			"id": "03_lake_aerial",
+			"time_of_day": 0.0,
+			"weather": "clear",
+			"what": "the whole lake from above: Eye in the middle, shore, mountains"
+		},
+		{
+			"eye_stage": 2,
+			"file": "04_eye_top.png",
+			"id": "04_eye_top",
+			"time_of_day": 0.0,
+			"weather": "clear",
+			"what": "straight down on the Eye: its rings and pupil, nothing else"
+		},
+		{
+			"eye_stage": 3,
+			"file": "05_eye_close.png",
+			"id": "05_eye_close",
+			"time_of_day": 0.0,
+			"weather": "clear",
+			"what": "standing at the rim of the Eye looking down into it"
+		},
+		{
+			"eye_stage": 1,
+			"file": "06_market_row.png",
+			"id": "06_market_row",
+			"time_of_day": 0.0,
+			"weather": "clear",
+			"what": "the market row of stalls in the camp"
+		},
+		{
+			"eye_stage": 0,
+			"file": "07_hut_view.png",
+			"id": "07_hut_view",
+			"time_of_day": 0.0,
+			"weather": "clear",
+			"what": "Olga's hut from the ice"
+		},
+		{
+			"eye_stage": 1,
+			"file": "08_dusk.png",
+			"id": "08_dusk",
+			"time_of_day": 0.25,
+			"weather": "clear",
+			"what": "the camp at dusk, lanterns lit"
+		},
+		{
+			"eye_stage": 1,
+			"file": "09_night.png",
+			"id": "09_night",
+			"time_of_day": 0.5,
+			"weather": "clear",
+			"what": "the lake at night, stars out"
+		},
+		{
+			"eye_stage": 5,
+			"file": "10_aurora.png",
+			"id": "10_aurora",
+			"time_of_day": 0.5,
+			"weather": "clear",
+			"what": "an aurora night over the lake"
+		},
+		{
+			"eye_stage": 1,
+			"file": "11_snowfall.png",
+			"id": "11_snowfall",
+			"time_of_day": 0.1,
+			"weather": "snowfall",
+			"what": "snowfall in the camp"
+		},
+		{
+			"eye_stage": 1,
+			"file": "12_blizzard.png",
+			"id": "12_blizzard",
+			"time_of_day": 0.1,
+			"weather": "blizzard",
+			"what": "a blizzard: the long view lost"
+		},
+		{
+			"eye_stage": 1,
+			"file": "13_fog.png",
+			"id": "13_fog",
+			"time_of_day": 0.1,
+			"weather": "fog",
+			"what": "fog on the lake"
+		},
+		{
+			"eye_stage": 5,
+			"file": "14_eye_awake.png",
+			"id": "14_eye_awake",
+			"time_of_day": 0.0,
+			"weather": "clear",
+			"what": "the Eye fully awake, stage 5, from the camp"
+		},
+		{
+			"eye_stage": 5,
+			"file": "15_eye_awake_night.png",
+			"id": "15_eye_awake_night",
+			"time_of_day": 0.5,
+			"weather": "clear",
+			"what": "the awake Eye at night"
+		},
+		{
+			"eye_stage": 2,
+			"file": "16_machines.png",
+			"id": "16_machines",
+			"time_of_day": 0.0,
+			"weather": "clear",
+			"what": "belts, auto-rods and machines running into the Eye"
+		},
+		{
+			"eye_stage": 2,
+			"file": "17_machines_top.png",
+			"id": "17_machines_top",
+			"time_of_day": 0.0,
+			"weather": "clear",
+			"what": "machines seen from far above"
+		},
+		{
+			"eye_stage": 2,
+			"file": "18_machines_low.png",
+			"id": "18_machines_low",
+			"time_of_day": 0.0,
+			"weather": "clear",
+			"what": "a belt line seen low from the side"
+		},
+		{
+			"eye_stage": 1,
+			"file": "19_shore.png",
+			"id": "19_shore",
+			"time_of_day": 0.0,
+			"weather": "clear",
+			"what": "the far shore: treeline, snow, mountains"
+		},
+		{
+			"eye_stage": 1,
+			"file": "20_sunrise.png",
+			"id": "20_sunrise",
+			"time_of_day": 0.75,
+			"weather": "clear",
+			"what": "dawn over the lake"
+		}
+	]
+}
