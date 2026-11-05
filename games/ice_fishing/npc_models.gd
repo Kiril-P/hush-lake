@@ -108,4 +108,55 @@ static func olga() -> Dictionary:
 	gm.emission = AMBER
 	gm.emission_energy_multiplier = 2.4
 	glow.material_override = gm
-	return {"root": root, "body": body, "head": head, "arm": arm}
+	return {"root": root, "body": body, "head": head, "arm": arm, "arm_l": arm_l}
+
+## A sled dog, about 0.65 m at the shoulder, facing -Z (the way it runs). Returns {root, body, head, legs (4 pivots: front-left,
+## front-right, back-left, back-right), tail}. `run(d, t, speed)` poses the gait; it is a plain bounding lope.
+static func dog(fur: Color, mask: Color) -> Dictionary:
+	var root := Node3D.new()
+	var body := Node3D.new()
+	root.add_child(body)
+	_ball(body, fur, Vector3(0, 0.56, 0.02), 0.3, Vector3(0.72, 0.72, 1.75))   # the barrel of the chest and flank
+	_ball(body, mask, Vector3(0, 0.68, 0.1), 0.24, Vector3(0.78, 0.4, 1.5))   # the dark saddle on the back
+	_ball(body, CREAM, Vector3(0, 0.42, -0.24), 0.2, Vector3(0.7, 0.7, 0.9))   # pale chest
+	var head := Node3D.new()
+	head.position = Vector3(0, 0.86, -0.66)
+	body.add_child(head)
+	_ball(head, fur, Vector3.ZERO, 0.17, Vector3(0.95, 0.9, 1.05))
+	_ball(head, mask, Vector3(0, 0.02, -0.08), 0.13, Vector3(0.85, 0.65, 0.9))   # the face mask
+	_ball(head, CREAM, Vector3(0, -0.04, -0.23), 0.09, Vector3(0.75, 0.65, 1.5))   # muzzle
+	_ball(head, Color(0.08, 0.07, 0.1), Vector3(0, -0.02, -0.34), 0.035)   # nose
+	for sx in [-0.07, 0.07]:
+		_ball(head, Color(0.08, 0.07, 0.1), Vector3(sx, 0.05, -0.16), 0.025)   # eyes
+		var ear := _mesh(head, BoxMesh.new(), mask, Vector3(sx * 1.4, 0.2, 0.02), Vector3(0.09, 0.2, 0.07))   # upright, pricked ears
+		ear.rotation_degrees.z = -sx * 80.0
+	var legs := []
+	for pos in [Vector3(-0.12, 0.38, -0.34), Vector3(0.12, 0.38, -0.34), Vector3(-0.12, 0.38, 0.3), Vector3(0.12, 0.38, 0.3)]:
+		var piv := Node3D.new()
+		piv.position = pos
+		body.add_child(piv)
+		_cyl(piv, fur.darkened(0.12), Vector3(0, -0.18, 0), 0.065, 0.05, 0.4)
+		_ball(piv, CREAM, Vector3(0, -0.4, -0.03), 0.075, Vector3(0.9, 0.6, 1.4))   # paw
+		legs.append(piv)
+	var tail := Node3D.new()
+	tail.position = Vector3(0, 0.72, 0.5)
+	body.add_child(tail)
+	var tl := _mesh(tail, BoxMesh.new(), fur, Vector3(0, 0.12, 0.12), Vector3(0.09, 0.09, 0.34))
+	tl.rotation_degrees.x = 38.0
+	return {"root": root, "body": body, "head": head, "legs": legs, "tail": tail}
+
+## Poses a running dog: `phase` advances with distance travelled; `speed` (m/s) scales the stride, and 0 settles it into a sit-and-pant.
+static func dog_run(d: Dictionary, phase: float, speed: float) -> void:
+	var k := clampf(speed / 6.0, 0.0, 1.0)
+	var legs: Array = d.legs
+	var s := sin(phase)
+	var c := cos(phase)
+	var swing := 0.9 * k
+	(legs[0] as Node3D).rotation.x = s * swing
+	(legs[1] as Node3D).rotation.x = sin(phase + 0.5) * swing
+	(legs[2] as Node3D).rotation.x = -c * swing
+	(legs[3] as Node3D).rotation.x = -sin(phase + 0.4) * swing
+	(d.body as Node3D).position.y = absf(c) * 0.09 * k
+	(d.body as Node3D).rotation.x = s * 0.06 * k
+	(d.head as Node3D).rotation.x = -s * 0.05 * k + (0.0 if k > 0.2 else 0.0)
+	(d.tail as Node3D).rotation.y = sin(phase * 0.5) * 0.3

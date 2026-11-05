@@ -16,6 +16,7 @@ var box: VBoxContainer
 var dim: ColorRect
 var hint_label: Label
 var _slide := 0.0
+var from_title := false      # opened from the title screen: Back and Esc return to it instead of resuming play
 
 const CONTROLS := [
 	["Moving", [["W A S D", "walk"], ["V", "ride the snowmobile (once you own one)"], ["Mouse", "look"], ["Esc", "pause / menu"]]],
@@ -62,6 +63,7 @@ func set_open(on: bool) -> void:
 		return
 	visible = on
 	if on:
+		from_title = false
 		set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)   # (a hidden control is not laid out: fit it to the screen when it opens)
 		page = "main"
 		_rebuild()
@@ -78,6 +80,22 @@ func _process(delta: float) -> void:
 	modulate.a = minf(_open_t * 1.5, 1.0)
 	card.position.y = (1.0 - k) * 18.0
 
+## Opens one page straight away (the title screen's Settings and Controls).
+func open_page(p: String) -> void:
+	from_title = true
+	visible = true
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	page = p
+	_rebuild()
+	_open_t = 0.0
+	modulate.a = 0.0
+
+func close_to_title() -> void:
+	from_title = false
+	visible = false
+	if game.sfx:
+		game.sfx.play("tick", -8.0, 1.1)
+
 func go(p: String) -> void:
 	page = p
 	_rebuild()
@@ -88,7 +106,9 @@ func _input(event: InputEvent) -> void:
 	if not visible:
 		return
 	if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
-		if page != "main":
+		if from_title:
+			close_to_title()
+		elif page != "main":
 			go("main")
 		else:
 			resume_requested.emit()
@@ -160,7 +180,7 @@ func _sep() -> void:
 
 func _back_button() -> void:
 	_sep()
-	_btn("Back", func(): go("main"))
+	_btn("Back", func(): close_to_title() if from_title else go("main"))
 
 # ---------------------------------------------------------------- pages
 

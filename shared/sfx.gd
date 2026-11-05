@@ -44,6 +44,9 @@ func _ready() -> void:
 	streams["creak"] = _wav(_creak(1.3))
 	streams["gust"] = _wav(_swell_noise(4.5))
 	streams["owl"] = _wav(_owl())
+	streams["hum"] = _wav(_hum(8.0), true)
+	streams["bells"] = _wav(_bells())
+	streams["bark"] = _wav(_bark())
 	streams["caw"] = _wav(_caw())
 	streams["wind"] = _wav(_wind(6.0), true)
 	streams["pad"] = _wav(_pad(8.0), true)
@@ -63,7 +66,7 @@ func _ready() -> void:
 ## quiet UI ticks < everyday action sounds < impacts < stingers. The ambient loops are set far below all of them.
 const PEAK := {"tick": 0.28, "reel": 0.3, "drill": 0.32, "step": 0.18, "slide": 0.2, "coin": 0.38, "deny": 0.4, "buy": 0.45, "bite": 0.5,
 	"cast": 0.42, "plop": 0.5, "thud": 0.55, "kick": 0.65, "hook": 0.55, "splash": 0.6, "catch": 0.55, "rare": 0.62, "goal": 0.62,
-	"rumble": 0.7, "swell": 0.6, "awaken": 0.8, "creak": 0.3, "gust": 0.35, "wind": 0.5, "pad": 0.3, "owl": 0.3, "caw": 0.3}
+	"rumble": 0.7, "swell": 0.6, "awaken": 0.8, "creak": 0.3, "gust": 0.35, "wind": 0.5, "pad": 0.3, "owl": 0.3, "caw": 0.3, "hum": 0.5, "bells": 0.3, "bark": 0.4}
 
 func _mix_pass() -> void:
 	for n in PEAK:
@@ -87,6 +90,13 @@ func _renormalise(w: AudioStreamWAV, peak: float) -> AudioStreamWAV:
 var _creak_t := 12.0
 var _gust_t := 6.0
 var _wind_player: AudioStreamPlayer
+var _hum_player: AudioStreamPlayer
+var hum_level := 0.0     # 0..1: the Eye's low hum under the ice (title screen, the Eye opening, a little more as it wakes)
+var hum_target := 0.0
+
+func set_hum(level: float) -> void:
+	hum_target = clampf(level, 0.0, 1.0)
+
 var wx_wind := 0.25     # the weather's wind (0..1): the howl swells and gusts come sooner in a storm
 var wx_snow := 0.3
 var wx_night := 0.0
@@ -98,6 +108,9 @@ func set_weather(wind: float, snow: float, night: float) -> void:
 	wx_night = night
 
 func _process(delta: float) -> void:
+	if _hum_player != null:
+		hum_level = move_toward(hum_level, hum_target, delta * 0.35)
+		_hum_player.volume_db = -60.0 if hum_level < 0.005 else (-34.0 + 22.0 * hum_level + amb_db)
 	if _wind_player == null or muted:
 		return
 	# the wind breathes slowly, and now and then the ice creaks or a gust rolls across the lake
@@ -116,6 +129,7 @@ func _process(delta: float) -> void:
 		play("gust", -12.0 + wx_wind * 5.0, randf_range(0.85, 1.1))
 
 func start_ambient() -> void:
+	_hum_player = _play_loop("hum", -60.0)
 	_wind_player = _play_loop("wind", -17.0)
 	_pad_player = _play_loop("pad", -24.0 + amb_db)
 
@@ -263,6 +277,52 @@ func _creak(dur: float) -> PackedFloat32Array:
 		phase += TAU * f / RATE
 		var env := sin(PI * k)
 		out[i] = (sin(phase) * 0.6 + sin(phase * 2.01) * 0.25 + randf_range(-0.08, 0.08)) * env * env * 0.5
+	return out
+
+## The Eye's hum: two slightly detuned low tones that beat slowly, a soft fifth above, a slow swell. Whole cycles, so it loops without a click.
+func _hum(dur: float) -> PackedFloat32Array:
+	var n := int(dur * RATE)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	for i in n:
+		var t := float(i) / RATE
+		var s := sin(TAU * 55.0 * t) * 0.5 + sin(TAU * 56.0 * t) * 0.45   # 1 Hz beating
+		s += sin(TAU * 82.5 * t) * 0.2 + sin(TAU * 110.0 * t) * 0.14
+		s += sin(TAU * 220.0 * t + sin(TAU * 0.25 * t) * 1.5) * 0.04   # a faint shimmer
+		var swell := 0.75 + 0.25 * sin(TAU * 0.25 * t)
+		out[i] = s * swell * 0.5
+	return out
+
+## Sled bells: a quick scatter of small bright pings.
+func _bells() -> PackedFloat32Array:
+	var parts: Array = []
+	var starts := [0.0, 0.07, 0.15, 0.22, 0.31]
+	var freqs := [2349.0, 2794.0, 2637.0, 3136.0, 2489.0]
+	for i in 5:
+		var n := int(0.5 * RATE)
+		var tone := PackedFloat32Array()
+		tone.resize(n)
+		for j in n:
+			var t := float(j) / RATE
+			tone[j] = (sin(TAU * freqs[i] * t) * 0.6 + sin(TAU * freqs[i] * 2.76 * t) * 0.25) * exp(-t * 11.0) * 0.5
+		var pad := PackedFloat32Array()
+		pad.resize(int(starts[i] * RATE))
+		pad.append_array(tone)
+		parts.append(pad)
+	return _mix(parts)
+
+## A short sled-dog bark: a rough, quickly falling tone.
+func _bark() -> PackedFloat32Array:
+	var n := int(0.22 * RATE)
+	var out := PackedFloat32Array()
+	out.resize(n)
+	var phase := 0.0
+	for j in n:
+		var t := float(j) / RATE
+		var k := t / 0.22
+		phase += TAU * lerpf(520.0, 280.0, k) / RATE
+		var saw := fmod(phase / TAU, 1.0) * 2.0 - 1.0
+		out[j] = (saw * 0.45 + sin(phase) * 0.35 + randf_range(-0.12, 0.12)) * sin(PI * minf(k * 1.6, 1.0)) * exp(-k * 2.2)
 	return out
 
 ## A night owl: two soft falling hoots, then a longer one.

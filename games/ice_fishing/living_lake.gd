@@ -113,7 +113,7 @@ func _build_birds() -> void:
 	body_m.albedo_color = Color(0.92, 0.94, 0.98)
 	body_m.roughness = 0.9
 	var tip_m := StandardMaterial3D.new()
-	tip_m.albedo_color = Color(0.22, 0.26, 0.36)
+	tip_m.albedo_color = Color(0.3, 0.27, 0.28)
 	for i in 9:
 		var n := Node3D.new()
 		var body := MeshInstance3D.new()
@@ -434,7 +434,7 @@ func update(delta: float, night_in: float, player: Vector3, cutscene := false) -
 	_apply_weather(delta, w)
 	_update_stars()
 	_update_clouds(delta, w)
-	_update_birds(delta, w, player)
+	_update_birds(delta, w, player, cutscene)
 	_update_cracks(delta, player, cutscene)
 	_update_camp(delta, player)
 	_update_calls(delta, w, cutscene)
@@ -483,9 +483,9 @@ func _update_clouds(delta: float, w: Dictionary) -> void:
 		# fewer clouds on a clear day, all of them in a storm
 		n.visible = gloom + 0.35 >= c.base * 0.9
 
-func _update_birds(delta: float, w: Dictionary, player: Vector3) -> void:
-	var want := 1.0 if (night < 0.35 and float(w.gloom) < 0.35 and float(w.wind) < 0.6) else 0.0
-	bird_vis = move_toward(bird_vis, want, delta * 0.25)
+func _update_birds(delta: float, w: Dictionary, player: Vector3, cutscene := false) -> void:
+	var want := 1.0 if (night < 0.35 and float(w.gloom) < 0.35 and float(w.wind) < 0.6 and not cutscene) else 0.0   # (the gulls are off camera for the scripted shots: up close they are just boxes)
+	bird_vis = move_toward(bird_vis, want, delta * (0.25 if want > 0.5 else 1.5))
 	for b in birds:
 		var n: Node3D = b.node
 		n.visible = bird_vis > 0.05

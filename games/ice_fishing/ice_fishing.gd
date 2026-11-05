@@ -279,6 +279,15 @@ var hut_node: Node3D
 var weather: Weather
 var living: LivingLake
 var world_label: Label
+var title: TitleScreen
+var title_active := false
+var title_t := 0.0
+var title_hidden: Array = []
+var title_resumed := false
+var title_leave_t := 0.0
+var title_mouse := Vector2.ZERO
+var cine_eye := 0.0           # the Eye's lid during the opening scene (0 .. 0.1)
+var opening: Opening
 var sky_clock: HudWidgets.SkyClock
 var world_t := 0.0
 var session_t := 0.0
@@ -291,7 +300,7 @@ var ground_serial := 0
 var rack_mounts: Array = []   # the rack's three mounted tools (shown while the tool is on the rack)
 var rack_pos := Vector3.ZERO
 var journal := {}          # species name -> count
-var stats := {"holes": 0, "caught": 0, "deliveries": 0, "earned": 0.0, "autos": 0, "smokes": 0, "gutted": 0, "tiles_cleared": 0, "sectors": 0, "ended": 0, "eye_fed": 0, "belts": 0, "cans": 0, "sorters": 0, "depots": 0, "rigs": 0, "rides": 0, "tithe": 0, "awakened": 0, "grinders": 0, "fans": 0, "grinds": 0}
+var stats := {"holes": 0, "caught": 0, "deliveries": 0, "earned": 0.0, "autos": 0, "smokes": 0, "gutted": 0, "tiles_cleared": 0, "sectors": 0, "ended": 0, "eye_fed": 0, "belts": 0, "cans": 0, "sorters": 0, "depots": 0, "rigs": 0, "rides": 0, "tithe": 0, "awakened": 0, "grinders": 0, "fans": 0, "grinds": 0, "ajar": 0}
 var unlocked := {}
 var goal_done: Array = []
 var combo := 0
@@ -507,16 +516,86 @@ func _ready() -> void:
 	_update_sector_hud(1.0)
 	sfx.start_ambient()
 	_log("--- session start (resumed=%s) ---" % resumed)
+	var with_title := not GameState.save_slot.begins_with("test") or has_meta("force_title")
 	if resumed:
 		_say_notice("Welcome back!")
 		_offline(away)
+		if with_title:
+			_open_title(true)
 	else:
 		if _meta_int("lakes") > 0:
 			_banner("%s #%d: %s" % [model.mod_info().name, _meta_int("lakes") + 1, model.mod_info().desc], Color(0.7, 0.9, 1.0))
-		if GameState.save_slot.begins_with("test"):
+		if not with_title:
 			_say("Olga: The Eye wants feeding, dear. Hold click anywhere on the ice with the drill. Get what you catch into the Eye.")
 		else:
-			guide.want_intro = true
+			_open_title(false)
+
+# ---------- the title screen ----------
+## Hush Lake at dusk behind a frosted glass: the camera drifts, the Eye hums, the title forms. Play fades to black and starts the opening
+## (a new game) or the "previously" beat (a save).
+func _open_title(resumed: bool) -> void:
+	title_active = true
+	title_t = 0.0
+	title_resumed = resumed
+	guide.cam_home = cam.position   # (taken now: the title camera is about to take over)
+	guide.cam_pitch = cam.rotation.x
+	guide.cam_preset = true
+	if not resumed:
+		day_t = Opening.DUSK   # a new lake opens at the start of dusk and stays there through the opening
+	title = TitleScreen.new()
+	guide.ui_root.add_child(title)
+	guide.ui_root.move_child(title, menu.get_index())   # (the settings and controls cards open above it)
+	title.build(self, resumed)
+	title.settings_pressed.connect(func(): menu.open_page("settings"))
+	title.controls_pressed.connect(func(): menu.open_page("controls"))
+	title.quit_pressed.connect(func():
+		GameState.save_game()
+		get_tree().quit())
+	title.left.connect(_title_go)
+	title_hidden.clear()
+	for c in guide.ui_root.get_children():   # a clean glass: no HUD behind the title
+		if c is Control and c.visible and c != menu and c != title and not guide.own_controls().has(c):
+			c.visible = false
+			title_hidden.append(c)
+	if not resumed:
+		scenery.eye_prelude(true)   # the Eye holds its breath until the lid lifts in the opening
+	view.visible = false   # (the first-person props belong to the player, not to the title camera)
+	tool_view.visible = false
+	sfx.set_hum(0.5)
+	scenery.set_time(day_t)
+
+func _title_go() -> void:
+	title_active = false
+	title_leave_t = 0.0
+	guide.hidden_hud = title_hidden.duplicate()
+	guide.hud_preset = true
+	title_hidden.clear()
+	if title_resumed:
+		guide.want_previously = true
+	else:
+		guide.want_intro = true
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+## Per frame while the title is up (and while it hands over to the opening).
+func _tick_title(delta: float) -> void:
+	if title_active:
+		title_t += delta
+		for c in title_hidden:
+			if is_instance_valid(c):
+				c.visible = false
+		var vp := get_viewport().get_visible_rect().size
+		var mp := get_viewport().get_mouse_position() / maxf(vp.x, 1.0)
+		title_mouse = title_mouse.lerp(Vector2(clampf((mp.x - 0.5) * 2.0, -1.0, 1.0), clampf((get_viewport().get_mouse_position().y / maxf(vp.y, 1.0) - 0.5) * 2.0, -1.0, 1.0)), minf(1.0, delta * 3.0))
+		var pose := opening.title_pose(title_t, title_mouse)
+		cine_fov = CameraDirector.apply(cam, pose, title_t, fov_base)
+		cam.fov = fov_base + cine_fov
+		if int(title_t * 0.3) != int((title_t - delta) * 0.3):   # the Eye pulses with its own hum, softly
+			scenery.eye_catch(Color(0.45, 0.9, 1.0), 0.1)
+	elif title != null:
+		title_leave_t += delta
+		if guide.intro_active or title_leave_t > 4.0:   # the opening has taken over (or never started): the black cover can go
+			title.queue_free()
+			title = null
 
 # ---------- hex helpers ----------
 func _on_currency_changed(_v: float) -> void:
@@ -814,7 +893,7 @@ func _update_sector_hud(delta: float) -> void:
 		sector_hud_label.text = txt
 		(sector_hud_dot.get_theme_stylebox("panel") as StyleBoxFlat).bg_color = col
 		(sector_hud_dot.get_theme_stylebox("panel") as StyleBoxFlat).border_color = col.lightened(0.4)
-	sector_hud.visible = not guide.intro_active and reveal_t <= 0.0
+	sector_hud.visible = not guide.intro_active and not title_active and reveal_t <= 0.0
 
 func _update_sector_labels() -> void:   # (name kept: it refreshes everything that shows sector state)
 	_update_lanterns()
@@ -1305,6 +1384,10 @@ void fragment() {
 	guide.game = self
 	add_child(guide)
 	guide.build(ui)
+	opening = Opening.new()
+	add_child(opening)
+	opening.setup(self, guide)
+	guide.opening = opening
 	_ignore_mouse(ui)
 	menu = MenuUI.new()   # the title / pause menu sits on top of everything and takes clicks
 	ui.add_child(menu)
@@ -1977,10 +2060,13 @@ func _process(delta: float) -> void:
 	tithe_armed_t = maxf(tithe_armed_t - delta, 0.0)
 	reset_armed_t = maxf(reset_armed_t - delta, 0.0)
 	var cap_now := _cap()
-	if cap_now:
+	if cap_now and not title_active:
 		ever_captured = true
 	# Esc frees the mouse and really pauses: no bites expire, no machines run, no timers tick (cutscenes play on)
 	var want_pause := ever_captured and not cap_now and not guide.intro_active
+	if title_active:
+		cap_now = false
+		want_pause = false
 	if want_pause != sim_paused:
 		sim_paused = want_pause
 		_on_pause_changed()
@@ -2028,7 +2114,8 @@ func _process(delta: float) -> void:
 		eye_pending = 0.0
 		eye_pending_t = 0.7
 	var captured := _cap()
-	menu.set_open(not captured and not guide.intro_active)
+	if not title_active:
+		menu.set_open(not captured and not guide.intro_active and title == null)
 	_walk(delta)
 	var raw := _aim_raw()
 	var a := raw if _in_range(raw) else ""
@@ -2065,7 +2152,8 @@ func _process(delta: float) -> void:
 func _animate(delta: float) -> void:
 	var tm := Time.get_ticks_msec() * 0.001
 	play_time += delta
-	day_t = fmod(day_t + delta / DAY_LENGTH, 1.0)
+	if not title_active and not (guide.intro_active and guide.scene == "intro"):   # the clock waits through the title and the opening
+		day_t = fmod(day_t + delta / DAY_LENGTH, 1.0)
 	sky_t -= delta
 	if sky_t <= 0.0:  # re-lighting the sky every frame is wasteful; 5x a second is plenty
 		sky_t = 0.2
@@ -2154,6 +2242,9 @@ func _animate(delta: float) -> void:
 			sh.node.position = Vector3(cos(ang) * sh.r, 0.065, sin(ang * 1.7) * sh.r * 0.8)
 			sh.node.rotation.y = -ang + PI * 0.5
 	_update_sector_hud(delta)
+	_tick_title(delta)
+	if kick_boot:
+		kick_boot.visible = not (title_active or guide.intro_active)
 
 # ---------- fish on the ice ----------
 func no_kicks_yet() -> bool:
@@ -2992,7 +3083,7 @@ func _update_hand(delta: float) -> void:
 	if hk != "fish" and hk != "bucket":
 		hold_node.visible = false
 		return
-	hold_node.visible = not guide.intro_active
+	hold_node.visible = not guide.intro_active and not title_active
 	var pl: Node3D = $Player
 	var look := Vector2(pl.rotation.y, cam.rotation.x)
 	var dl := Vector2(wrapf(look.x - prev_look.x, -PI, PI), look.y - prev_look.y)
@@ -3621,7 +3712,10 @@ func eye_stage() -> int:
 	return n
 
 func eye_open_frac() -> float:
-	return clampf(sqrt(float(stats.eye_fed) / float(eye_stage_at(EYE_STAGES.size() - 1))), 0.0, 1.0)
+	var base := clampf(sqrt(float(stats.eye_fed) / float(eye_stage_at(EYE_STAGES.size() - 1))), 0.0, 1.0)
+	if int(stats.get("ajar", 0)) > 0 or int(stats.eye_fed) > 0:   # after the opening the Eye never quite closes again
+		base = maxf(base, 0.10)
+	return maxf(base, cine_eye)
 
 func _belt_speed() -> float:
 	return BELT_SPEED * (1.0 + 0.25 * GameState.level("conveyor"))

@@ -101,6 +101,12 @@ func _ready() -> void:
 	g.day_t = 0.0
 	g.scenery.set_time(0.0)
 	g.weather.aurora = false
+	# the opening itself: the sled team, the chase camera, particles and a close-up of Olga (the intro starts on the first frame)
+	g.day_t = Opening.DUSK
+	g.scenery.set_time(Opening.DUSK)
+	g.guide.want_intro = true
+	await measure("sled run", g, 420)
+	g.guide.skip_intro()
 	await action_phase(g, p)
 	print("PERF %s (%d failures)" % ["PASS" if fails == 0 else "FAIL", fails])
 	get_tree().quit(1 if fails > 0 else 0)

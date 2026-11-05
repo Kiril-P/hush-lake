@@ -6,12 +6,6 @@ extends Node
 ##  - a world marker plus an edge-of-screen arrow pointing at wherever the step happens
 ##  - one-time tips (new tools, first affordable upgrades), and H to ask where to go
 
-const INTRO := [
-	[0.0, 3.2, "Hush Lake.\nEvery winter it freezes over a little earlier.", false],
-	[3.4, 6.8, "Out on the ice, something old watches through the dark water.\nOlga, who keeps the hut, calls it the Eye.", false],
-	[7.0, 9.8, "It is very hungry.\nAnd it pays well for what it is fed.", false],
-	[10.0, 12.4, "Olga: Drill a hole, dear. Catch a fish.\nCarry it to the Eye.", true],
-]
 const AWAKEN := [
 	[0.4, 3.2, "The ice goes quiet.", false],
 	[4.4, 7.5, "It is awake.", false],
@@ -21,8 +15,6 @@ const AWAKEN := [
 const AWAKEN_LEN := 15.8
 const AWAKEN_OPEN := 3.6
 const AWAKEN_TITLE := 12.4
-const INTRO_LEN := 12.8
-const INTRO_FLY := 11.0
 const BAR_H := 78.0
 const STUCK_AFTER := 45.0
 const DRILL_SPOT_FROM := Vector3(-8.2, 0.0, 14.3)
@@ -83,6 +75,10 @@ var game: Node
 var ui_root: Control
 var hidden_hud: Array = []
 var want_intro := false
+var want_previously := false   # a continued save: the 'previously' beat plays when play begins
+var opening: Opening
+var cam_preset := false         # the title already moved the camera: cam_home and cam_pitch were taken before that and must not be overwritten
+var hud_preset := false        # the title screen already hid the HUD: keep it hidden through the scene and restore it at the end
 var intro_active := false
 var tips_seen := {}
 var bootstrap_tips := false
@@ -459,6 +455,12 @@ func olga_line() -> String:
 func tick(delta: float, captured: bool) -> void:
 	if want_intro and captured and not intro_started:
 		_begin_intro()
+	elif want_previously and captured and not intro_started:
+		want_previously = false
+		intro_started = true
+		scene = "previously"
+		skip_after = 1.0
+		_begin_scene()
 	if intro_active:
 		_tick_intro(delta)
 	cine_t = maxf(0.0, cine_t - delta)
@@ -475,7 +477,7 @@ func tick(delta: float, captured: bool) -> void:
 	else:
 		stuck_t += delta
 	var show: bool = captured and not intro_active and not game.journal_panel.visible and not game.refreeze_panel.visible \
-		and not game.ending_panel.visible and not game.riding and cine_t <= 0.0 and GameSettings.on("hints")
+		and not game.ending_panel.visible and not game.riding and cine_t <= 0.0 and not game.title_active and GameSettings.on("hints")
 	strip_alpha = move_toward(strip_alpha, 1.0 if show else 0.0, delta * 4.0)
 	strip.modulate.a = strip_alpha
 	strip_tag.text = "NEXT"
@@ -615,40 +617,45 @@ func play_awakening(force := false) -> bool:
 	game.sfx.play("swell", -4.0)
 	return true
 
+## The controls a scene needs on screen (letterbox, captions, skip hint, flashes): never hidden with the HUD.
+func own_controls() -> Array:
+	return [strip, tip_panel, arrow, bar_top, bar_bot, caption, skip_label, game.flash_rect, game.reveal_title, game.reveal_sub, game.streak_label]
+
 func _begin_scene() -> void:
 	intro_active = true
 	intro_t = 0.0
 	var cam: Camera3D = game.cam
-	cam_home = cam.position
-	cam_pitch = cam.rotation.x
+	if not cam_preset:
+		cam_home = cam.position
+		cam_pitch = cam.rotation.x
+	cam_preset = false
 	game.get_node("Player").set_process_unhandled_input(false)
 	game.view.visible = false
 	game.tool_view.visible = false
-	var own := [strip, tip_panel, arrow, bar_top, bar_bot, caption, skip_label, game.flash_rect, game.reveal_title, game.reveal_sub, game.streak_label]
-	hidden_hud.clear()
+	var own := own_controls()
+	tip_panel.modulate.a = 0.0   # (a tip must not pop up over a cutscene)
+	tip_t = 0.0
+	if not hud_preset:
+		hidden_hud.clear()
+	hud_preset = false
 	for c in ui_root.get_children():  # a clean frame for the flyover
-		if c is Control and not own.has(c) and c.visible:
+		if c is Control and not own.has(c) and c.visible and not (game.title != null and c == game.title):
 			c.visible = false
 			hidden_hud.append(c)
 	game.prompt_label.text = ""
 	game.msg_label.text = ""
-	if scene == "intro":
-		_apply_cam(0.0)
-
-func _apply_cam(k: float) -> void:
-	var cam: Camera3D = game.cam
-	var e := k * k * (3.0 - 2.0 * k)
-	cam.position = cam_home + Vector3(0.0, 25.0 * (1.0 - e), 9.0 * (1.0 - e))
-	cam.rotation.x = lerpf(deg_to_rad(-43.0), cam_pitch, e)
-	cam.rotation.y = 0.5 * (1.0 - e)
+	if scene == "intro" or scene == "previously":
+		opening.begin(scene)
 
 func _tick_intro(delta: float) -> void:
 	var before := intro_t
 	intro_t += delta
-	var lines: Array = INTRO if scene == "intro" else AWAKEN
-	var length := INTRO_LEN if scene == "intro" else AWAKEN_LEN
-	if scene == "intro":
-		_apply_cam(clampf(intro_t / INTRO_FLY, 0.0, 1.0))
+	var lines: Array = AWAKEN
+	var length := AWAKEN_LEN
+	if scene == "intro" or scene == "previously":
+		lines = opening.captions(scene)
+		length = opening.length(scene)
+		opening.tick(scene, intro_t, delta)
 	else:
 		_tick_awaken(before, delta)
 	skip_label.modulate.a = lerpf(skip_label.modulate.a, 0.7 if intro_t > skip_after + 0.2 else 0.0, minf(1.0, delta * 4.0))
@@ -662,11 +669,8 @@ func _tick_intro(delta: float) -> void:
 				caption.add_theme_color_override("font_color", Style.AMBER if ln[3] else Style.CREAM)
 			line_a = clampf(minf((intro_t - t0) / 0.6, (t1 - intro_t) / 0.6), 0.0, 1.0)
 	caption.modulate.a = line_a
-	if scene == "intro" and before < 3.4 and intro_t >= 3.4 and is_instance_valid(game.scenery):
-		game.scenery.pulse_eye()
-		game.sfx.play("rare", -12.0, 0.6)
 	if intro_t >= length:
-		skip_intro()
+		skip_intro(false)
 
 ## The awakening: pull up and back, hold the breath, then the Eye opens and everything answers.
 func _tick_awaken(before: float, delta: float) -> void:
@@ -715,10 +719,12 @@ func _awaken_open(instant: bool) -> void:
 		game.sfx.play("awaken", 0.0)
 		game.sfx.play("rare", -6.0, 0.8)
 
-func skip_intro() -> void:
+func skip_intro(skipped := true) -> void:
 	if not intro_active:
 		return
 	var was := scene
+	if was == "intro" or was == "previously":
+		opening.finish(was, skipped)
 	intro_active = false
 	want_intro = false
 	if was == "awaken":
@@ -731,8 +737,7 @@ func skip_intro() -> void:
 		game.awaken_hold = false
 	var cam: Camera3D = game.cam
 	cam.position = cam_home
-	cam.rotation.x = cam_pitch
-	cam.rotation.y = 0.0
+	cam.rotation = Vector3(cam_pitch, 0.0, 0.0)
 	game.get_node("Player").set_process_unhandled_input(true)
 	game.view.visible = true
 	game.tool_view.visible = true
@@ -744,6 +749,8 @@ func skip_intro() -> void:
 	skip_label.modulate.a = 0.0
 	if was == "intro":
 		game._say("Olga: Drill a hole, dear. Catch a fish. Carry it to the Eye.")
+	elif was == "previously":
+		game._say("Olga: Welcome back, dear.")
 	else:
 		game._say("Olga: %s\nNew: %s" % [game.EYE_LINES[game.EYE_STAGES.size() - 1], game.EYE_BOONS[game.EYE_STAGES.size() - 1]])
 
