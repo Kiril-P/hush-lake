@@ -24,6 +24,8 @@ func until_scene(g, t: float, limit := 2000) -> void:
 		n += 1
 
 func _ready() -> void:
+	DisplayServer.window_move_to_foreground()   # a window behind others stops redrawing on macOS and the captures come back stale
+	DisplayServer.window_set_flag(DisplayServer.WINDOW_FLAG_ALWAYS_ON_TOP, true)
 	var only := OS.get_environment("OPEN_ONLY")
 	if only == "" or only == "title":
 		var g = make_game(false)
@@ -44,6 +46,12 @@ func _ready() -> void:
 			while not g2.guide.intro_active:
 				await get_tree().process_frame
 			await until_scene(g2, m[0])
+			var cp: Vector3 = g2.cam.global_position
+			var near := ""
+			for c in g2.dressing.root.get_children():
+				if c is Node3D and (c as Node3D).global_position.distance_to(cp) < 2.5:
+					near += " %s@%.1f" % [c.name if c.name != "" else str(c.get_class()), (c as Node3D).global_position.distance_to(cp)]
+			print("CAM ", m[1], " ", cp, near, " flash=", g2.flash_rect.color, " dream=", g2.dream.visible, " photo=", g2.photo, " ts=", Engine.time_scale, " t=", g2.guide.intro_t, " fov=", g2.cam.fov, " cine=", g2.cine_eye)
 			shot(m[1])
 		await until_scene(g2, 99.0)
 		Engine.time_scale = 1.0

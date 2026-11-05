@@ -17,3 +17,8 @@ The scene is procedural, so images are **mood boards, not blueprints**. The loop
 6. **You choose**: the sheets in `docs/refs/sheets/` are the review artifact. Say which scenes to push further; repeat from 2 on those.
 
 Rules for agents: they edit nothing but their own output dir. Prompts never mention UI. Keep every round's `manifest.json`.
+
+## Capture gotcha (macOS)
+A windowed Godot run that is hidden behind other windows stops redrawing: captures come back as one stale frame (byte-identical files) or
+black, and a long capture can stall. The capture tools now call `DisplayServer.window_move_to_foreground()` first. If sheets ever show
+identical frames, check file sizes and keep the window visible.

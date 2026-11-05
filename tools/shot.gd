@@ -15,6 +15,7 @@ const VIEWS := [
 ]
 
 func _ready() -> void:
+	DisplayServer.window_move_to_foreground()   # a window behind others stops redrawing on macOS: captures would come back stale
 	GameState.save_slot = "test_shot"
 	GameState.delete_save()
 	GameState.reset()

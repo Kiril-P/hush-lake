@@ -29,6 +29,7 @@ const SHOTS := [
 ]
 
 func _ready() -> void:
+	DisplayServer.window_move_to_foreground()   # a window behind others stops redrawing on macOS: captures would come back stale
 	var out := OUT
 	var args := OS.get_cmdline_user_args()
 	if args.size() >= 2 and args[0] == "--out":

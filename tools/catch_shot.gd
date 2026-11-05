@@ -3,6 +3,7 @@ extends Node
 ## Usage: tools/catch_shot.sh -> renders/catch_journal.png, renders/catch_fish.png
 
 func _ready() -> void:
+	DisplayServer.window_move_to_foreground()   # a window behind others stops redrawing on macOS: captures would come back stale
 	GameState.save_slot = "test_catch_shot"
 	GameState.delete_save()
 	GameState.reset()

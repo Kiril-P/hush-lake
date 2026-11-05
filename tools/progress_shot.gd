@@ -7,6 +7,7 @@ func shot(n: String) -> void:
 	print("saved ", n)
 
 func _ready() -> void:
+	DisplayServer.window_move_to_foreground()   # a window behind others stops redrawing on macOS: captures would come back stale
 	GameState.save_slot = "test_progress_shot"
 	GameState.delete_save()
 	GameState.reset()
