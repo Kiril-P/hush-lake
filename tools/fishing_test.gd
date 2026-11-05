@@ -95,6 +95,29 @@ func _ready() -> void:
 	check("at midnight some draws are Lantern Eels (%d of %d)" % [eels, drawn], eels >= 1 and eels < drawn)
 	check("each draw still cost the tile exactly one fish", g.model.tile_left(c) == left0 - drawn)
 	check("a discovered visitor is in the journal", g.journal.has("Lantern Eel"))
+	# the review's two economy findings: rares are never swapped away, and visitors are capped per lake
+	g.model.stock[c] = {"Ancient Fish": 40}
+	var swapped := 0
+	for i in 40:
+		if g._draw_fish({"c": c}).get("name", "") != "Ancient Fish":
+			swapped += 1
+	check("a rare draw is never swapped for a visitor (Ancient Fish stays Ancient Fish)", swapped == 0)
+	g.visit_count = {}
+	g.model.stock[c] = {"Minnow": 400}
+	g.visitor_rng.seed = 2
+	var seen_eels := 0
+	for i in 300:
+		if g._draw_fish({"c": c}).get("name", "") == "Lantern Eel":
+			seen_eels += 1
+	check("a visitor species is capped per lake (%d eels of 300 minnows, cap %d)" % [seen_eels, g.VISIT_CAP], seen_eels == g.VISIT_CAP and g.visit_count.get("Lantern Eel", 0) == g.VISIT_CAP)
+	g._refresh()
+	check("the click-block and walk-block helpers know the overlays", g._overlay_blocks_click() == false and g.letters_panel.visible == false)
+	g.letters_panel.visible = true
+	check("an open letter blocks walking and clicks", g._overlay_blocks_walk() and g._overlay_blocks_click())
+	g.letters_panel.visible = false
+	g.photo = true
+	check("photo mode blocks clicks but not walking", g._overlay_blocks_click() and not g._overlay_blocks_walk())
+	g.photo = false
 	var vals := 0.0
 	for s in g.SPECIES:
 		if s.w > 0.0:

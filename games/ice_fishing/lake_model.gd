@@ -32,7 +32,7 @@ const MODS := {
 	"skittish": {"name": "Skittish Lake", "desc": "bites take 50% longer, fish sell for +40%", "count": 1.0, "rare": 1.0, "wait": 1.5, "value": 1.4},
 	"glass": {"name": "Glass Lake", "desc": "bites come 30% sooner, fish sell for -20%", "count": 1.0, "rare": 1.0, "wait": 0.7, "value": 0.8},
 	"longnight": {"name": "Long Night Lake", "desc": "visitors come twice as often, bites 20% slower, +15% value", "count": 1.0, "rare": 1.3, "wait": 1.2, "value": 1.15, "visitors": 2.0},
-	"deep": {"name": "Deep Lake", "desc": "+60% fish, bites 25% slower, +10% value", "count": 1.6, "rare": 1.0, "wait": 1.25, "value": 1.1},
+	"deep": {"name": "Deep Lake", "desc": "+60% fish, but bites take 50% longer", "count": 1.6, "rare": 1.0, "wait": 1.5, "value": 1.0},
 }
 
 var seed_value := 0

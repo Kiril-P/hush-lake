@@ -68,3 +68,21 @@ Weather drifts between clear, flurries, snowfall, blizzard and fog (never in the
 
 ## The opening
 Launch: the title forms out of frost over a slow dusk drift toward the Eye, a hum under the ice (Enter or Space also starts). New game: Play fades to the dog-sled run (about 41 s: chase from above, low beside the dogs, from the sled basket, Olga turns and hands you a rod, you step off, the Eye opens one lid) and drops you on the ice with no cut. Continue: a 10 s "previously" recap. Click skips either after a second. Questions: (1) did the title make you want to play, or did you wait for the buttons? (2) was the sled run too long, too short, or just right, and did you skip it? second time? (3) did Olga handing you the rod land as a moment, or was it filler? (4) was the Eye opening a payoff? (5) did the hand-off to control feel seamless? (6) on Continue, did the recap help or did you just want to play?
+
+## Round 5 checklist (art pass, score, catch layer, story, progression): needs a human with ears and eyes
+Everything below passes its headless tests; none of it has been *felt*. Please play 30+ minutes and answer:
+
+**Look (art pass).** Is the cold teal grade right, or too dark/too saturated? Is the Eye always the first thing you see? Do the camp props (crates,
+sled, snowman, flag, lamp pools) feel lived-in or cluttered? Does dusk/night look better than before? (Sheets: `docs/refs/sheets/r2/`.)
+
+**Sound.** The score is generated and has only ever been level-checked. Is it too loud/quiet (Music slider, default 80%)? Does the melody feel like
+a lake or like a ringtone? Too many notes by day? Does it duck well under the opening? Do ice/snow steps and the bucket clank read as different?
+
+**Catch layer.** Do you notice visitor fish (night: Lantern Eel, fog: Ghost Carp, dawn: Dawn Salmon, blizzard: Frost Gar, aurora: Aurora Char, awake
+Eye: Eye Tetra)? Is the 0.35x slow beat on big catches delightful or annoying (Settings > Look & feel turns it off)? Does photo mode (P) feel good?
+
+**Story.** Do the letters land (warm, dry, a little eerie)? Is the mailbox easy to find? Are keepsakes too rare (30% of junk) or too common? Does
+the ending feel like a door left open? Is a dream before every refreeze welcome or a speed bump (any key skips after 1.5 s)?
+
+**Progression.** Is Overdrive Coils (900, x2.4) worth it? Do you want the Ledger pearls sooner or later? Is choosing the next lake (Z X C) clear?
+Are the seven perks the right mix?

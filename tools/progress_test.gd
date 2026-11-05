@@ -83,7 +83,7 @@ func _ready() -> void:
 	check("the next lake rolls fresh offers", not GameState.meta.has("offers") or int(GameState.meta.get("offers_for", -1)) != g._meta_int("lakes"))
 	# ---------- the new modifiers ----------
 	var ln: Dictionary = LakeModel.MODS["longnight"]
-	check("Long Night doubles visitors, Deep adds 60% fish", float(ln.visitors) == 2.0 and float(LakeModel.MODS["deep"].count) == 1.6)
+	check("Long Night doubles visitors, Deep adds 60% fish for slower bites", float(ln.visitors) == 2.0 and float(LakeModel.MODS["deep"].count) == 1.6 and float(LakeModel.MODS["deep"].wait) >= 1.4)
 	var m = LakeModel.new()
 	m.generate(5, "deep")
 	var m0 = LakeModel.new()
@@ -108,5 +108,17 @@ func _ready() -> void:
 	g._bank_and_reset()
 	check("Spare Coils start the next lake with Overdrive 2", GameState.level("overdrive") == 2)
 	check("seven perks are on the refreeze card", g.PERKS.size() == 7)
+	# an older save with the stage-3 goal done must still unlock the Overdrive stall (the review's finding)
+	var gi := -1
+	for i in g.GOALS.size():
+		if g.GOALS[i].get("unlock", []).has("overdrive"):
+			gi = i
+	var goals := []
+	goals.resize(g.GOALS.size())
+	goals.fill(false)
+	goals[gi] = true
+	g.unlocked["overdrive"] = false
+	g._restore_inner({"goals": goals})
+	check("restoring a save with the stage-3 goal done unlocks Overdrive Coils", g.unlocked["overdrive"] == true)
 	print("PROGRESS %s" % ("PASS" if fails == 0 else "FAIL"))
 	get_tree().quit(1 if fails > 0 else 0)

@@ -1634,10 +1634,11 @@ func _draw_fish(t: Dictionary) -> Dictionary:
 	var n: String = model.draw(t.c)
 	if n == "":
 		return {}
-	if not Visitors.is_visitor(n):   # the right hour or weather may swap in a visitor (the tile still pays one fish)
+	if n in ["Minnow", "Perch"]:   # the right hour or weather may swap in a visitor for a COMMON fish (never a rare, never junk: the stock and the keepsakes stay whole)
 		var vn := Visitors.roll(visitor_ctx(), visitor_rng)
-		if vn != "":
+		if vn != "" and int(visit_count.get(vn, 0)) < VISIT_CAP:   # a handful per species per lake keeps the economy where it was
 			n = vn
+			visit_count[vn] = int(visit_count.get(vn, 0)) + 1
 	var f := _make_fish(_species(n))
 	if n in ["Old Boot", "Old Coin", "Glass Pearl"] and keep_rng.randf() < KEEP_CHANCE * (1.0 + 0.2 * perk_level("ears")):
 		var kp := Story.roll_keep(n, story, keep_rng)
@@ -1648,6 +1649,8 @@ func _draw_fish(t: Dictionary) -> Dictionary:
 	return f
 
 var visitor_rng := RandomNumberGenerator.new()
+var visit_count := {}   # visitor species -> how many came this lake (saved)
+const VISIT_CAP := 10   # per species per lake: <= ~1800 coins of visitors in a lake worth hundreds of thousands
 
 # ---------- the story (story.gd): letters, keepsakes, dreams, the ending ----------
 var story: Dictionary = Story.blank()
@@ -3495,8 +3498,15 @@ func _under_hud(world: Vector3) -> bool:
 		or Rect2(Vector2(0.0, 0.0), Vector2(340.0, 230.0)).has_point(sp) \
 		or Rect2(Vector2(vp.x - 340.0, 0.0), Vector2(340.0, 190.0)).has_point(sp)
 
+## A full-screen panel or scene that owns the keyboard and the mouse (photo mode only owns the mouse: you can still walk to frame a shot).
+func _overlay_blocks_walk() -> bool:
+	return letters_panel.visible or ledger_panel.visible or (dream != null and dream.active)
+
+func _overlay_blocks_click() -> bool:
+	return refreeze_panel.visible or letters_panel.visible or ledger_panel.visible or photo or (dream != null and dream.active)
+
 func _walk(delta: float) -> void:
-	if guide.intro_active:
+	if guide.intro_active or _overlay_blocks_walk():
 		moving = false
 		return
 	var d := Vector3(int(Input.is_physical_key_pressed(KEY_D)) - int(Input.is_physical_key_pressed(KEY_A)), 0,
@@ -4603,7 +4613,9 @@ func _prompt_for(a: String) -> String:
 	return "%s\n[%s: %d fish left]  %s" % [_tile_action_text(t), sec2.name, sec2.left, _below_text(t)]
 
 func _update_hold(a: String, delta: float) -> void:
-	var holding := Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and _cap()
+	var holding := Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and _cap() and not _overlay_blocks_click()
+	if _overlay_blocks_click():
+		hold_block = true   # a press that closes a panel (or takes a photo) must not drill when the panel is gone
 	if hold_block:
 		if holding:
 			holding = false
@@ -4780,6 +4792,7 @@ func _toggle_refreeze() -> void:
 	refreeze_panel.visible = not refreeze_panel.visible
 	if refreeze_panel.visible:
 		journal_panel.visible = false
+		ledger_panel.visible = false
 		_update_refreeze()
 
 func _update_refreeze() -> void:
@@ -4868,10 +4881,10 @@ func _refreeze_key(key: int) -> bool:
 
 func _refreeze() -> void:
 	refreeze_panel.visible = false
-	story.dreams = int(story.dreams) + 1
 	if not test_capture and dream != null:   # the Eye dreams of the winter you just finished, then the lake freezes again
 		dream.play(Story.dream_lines(_meta_int("lakes"), int(stats.eye_fed)), "THE EYE DREAMS")
 		await dream.finished
+	story.dreams = int(story.dreams) + 1   # (counted after: a quit during the dream must not count it twice)
 	_bank_and_reset()
 	get_tree().reload_current_scene()
 
@@ -4984,7 +4997,7 @@ func _on_about_to_save() -> void:
 		"yaw": p.rotation.y, "pitch": cam.rotation.x,
 		"day": day_t, "time": play_time, "weather": weather.to_dict(),
 		"depots": depots.map(func(d): return [d.pos.x, d.pos.z]), "props": props.map(func(pr): return [pr.kind, pr.pos.x, pr.pos.z]), "bait": bait_t, "rigs": rigs.map(func(rg): return [rg.pos.x, rg.pos.z]),
-		"order": order, "orders_done": orders_done, "lake": model.to_dict()}
+		"order": order, "orders_done": orders_done, "visits": visit_count, "lake": model.to_dict()}
 
 func _restore(d: Dictionary) -> bool:
 	restoring = true
@@ -5006,6 +5019,10 @@ func _restore_inner(d: Dictionary) -> bool:
 		goal_done[i] = g[i]
 	for k in d.get("unlocked", {}):
 		unlocked[k] = d.unlocked[k]
+	for gi in mini(goal_done.size(), GOALS.size()):   # goals finished in an older version may have gained an unlock since: re-apply them
+		if goal_done[gi]:
+			for uid in GOALS[gi].get("unlock", []):
+				unlocked[uid] = true
 	guide.from_dict(d.get("tips", null))
 	for k in d.get("records", {}):
 		records[k] = float(d.records[k])
@@ -5039,6 +5056,7 @@ func _restore_inner(d: Dictionary) -> bool:
 		order.need = int(order.get("need", 3))
 		order.reward = int(order.get("reward", 10))
 	orders_done = int(d.get("orders_done", 0))
+	visit_count = d.get("visits", {}).duplicate()
 	for ld in d.get("loose", []):
 		if yard.count() >= FishYard.MAX_LOOSE:   # a save can hold more than the ice does (fights, old saves): the rest are paid in full
 			_settle_fish(_fish_from(ld.f), EYE_MULT)
@@ -5284,7 +5302,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			_release_kick()
 	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT \
 			and _cap() \
-			and not refreeze_panel.visible:
+			and not _overlay_blocks_click():
 		var a_click := _aim()
 		if a_click in ["", "ice"]:
 			if _aim_fish() != null:
@@ -5526,9 +5544,11 @@ func _catch(t: Dictionary) -> void:
 
 ## A big catch (or a first of its kind) gets a beat: time slows for half a second, the view eases wide, the music answers.
 func _hero_moment(first: bool) -> void:
+	sfx.score.hit("stage" if first else "catch")
+	if not GameSettings.on("hero"):
+		return
 	Engine.time_scale = 0.35
 	fov_kick = 5.0 * fx_punch if first else 3.0 * fx_punch
-	sfx.score.hit("stage" if first else "catch")
 	get_tree().create_timer(0.5 if first else 0.35, true, false, true).timeout.connect(func(): Engine.time_scale = 1.0)
 
 func _exit_tree() -> void:
@@ -5576,6 +5596,8 @@ func take_photo() -> String:
 	photo_hint.visible = false
 	await RenderingServer.frame_post_draw
 	var img := get_viewport().get_texture().get_image()
+	if img == null:
+		return ""
 	DirAccess.make_dir_recursive_absolute("user://photos")
 	var path := "user://photos/hush_%s.png" % Time.get_datetime_string_from_system().replace(":", "-")
 	img.save_png(path)

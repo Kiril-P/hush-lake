@@ -10,6 +10,7 @@ const DEFS := {
 	"fov":    {"label": "Field of view", "kind": "slider", "def": 75.0, "min": 60.0, "max": 100.0, "step": 1.0, "tab": 0, "fmt": "deg", "hint": "A wider view sees more but bends the edges."},
 	"bob":    {"label": "Head bob", "kind": "slider", "def": 1.0, "min": 0.0, "max": 1.0, "tab": 0, "fmt": "pct", "hint": "The sway of the view while you walk. 0 = steady."},
 	"shake":  {"label": "Screen shake", "kind": "slider", "def": 1.0, "min": 0.0, "max": 1.0, "tab": 0, "fmt": "pct", "hint": "Kicks, big catches and the Eye waking. 0 = still."},
+	"hero":   {"label": "Slow motion on big catches", "kind": "toggle", "def": 1.0, "tab": 0, "hint": "A half-second slow beat for a first-of-its-kind or valuable catch. Off = no time change."},
 	"punch":  {"label": "View punch (FOV kicks)", "kind": "slider", "def": 1.0, "min": 0.0, "max": 1.0, "tab": 0, "fmt": "pct", "hint": "The little zoom pulses on bites, throws and feeding streaks."},
 	"hints":  {"label": "Guidance (NEXT strip, tips, pin)", "kind": "toggle", "def": 1.0, "tab": 1, "hint": "Turn off once you know the game. H still asks Olga."},
 	"prompts": {"label": "Interaction prompts", "kind": "toggle", "def": 1.0, "tab": 1, "hint": "The line under the crosshair that says what a click does."},

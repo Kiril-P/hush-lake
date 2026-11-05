@@ -68,7 +68,7 @@ func open(got: Array, read: Array, keeps_found: int, keeps_total: int) -> void:
 	_foot()
 
 func _foot() -> void:
-	foot_l.text = "%s        <  >  turn the page        E / Esc  close" % String(foot_l.get_meta("keeps", ""))
+	foot_l.text = "%s        A / D  turn the page        E  close" % String(foot_l.get_meta("keeps", ""))
 
 func _show(i: int) -> void:
 	idx = clampi(i, 0, ids.size() - 1)
@@ -82,8 +82,12 @@ func _show(i: int) -> void:
 	var secs := clampf(body_l.get_total_character_count() * 0.012, 1.2, 4.5)
 	tw = create_tween()
 	tw.tween_property(body_l, "visible_ratio", 1.0, secs)
-	read_letter.emit(ids[idx])
-	unread_ids.erase(ids[idx])
+	var this_id: String = ids[idx]
+	tw.finished.connect(func(): _mark(this_id))   # a letter counts as read once its writing has finished (paging past it does not)
+
+func _mark(id: String) -> void:
+	unread_ids.erase(id)
+	read_letter.emit(id)
 
 func nav(dir: int) -> void:
 	if ids.is_empty():
@@ -99,6 +103,7 @@ func dismiss() -> bool:
 		if tw:
 			tw.kill()
 		body_l.visible_ratio = 1.0
+		_mark(current_id())
 		return false
 	visible = false
 	return true
