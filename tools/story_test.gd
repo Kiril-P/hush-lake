@@ -70,6 +70,20 @@ func _ready() -> void:
 	check("the first press finishes the writing, which marks it read and drops the flag", g.letters_panel.visible and not g.letters_panel.typing() and g.story.read == ["welcome"] and g.dressing._unread == 0)
 	g._close_letters()
 	check("the second press closes it", not g.letters_panel.visible)
+	# Esc closes a letter without pausing: the game eats the key before the Player frees the mouse
+	g._open_letters()
+	var esc := InputEventKey.new()
+	esc.keycode = KEY_ESCAPE
+	esc.pressed = true
+	g._input(esc)
+	g._input(esc)
+	check("Esc finishes then closes a letter", not g.letters_panel.visible)
+	g._toggle_photo()
+	g._input(esc)
+	check("Esc leaves photo mode", not g.photo and g.get_node("UI").visible)
+	g.ledger_panel.visible = true
+	g._input(esc)
+	check("Esc closes the ledger", not g.ledger_panel.visible)
 	var ev := InputEventKey.new()
 	ev.keycode = KEY_E
 	ev.pressed = true

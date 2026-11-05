@@ -5192,6 +5192,26 @@ func _new_game() -> void:
 		GameState.meta["settings"] = keep
 	get_tree().reload_current_scene()
 
+## Esc closes a panel or photo mode instead of pausing: `_input` runs before the Player's own handler would free the mouse.
+func _input(event: InputEvent) -> void:
+	if not (event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE):
+		return
+	if title_active or (dream != null and dream.active) or guide.intro_active:
+		return
+	if letters_panel.visible:
+		_close_letters()
+	elif photo:
+		_toggle_photo()
+	elif ledger_panel.visible:
+		ledger_panel.visible = false
+	elif journal_panel.visible:
+		journal_panel.visible = false
+	elif refreeze_panel.visible:
+		refreeze_panel.visible = false
+	else:
+		return
+	get_viewport().set_input_as_handled()
+
 func _unhandled_input(event: InputEvent) -> void:
 	if title_active or (title != null and not guide.intro_active):   # the title owns the keyboard (its own Enter handler); nothing leaks into the world behind it
 		return

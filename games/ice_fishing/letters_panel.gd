@@ -68,7 +68,7 @@ func open(got: Array, read: Array, keeps_found: int, keeps_total: int) -> void:
 	_foot()
 
 func _foot() -> void:
-	foot_l.text = "%s        A / D  turn the page        E  close" % String(foot_l.get_meta("keeps", ""))
+	foot_l.text = "%s        A / D  turn the page        E or Esc  close" % String(foot_l.get_meta("keeps", ""))
 
 func _show(i: int) -> void:
 	idx = clampi(i, 0, ids.size() - 1)
