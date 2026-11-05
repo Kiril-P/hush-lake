@@ -119,6 +119,13 @@ const SPECIES := [
 	{"name": "Old Coin",     "value": 30.0,  "w": 1.8,  "color": Color(0.95, 0.75, 0.2)},
 	{"name": "Glass Pearl",  "value": 90.0,  "w": 0.7,  "color": Color(0.7, 0.95, 1.0)},
 	{"name": "Ancient Fish", "value": 250.0, "w": 0.5,  "color": Color(0.4, 1.0, 0.8)},
+	# visitors (visitors.gd): never in the lake's stock; the right hour or weather swaps one in when you draw a fish
+	{"name": "Dawn Salmon",  "value": 11.0,  "w": 0.0,  "color": Color(1.0, 0.55, 0.45)},
+	{"name": "Ghost Carp",   "value": 9.0,   "w": 0.0,  "color": Color(0.85, 0.92, 0.95)},
+	{"name": "Lantern Eel",  "value": 12.0,  "w": 0.0,  "color": Color(1.0, 0.72, 0.3)},
+	{"name": "Frost Gar",    "value": 20.0,  "w": 0.0,  "color": Color(0.7, 0.85, 1.0)},
+	{"name": "Aurora Char",  "value": 55.0,  "w": 0.0,  "color": Color(0.5, 1.0, 0.75)},
+	{"name": "Eye Tetra",    "value": 40.0,  "w": 0.0,  "color": Color(0.3, 1.0, 0.95)},
 ]
 
 # shop: "start" = available from the beginning, otherwise unlocked by a goal
@@ -1295,8 +1302,12 @@ void fragment() {
 	journal_grid = GridContainer.new()
 	journal_grid.columns = 5
 	journal_grid.add_theme_constant_override("h_separation", 18)
-	journal_grid.add_theme_constant_override("v_separation", 6)
-	jbox.add_child(journal_grid)
+	journal_grid.add_theme_constant_override("v_separation", 4)
+	var jscroll := ScrollContainer.new()   # fourteen species with a note each: scroll rather than overflow a small window
+	jscroll.custom_minimum_size = Vector2(0, 520)
+	jscroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	jscroll.add_child(journal_grid)
+	jbox.add_child(jscroll)
 	var jhint := Label.new()
 	jhint.text = "Tab to close"
 	jhint.add_theme_font_size_override("font_size", 14)
@@ -1570,7 +1581,8 @@ func roll_fish() -> Dictionary:
 
 ## cm range per species: purely cosmetic (shown on the catch card, kept as personal records)
 const LENGTHS := {"Minnow": [6.0, 10.0], "Perch": [14.0, 28.0], "Silver Pike": [45.0, 90.0], "Golden Trout": [30.0, 55.0],
-	"Old Boot": [27.0, 32.0], "Old Coin": [3.0, 4.0], "Glass Pearl": [2.0, 3.0], "Ancient Fish": [140.0, 220.0]}
+	"Old Boot": [27.0, 32.0], "Old Coin": [3.0, 4.0], "Glass Pearl": [2.0, 3.0], "Ancient Fish": [140.0, 220.0],
+	"Lantern Eel": [60.0, 110.0], "Ghost Carp": [30.0, 62.0], "Dawn Salmon": [50.0, 85.0], "Frost Gar": [80.0, 140.0], "Aurora Char": [35.0, 60.0], "Eye Tetra": [3.0, 6.0]}
 
 func _make_fish(s: Dictionary) -> Dictionary:
 	var r: Array = LENGTHS.get(s.name, [10.0, 20.0])
@@ -1597,10 +1609,19 @@ func _draw_fish(t: Dictionary) -> Dictionary:
 	var n: String = model.draw(t.c)
 	if n == "":
 		return {}
+	if not Visitors.is_visitor(n):   # the right hour or weather may swap in a visitor (the tile still pays one fish)
+		var vn := Visitors.roll(visitor_ctx(), visitor_rng)
+		if vn != "":
+			n = vn
 	var f := _make_fish(_species(n))
 	_note_found(f)
 	return f
 
+var visitor_rng := RandomNumberGenerator.new()
+
+func visitor_ctx() -> Dictionary:
+	return {"night": scenery._night, "weather": weather.cur if weather else "clear", "aurora": weather.aurora_on() if weather else false,
+		"dawn": Visitors.is_dawn(day_t), "eye_stage": eye_stage(), "stages": EYE_STAGES.size()}
 func _after_draw(t: Dictionary) -> void:
 	var cell: Dictionary = tiles[t.c]
 	_update_shadows(cell)
@@ -1793,11 +1814,22 @@ func _update_journal() -> void:
 		hl.text = h
 	for sp in SPECIES:
 		var found := journal.has(sp.name)
-		var sw := _dot(journal_grid, sp.color if found else Color(0.3, 0.33, 0.45), 16)
-		sw.custom_minimum_size = Vector2(16, 16)
+		var ic := HudWidgets.FishIcon.new(sp.name, found)   # the fish itself, drawn from its model: a dark silhouette until you meet it
+		journal_grid.add_child(ic)
 		var rar: Array = _rarity(sp.name)
-		var nl := _plain(journal_grid, 19, rar[1] if found else Style.MUTED)
+		var nbox := VBoxContainer.new()
+		nbox.add_theme_constant_override("separation", 0)
+		journal_grid.add_child(nbox)
+		var nl := _plain(nbox, 19, rar[1] if found else Style.MUTED)
 		nl.text = sp.name if found else "???"
+		var visitor: bool = Visitors.is_visitor(sp.name)
+		var sub := _plain(nbox, 12, Style.MUTED)
+		sub.custom_minimum_size = Vector2(330, 0)
+		sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		if found:
+			sub.text = ("Visitor.  " if visitor else "") + (Visitors.note_of(sp.name) if visitor else _journal_note(sp.name))
+		elif visitor:
+			sub.text = Visitors.clue_of(sp.name)
 		var cl := _plain(journal_grid, 18, Style.CREAM if found else Style.MUTED)
 		cl.text = "x%d" % journal[sp.name] if found else ""
 		var bl := _plain(journal_grid, 18, Style.CREAM if found else Style.MUTED)
@@ -2200,7 +2232,7 @@ func _animate(delta: float) -> void:
 		if prev_phase > 0.0 and sin(bob_t) <= 0.0:
 			var pw: Vector3 = $Player.global_position
 			_snow_fx(Vector3(pw.x, 0.03, pw.z) + (-$Player.global_basis.z) * 0.2, 2, 0.35)
-			sfx.play("step", -8.0, randf_range(0.8, 1.2))
+			sfx.play("step_ice" if pw.length() < scenery.edge_at(pw.x, pw.z) else "step_snow", -8.0, randf_range(0.8, 1.2))
 	else:
 		bob_t = lerpf(bob_t, round(bob_t / PI) * PI, minf(1.0, delta * 8.0))
 	fov_kick = lerpf(fov_kick, 0.0, delta * 6.0)
@@ -2830,7 +2862,9 @@ func _place_ground(item: Dictionary, pos: Vector3, toss := false) -> Dictionary:
 		tw.tween_callback(func():
 			node.global_position = pos
 			_snow_fx(pos + Vector3(0, 0.1, 0), 6, 1.0)
-			sfx.play("thud", -10.0, 1.0))
+			sfx.play("thud", -10.0, 1.0)
+			if item.k == "bucket":
+				sfx.play("clank", -8.0, randf_range(0.9, 1.1)))
 	return g
 
 func _remove_ground(g: Dictionary) -> void:
@@ -2854,6 +2888,8 @@ func _give_item(item: Dictionary) -> void:
 ## Pick something up off the ice. With every slot full, it swaps with what is in your hand (that goes down where it lay).
 func _take_ground(g: Dictionary) -> bool:
 	var item: Dictionary = g.item
+	if item.k == "bucket":
+		sfx.play("clank", -12.0, randf_range(1.1, 1.3))
 	var spot: Vector3 = g.pos
 	var fs := inv.free_slot()
 	var old := {}
@@ -2953,6 +2989,7 @@ func _kick_buckets(pos: Vector3, fwd: Vector3, power: float) -> int:
 		_refresh_bucket_node(g)
 		_snow_fx(g.pos + Vector3(0, 0.3, 0), 8, 1.2)
 		sfx.play("kick", -4.0, 0.7)
+		sfx.play("clank", -6.0, randf_range(0.75, 0.95))
 		n += 1
 	return n
 
@@ -4902,6 +4939,19 @@ func _unhandled_input(event: InputEvent) -> void:
 		if guide.intro_t > guide.skip_after and ((event is InputEventMouseButton and event.pressed) or (event is InputEventKey and event.pressed and event.keycode in [KEY_SPACE, KEY_ENTER, KEY_E])):
 			guide.skip_intro()
 		return
+	if photo:
+		if event is InputEventKey and event.pressed and not event.echo and event.keycode in [KEY_P, KEY_ESCAPE]:
+			_toggle_photo()
+		elif event is InputEventKey and event.pressed and not event.echo and event.keycode in [KEY_ENTER, KEY_KP_ENTER]:
+			take_photo()
+		elif event is InputEventMouseButton and event.pressed:
+			if event.button_index == MOUSE_BUTTON_LEFT:
+				take_photo()
+			elif event.button_index == MOUSE_BUTTON_WHEEL_UP:
+				fov_base = clampf(fov_base - 4.0, 25.0, 100.0)
+			elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+				fov_base = clampf(fov_base + 4.0, 25.0, 100.0)
+		return
 	if event is InputEventKey and event.keycode == KEY_F and not event.echo and _cap():
 		if event.pressed:
 			_start_kick()
@@ -4914,6 +4964,9 @@ func _unhandled_input(event: InputEvent) -> void:
 				return
 		if event.keycode == KEY_R:
 			_toggle_refreeze()
+			return
+		if event.keycode == KEY_P and _cap() and not journal_panel.visible and not refreeze_panel.visible:
+			_toggle_photo()
 			return
 		if event.keycode == KEY_TAB:
 			refreeze_panel.visible = false
@@ -5207,11 +5260,75 @@ func _catch(t: Dictionary) -> void:
 	_show_card(best, got.size(), new_species, new_record)
 	sfx.play("rare" if best.base >= 5.0 else "catch")
 	shake = maxf(shake, 0.07 if best.base >= 5.0 else 0.025)
+	if (new_species or _species_value(best.name) >= 14.0) and not test_capture:
+		_hero_moment(new_species)
 	_kick_tool(-1.0)
 	if best.name == "Old Boot":
 		_say("Olga will love this... an Old Boot.")
 	_after_draw(t)
 	_refresh()
+
+## A big catch (or a first of its kind) gets a beat: time slows for half a second, the view eases wide, the music answers.
+func _hero_moment(first: bool) -> void:
+	Engine.time_scale = 0.35
+	fov_kick = 5.0 * fx_punch if first else 3.0 * fx_punch
+	sfx.score.hit("stage" if first else "catch")
+	get_tree().create_timer(0.5 if first else 0.35, true, false, true).timeout.connect(func(): Engine.time_scale = 1.0)
+
+func _exit_tree() -> void:
+	Engine.time_scale = 1.0
+
+# ---------- photo mode ----------
+var photo := false
+var photo_layer: CanvasLayer
+var photo_hint: Label
+var photo_flash: ColorRect
+
+func _toggle_photo() -> void:
+	photo = not photo
+	$UI.visible = not photo
+	tool_view.visible = not photo and tool >= 0
+	if photo_layer == null:
+		photo_layer = CanvasLayer.new()
+		photo_layer.layer = 50
+		add_child(photo_layer)
+		photo_hint = Label.new()
+		photo_hint.text = "PHOTO MODE      click or Enter: take a picture      scroll: zoom      walk to frame it      P: back"
+		photo_hint.add_theme_font_size_override("font_size", 16)
+		photo_hint.add_theme_color_override("font_color", Color(1, 1, 1, 0.7))
+		photo_hint.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+		photo_hint.offset_top = -40
+		photo_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		photo_layer.add_child(photo_hint)
+		photo_flash = ColorRect.new()
+		photo_flash.color = Color(1, 1, 1, 0)
+		photo_flash.set_anchors_preset(Control.PRESET_FULL_RECT)
+		photo_flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		photo_layer.add_child(photo_flash)
+	photo_layer.visible = true
+	photo_hint.visible = photo
+	if photo:
+		photo_hint.modulate.a = 1.0
+		create_tween().tween_property(photo_hint, "modulate:a", 0.0, 1.0).set_delay(4.0)
+	else:
+		fov_base = GameSettings.get_value("fov")
+		_refresh_dock()
+		_sync_tool_view()
+
+## Saves the frame without the interface to user://photos/ and flashes. Returns the saved path ("" in headless runs).
+func take_photo() -> String:
+	photo_hint.visible = false
+	await RenderingServer.frame_post_draw
+	var img := get_viewport().get_texture().get_image()
+	DirAccess.make_dir_recursive_absolute("user://photos")
+	var path := "user://photos/hush_%s.png" % Time.get_datetime_string_from_system().replace(":", "-")
+	img.save_png(path)
+	sfx.play("tick", -4.0, 0.6)
+	sfx.play("thud", -12.0, 1.8)
+	photo_flash.color = Color(1, 1, 1, 0.7)
+	create_tween().tween_property(photo_flash, "color:a", 0.0, 0.4)
+	photo_hint.visible = photo
+	return ProjectSettings.globalize_path(path)
 
 func _hand_point() -> Vector3:
 	return cam.global_position + cam.global_basis * Vector3(0.1, -0.3, -0.7)
@@ -5244,6 +5361,21 @@ func _launch_catch(t: Dictionary, got: Array, best: Dictionary) -> void:
 	sfx.play("plop", -4.0, randf_range(1.0, 1.3))
 	view_pop = 1.0
 
+## Olga's margin notes for the lake's own fish (visitors have theirs in visitors.gd).
+const JOURNAL_NOTES := {
+	"Minnow": "Plenty. The Eye does not mind plenty.",
+	"Perch": "Stripes like a little prisoner. Good eating, they say.",
+	"Silver Pike": "All teeth and no opinions.",
+	"Golden Trout": "Keep it out of the sun. Or do not: it looks better there.",
+	"Old Boot": "Somebody's. Somebody's whole winter.",
+	"Old Coin": "Older than the village. Older than the lake, maybe.",
+	"Glass Pearl": "Do not hold it up to the Eye. I did once.",
+	"Ancient Fish": "Runes on the scales. It looked at me like it knew my name.",
+}
+
+func _journal_note(n: String) -> String:
+	return String(JOURNAL_NOTES.get(n, ""))
+
 func _rarity(name: String) -> Array:   # rarity colours stay inside the palette: cream, teal, sky, warm amber, bright amber
 	var v := _species_value(name)
 	if v < 2.5: return ["COMMON", Style.CREAM]
@@ -5254,7 +5386,7 @@ func _rarity(name: String) -> Array:   # rarity colours stay inside the palette:
 
 func _show_card(best: Dictionary, count: int, new_species: bool, new_record: bool) -> void:
 	var rar := _rarity(best.name)
-	card_rarity.text = "%s%s" % [rar[0], "  -  NEW SPECIES" if new_species else ""]
+	card_rarity.text = "%s%s%s" % [rar[0], "  -  VISITOR" if Visitors.is_visitor(best.name) else "", "  -  NEW SPECIES" if new_species else ""]
 	card_rarity.add_theme_color_override("font_color", rar[1])
 	card_name.text = best.name
 	card_name.add_theme_color_override("font_color", best.color.lerp(Color.WHITE, 0.35))

@@ -175,3 +175,79 @@ class SkyClock extends Control:
 			draw_circle(c + Vector2(2.0, -1.2), 3.8, Color(0.1, 0.16, 0.38))
 		else:
 			draw_circle(c, 4.6, Color(1.0, 0.85, 0.45))
+
+## A fish drawn from its model data (profile, colours, fin and tail shapes), side on, for the field journal: the same fish as in the
+## world. `known` false draws the dark silhouette of a species you have not met. Boots, coins and pearls get simple glyphs.
+class FishIcon extends Control:
+	var species := ""
+	var known := true
+
+	func _init(name_in := "", known_in := true) -> void:
+		species = name_in
+		known = known_in
+		custom_minimum_size = Vector2(76, 34)
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _ink(c: Color) -> Color:
+		return c if known else Color(0.17, 0.2, 0.31)
+
+	func _draw() -> void:
+		var spec: Dictionary = FishModel.SPECS.get(species, {})
+		var mid := Vector2(size.x * 0.5, size.y * 0.5)
+		match String(spec.get("kind", "")):
+			"coin":
+				draw_circle(mid, 11.0, _ink(Color(0.95, 0.75, 0.2)))
+				draw_arc(mid, 7.5, 0.0, TAU, 20, _ink(Color(0.7, 0.5, 0.1)), 1.6, true)
+			"pearl":
+				draw_circle(mid, 9.0, _ink(Color(0.75, 0.95, 1.0)))
+				if known:
+					draw_circle(mid + Vector2(-3, -3), 2.5, Color(1, 1, 1, 0.9))
+			"boot":
+				draw_colored_polygon(PackedVector2Array([mid + Vector2(-8, -14), mid + Vector2(2, -14), mid + Vector2(4, 0), mid + Vector2(16, 5), mid + Vector2(16, 12), mid + Vector2(-8, 12)]), _ink(Color(0.4, 0.28, 0.2)))
+				draw_line(mid + Vector2(-8, 12), mid + Vector2(16, 12), _ink(Color(0.2, 0.14, 0.1)), 2.0)
+			"fish":
+				var prof: Array = spec.prof
+				var L := size.x * 0.62   # body length in px
+				var x0 := mid.x - L * 0.42
+				var top := PackedVector2Array()
+				var bot := PackedVector2Array()
+				var k := 14
+				for i in k + 1:
+					var u := float(i) / k
+					var hw: Vector2 = FishModel._profile(prof, u)
+					var px := x0 + u * L
+					top.append(Vector2(px, mid.y - hw.x * L * 1.05))
+					bot.append(Vector2(px, mid.y + hw.x * L * 1.05))
+				# tail (nose is +x: the model's tail polygon runs to -x from the body's rear)
+				var tp: Array = FishModel._tail_points(spec.tail)
+				var tail := PackedVector2Array()
+				for p in tp:
+					tail.append(Vector2(x0 + (p.x) * L, mid.y - p.y * L))
+				draw_colored_polygon(tail, _ink(spec.fin))
+				# dorsal
+				var dp: Array = FishModel._dorsal_points(spec.dorsal, spec)
+				var dor := PackedVector2Array()
+				for p in dp:
+					dor.append(Vector2(mid.x + p.x * L, mid.y - p.y * L))
+				if dor.size() >= 3:
+					draw_colored_polygon(dor, _ink(spec.fin))
+				var back_poly := PackedVector2Array()
+				back_poly.append_array(top)
+				for i in range(k, -1, -1):
+					back_poly.append(Vector2(top[i].x, mid.y))
+				draw_colored_polygon(back_poly, _ink(spec.back))
+				var belly_poly := PackedVector2Array()
+				for i in k + 1:
+					belly_poly.append(Vector2(bot[i].x, mid.y))
+				for i in range(k, -1, -1):
+					belly_poly.append(bot[i])
+				draw_colored_polygon(belly_poly, _ink(spec.belly))
+				if known:
+					var pat: Color = spec.pat if spec.has("pat") else Color(0, 0, 0, 0)
+					draw_line(Vector2(x0 + L * 0.2, mid.y), Vector2(x0 + L * 0.88, mid.y), Color(pat.r, pat.g, pat.b, 0.55), 1.6, true)
+					draw_circle(Vector2(x0 + L * 0.9, mid.y - 1.5), 1.8, Color(0.04, 0.04, 0.08))
+					if spec.has("lure"):
+						draw_circle(Vector2(x0 + L * 1.0, mid.y - FishModel._profile(prof, 0.9).x * L - 6.0), 3.0, spec.lure)
+				draw_polyline(top, Color(0, 0, 0, 0.35), 1.0, true)
+			_:
+				draw_circle(mid, 6.0, Color(0.3, 0.33, 0.45))

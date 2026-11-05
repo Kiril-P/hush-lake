@@ -26,6 +26,31 @@ const SPECS := {
 		"prof": [[0.0, 0.04, 0.03], [0.12, 0.1, 0.07], [0.35, 0.17, 0.1], [0.62, 0.16, 0.1], [0.85, 0.1, 0.07], [1.0, 0.03, 0.04]],
 		"back": Color(0.05, 0.28, 0.32), "belly": Color(0.3, 0.75, 0.7), "pattern": "runes", "pat": Color(0.5, 1.0, 0.9),
 		"fin": Color(0.3, 0.9, 0.85), "tail": "grand", "dorsal": "crest", "shine": 1.0},
+	# visitors (visitors.gd): fish that come with the hour or the weather
+	"Lantern Eel": {"kind": "fish", "size": 1.7, "lure": Color(1.0, 0.72, 0.3),
+		"prof": [[0.0, 0.03, 0.03], [0.1, 0.055, 0.05], [0.4, 0.06, 0.055], [0.75, 0.055, 0.05], [0.92, 0.04, 0.035], [1.0, 0.015, 0.02]],
+		"back": Color(0.12, 0.15, 0.25), "belly": Color(0.38, 0.42, 0.58), "pattern": "lateral", "pat": Color(0.95, 0.65, 0.25),
+		"fin": Color(0.9, 0.6, 0.25), "tail": "round", "dorsal": "soft", "shine": 0.5},
+	"Ghost Carp": {"kind": "fish", "size": 1.4,
+		"prof": [[0.0, 0.04, 0.035], [0.15, 0.1, 0.07], [0.4, 0.17, 0.1], [0.7, 0.15, 0.09], [0.9, 0.09, 0.06], [1.0, 0.03, 0.03]],
+		"back": Color(0.72, 0.84, 0.9), "belly": Color(0.97, 0.99, 1.0), "pattern": "spots", "pat": Color(0.5, 0.66, 0.78),
+		"fin": Color(0.85, 0.93, 0.98), "tail": "fork", "dorsal": "soft", "shine": 0.0},
+	"Dawn Salmon": {"kind": "fish", "size": 1.6,
+		"prof": [[0.0, 0.035, 0.03], [0.15, 0.09, 0.06], [0.4, 0.15, 0.085], [0.7, 0.13, 0.075], [0.9, 0.08, 0.05], [1.0, 0.025, 0.03]],
+		"back": Color(0.95, 0.5, 0.4), "belly": Color(1.0, 0.86, 0.76), "pattern": "spots", "pat": Color(0.6, 0.2, 0.15),
+		"fin": Color(1.0, 0.6, 0.45), "tail": "fork", "dorsal": "back", "shine": 0.2},
+	"Frost Gar": {"kind": "fish", "size": 2.0,
+		"prof": [[0.0, 0.025, 0.02], [0.12, 0.045, 0.04], [0.3, 0.08, 0.06], [0.6, 0.1, 0.07], [0.85, 0.07, 0.05], [1.0, 0.025, 0.025]],
+		"back": Color(0.5, 0.66, 0.84), "belly": Color(0.95, 1.0, 1.0), "pattern": "bands", "pat": Color(0.85, 0.95, 1.0),
+		"fin": Color(0.8, 0.92, 1.0), "tail": "round", "dorsal": "spiky", "shine": 0.3},
+	"Aurora Char": {"kind": "fish", "size": 1.2,
+		"prof": [[0.0, 0.035, 0.03], [0.15, 0.09, 0.06], [0.4, 0.14, 0.08], [0.7, 0.13, 0.08], [0.9, 0.08, 0.05], [1.0, 0.025, 0.025]],
+		"back": Color(0.2, 0.85, 0.6), "belly": Color(0.7, 0.5, 1.0), "pattern": "stripe_spots", "pat": Color(0.4, 1.0, 0.8),
+		"fin": Color(0.6, 0.95, 1.0), "tail": "round", "dorsal": "soft", "shine": 1.0},
+	"Eye Tetra": {"kind": "fish", "size": 0.55,
+		"prof": [[0.0, 0.03, 0.025], [0.12, 0.08, 0.06], [0.35, 0.125, 0.09], [0.65, 0.13, 0.09], [0.88, 0.09, 0.065], [1.0, 0.025, 0.025]],
+		"back": Color(0.1, 0.5, 0.55), "belly": Color(0.5, 1.0, 0.95), "pattern": "lateral", "pat": Color(0.3, 1.0, 0.95),
+		"fin": Color(0.5, 1.0, 0.95), "tail": "fork", "dorsal": "soft", "shine": 1.0},
 	"Old Boot": {"kind": "boot", "size": 0.9},
 	"Old Coin": {"kind": "coin", "size": 0.5},
 	"Glass Pearl": {"kind": "pearl", "size": 0.42},
@@ -254,6 +279,17 @@ static func _build_fish(root: FishNode, species: String, spec: Dictionary) -> vo
 	anal.material_override = c.fin_mat
 	sway.add_child(anal)
 	var prof: Array = spec.prof
+	if spec.has("lure"):   # an angler's lamp on a stalk above the head: the one warm note on a dark fish
+		var lc: Color = spec.lure
+		var hh := _profile(prof, 0.9).x
+		var stalk := _box(sway, Vector3(0.45, hh + 0.05, 0.0), Vector3(0.012, 0.1, 0.012), _plain(Color(0.2, 0.2, 0.3)))
+		stalk.rotation.z = -0.5
+		var bulb := MeshInstance3D.new()
+		bulb.mesh = c.eye
+		bulb.material_override = _plain(lc, 3.0)
+		bulb.position = Vector3(0.5, hh + 0.12, 0.0)
+		bulb.scale = Vector3.ONE * 0.07
+		sway.add_child(bulb)
 	for side in [1.0, -1.0]:
 		var pivot := Node3D.new()
 		pivot.position = Vector3(0.22, -_profile(prof, 0.72).x * 0.45, _profile(prof, 0.72).y * 0.85 * side)

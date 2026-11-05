@@ -275,3 +275,14 @@ Built in layers with a headless suite (`tools/run_opening.sh`, 60+ checks), a re
   Chord clock Am-F-C-G; melody random-walks the pentatonic scale with rests and phrases; mood (hour, weather gloom, Eye stage, scenes, catches)
   sets density and layers. Voices are synthesised in 2.5 ms slices after launch (no hitch). New "Music" slider (default 80%).
 - **Open question (needs ears):** I can only test levels and behaviour, never listen. Volumes (`-12 dB` melody, `-17 dB` pad) are guesses.
+
+## Catch layer: visitors, a drawn journal, hero moments, photo mode
+- **Visitors** (`visitors.gd`, 6 fish): not in the lake's finite stock. When you draw a fish and the hour/weather fits (night: Lantern Eel,
+  fog: Ghost Carp, dawn: Dawn Salmon, blizzard: Frost Gar, aurora night: Aurora Char, Eye awake: Eye Tetra) the draw may be a visitor
+  instead. The tile still loses exactly one fish, so stock, sector clearing and the econ sim are unchanged. They are the reason to fish at odd hours.
+- **Journal:** each species is drawn from its own model data (`HudWidgets.FishIcon`), a dark silhouette until found, with Olga's margin note
+  once found; unfound visitors show a clue instead ("only comes after dark"). 14 species; the "Fill the journal" goal stays at 8.
+- **Hero moment:** a first-of-its-kind or value >= 14 catch slows time to 0.35x for half a second with a wide FOV beat and a music hit.
+  (`Engine.time_scale` is restored by a real-time timer and in `_exit_tree`.)
+- **Photo mode (P):** hides the interface and the held tool, scroll zooms, click or Enter saves a PNG to `user://photos/` with a flash.
+- **Foley:** steps differ on ice and snow bank, buckets clank when set down, picked up or kicked.

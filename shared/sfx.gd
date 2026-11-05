@@ -42,6 +42,10 @@ func _ready() -> void:
 	streams["thud"] = _wav(_mix([_tone(190.0, 75.0, 0.13, 28.0, 0.7), _tone(340.0, 240.0, 0.06, 45.0, 0.3), _noise(0.06, 0.3, 40.0, 0.25)]))   # the mid knock keeps it audible on laptop speakers
 	streams["step"] = _wav(_mix([_noise(0.07, 0.45, 34.0, 0.45), _tone(170.0, 120.0, 0.05, 50.0, 0.25)]))
 	streams["slide"] = _wav(_noise(0.3, 0.2, 6.0, 0.3))
+	# surfaces and tin: a soft crunch on the snow bank, a dry tick with a ring on the ice, and the bucket's clank
+	streams["step_snow"] = _wav(_mix([_noise(0.13, 0.16, 16.0, 0.55), _tone(130.0, 95.0, 0.07, 36.0, 0.22)]))
+	streams["step_ice"] = _wav(_mix([_noise(0.05, 0.55, 45.0, 0.32), _tone(2100.0, 1750.0, 0.05, 55.0, 0.22), _tone(190.0, 140.0, 0.05, 50.0, 0.22)]))
+	streams["clank"] = _wav(_mix([_tone(1180.0, 1140.0, 0.38, 9.0, 0.42), _tone(1760.0, 1700.0, 0.28, 12.0, 0.28), _tone(2650.0, 2600.0, 0.2, 18.0, 0.18), _noise(0.03, 0.5, 60.0, 0.4)]))
 	streams["creak"] = _wav(_creak(1.3))
 	streams["gust"] = _wav(_swell_noise(4.5))
 	streams["owl"] = _wav(_owl())
@@ -67,7 +71,7 @@ func _ready() -> void:
 
 ## Loudness targets (peak, 0..1) by role, so nothing is accidentally ten times louder than its neighbours:
 ## quiet UI ticks < everyday action sounds < impacts < stingers. The ambient loops are set far below all of them.
-const PEAK := {"tick": 0.28, "reel": 0.3, "drill": 0.32, "step": 0.18, "slide": 0.2, "coin": 0.38, "deny": 0.4, "buy": 0.45, "bite": 0.5,
+const PEAK := {"tick": 0.28, "reel": 0.3, "drill": 0.32, "step": 0.18, "step_snow": 0.16, "step_ice": 0.2, "clank": 0.5, "slide": 0.2, "coin": 0.38, "deny": 0.4, "buy": 0.45, "bite": 0.5,
 	"cast": 0.42, "plop": 0.5, "thud": 0.55, "kick": 0.65, "hook": 0.55, "splash": 0.6, "catch": 0.55, "rare": 0.62, "goal": 0.62,
 	"rumble": 0.7, "swell": 0.6, "awaken": 0.8, "creak": 0.3, "gust": 0.35, "wind": 0.5, "pad": 0.3, "owl": 0.3, "caw": 0.3, "hum": 0.5, "bells": 0.3, "bark": 0.4}
 
