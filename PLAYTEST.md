@@ -75,7 +75,7 @@ Everything below passes its headless tests; none of it has been *felt*. Please p
 **Look (art pass).** Is the cold teal grade right, or too dark/too saturated? Is the Eye always the first thing you see? Do the camp props (crates,
 sled, snowman, flag, lamp pools) feel lived-in or cluttered? Does dusk/night look better than before? (Sheets: `docs/refs/sheets/r2/`.)
 
-**Sound.** The score is generated and has only ever been level-checked. Is it too loud/quiet (Music slider, default 80%)? Does the melody feel like
+**Sound.** Listen first without starting the game: `tools/score_dump.sh` writes `renders/score_{day,dusk,night,aurora,blizzard,eye}.wav` (2 minutes each, mixed from the game's own voices; day is about -29 dBFS RMS, blizzard 3 dB lower). The score is generated and has only ever been level-checked. Is it too loud/quiet (Music slider, default 80%)? Does the melody feel like
 a lake or like a ringtone? Too many notes by day? Does it duck well under the opening? Do ice/snow steps and the bucket clank read as different?
 
 **Catch layer.** Do you notice visitor fish (night: Lantern Eel, fog: Ghost Carp, dawn: Dawn Salmon, blizzard: Frost Gar, aurora: Aurora Char, awake

@@ -68,6 +68,7 @@ var _phrase_t := 0.0
 var notes_played := 0        # test hooks
 var pads_played := 0
 var last_melody_db := -99.0
+var tap: Callable   # optional: called as tap(stream, volume_db, pitch) for every voice that starts (tools/score_dump.gd records the score with it)
 
 func _init(seed_in := 0) -> void:
 	rng.seed = seed_in if seed_in != 0 else int(Time.get_ticks_usec())
@@ -244,6 +245,8 @@ func _note(scale_i: int, db: float) -> void:
 	p.volume_db = db + _music_db()
 	p.pitch_scale = 1.0
 	p.play()
+	if tap.is_valid():
+		tap.call(w, p.volume_db, 1.0)
 	notes_played += 1
 	last_melody_db = p.volume_db
 
@@ -266,6 +269,8 @@ func _pad_chord(ci: int, delay: float, db: float, octave := 1.0) -> void:
 			pl.pitch_scale = oct
 			pl.volume_db = vol + _music_db()
 			pl.play()
+			if tap.is_valid():
+				tap.call(wv, pl.volume_db, oct)
 			pads_played += 1)
 
 func _thump(db: float) -> void:
@@ -277,6 +282,8 @@ func _thump(db: float) -> void:
 	p.volume_db = db + _music_db()
 	p.pitch_scale = 1.0
 	p.play()
+	if tap.is_valid():
+		tap.call(thump, p.volume_db, 1.0)
 
 func _bell(db: float) -> void:
 	if bells.is_empty():
@@ -291,6 +298,8 @@ func _bell(db: float) -> void:
 	p.volume_db = db + _music_db()
 	p.pitch_scale = 1.0
 	p.play()
+	if tap.is_valid():
+		tap.call(w, p.volume_db, 1.0)
 
 ## Overall music level in dB: the player's slider, minus the cutscene duck, minus a little in a storm (the wind is the music then).
 func _music_db() -> float:
