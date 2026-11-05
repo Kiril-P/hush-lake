@@ -438,6 +438,7 @@ func _ready() -> void:
 		GameState.save_slot = "eyeslice"
 	GameState.autosave = not GameState.save_slot.begins_with("test")
 	var away := GameState.load_game()
+	story = _story_from_meta()
 	GameState.about_to_save.connect(_on_about_to_save)
 	sfx = SfxScript.new()
 	add_child(sfx)
@@ -1315,6 +1316,15 @@ void fragment() {
 	jbox.add_child(jhint)
 	journal_panel = _center_panel(ui, jbox)
 	journal_panel.visible = false
+	letters_panel = LettersPanel.new()
+	var lcc := CenterContainer.new()
+	lcc.set_anchors_preset(Control.PRESET_FULL_RECT)
+	lcc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lcc.add_child(letters_panel)
+	ui.add_child(lcc)
+	letters_panel.read_letter.connect(_on_letter_read)
+	dream = DreamOverlay.new()
+	add_child(dream)
 	map_ctrl = Control.new()
 	map_ctrl.set_script(LakeMapScript)
 	map_ctrl.game = self
@@ -1614,10 +1624,115 @@ func _draw_fish(t: Dictionary) -> Dictionary:
 		if vn != "":
 			n = vn
 	var f := _make_fish(_species(n))
+	if n in ["Old Boot", "Old Coin", "Glass Pearl"] and keep_rng.randf() < KEEP_CHANCE:
+		var kp := Story.roll_keep(n, story, keep_rng)
+		if not kp.is_empty():
+			f["keep"] = kp.id
+			_found_keep(kp)
 	_note_found(f)
 	return f
 
 var visitor_rng := RandomNumberGenerator.new()
+
+# ---------- the story (story.gd): letters, keepsakes, dreams, the ending ----------
+var story: Dictionary = Story.blank()
+var letters_panel: LettersPanel
+var dream: DreamOverlay
+var keep_rng := RandomNumberGenerator.new()
+const KEEP_CHANCE := 0.3   # of the junk you draw, this share hides a keepsake (until you have them all)
+
+func _story_from_meta() -> Dictionary:
+	var s: Dictionary = GameState.meta.get("story", {})
+	var b := Story.blank()
+	for k in b:
+		if not s.has(k):
+			s[k] = b[k]
+	GameState.meta["story"] = s
+	return s
+
+func story_ctx() -> Dictionary:
+	var vis := 0
+	for n in journal:
+		if Visitors.is_visitor(n):
+			vis += 1
+	var keeps: int = story.keeps.size()
+	return {"eye_fed": int(stats.eye_fed), "stage": eye_stage(), "sectors": int(stats.sectors), "tithe": int(stats.tithe), "lakes": _meta_int("lakes"),
+		"keeps": keeps, "visitors": vis, "keeps_all": 1 if (keeps >= Story.KEEPS.size() and eye_stage() >= EYE_STAGES.size()) else 0}
+
+## New letters arrive in the mailbox as you reach milestones (several at once when a late save loads: one toast for all).
+func _check_story() -> void:
+	if restoring or title_active or guide.intro_active:
+		return
+	var fresh := Story.due(story_ctx(), story)
+	for id in fresh:
+		story.got.append(id)
+	if not fresh.is_empty():
+		_log("LETTER %s" % ",".join(fresh))
+		_banner("A letter from Olga is in the mailbox" if fresh.size() == 1 else "%d letters from Olga are in the mailbox" % fresh.size(), Style.AMBER)
+		sfx.play("bells", -10.0, 0.9)
+		sfx.score.hit("catch")
+	_sync_story_world()
+
+func _sync_story_world() -> void:
+	if dressing == null:
+		return
+	dressing.set_unread(Story.unread(story).size())
+	dressing.set_keeps(story.keeps)
+	scenery.light_village(bool(story.ending))
+
+func _open_letters() -> void:
+	if story.got.is_empty():
+		_say("The mailbox is empty. Olga writes when there is something to say.")
+		return
+	letters_panel.open(story.got, story.read, story.keeps.size(), Story.KEEPS.size())
+	sfx.play("tick", -6.0, 0.7)
+
+func _on_letter_read(id: String) -> void:
+	if not story.read.has(id):
+		story.read.append(id)
+	_sync_story_world()
+
+func _letters_input(event: InputEvent) -> bool:
+	if not letters_panel.visible:
+		return false
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode in [KEY_A, KEY_LEFT]:
+			letters_panel.nav(-1)
+		elif event.keycode in [KEY_D, KEY_RIGHT]:
+			letters_panel.nav(1)
+		elif event.keycode in [KEY_E, KEY_ESCAPE, KEY_ENTER, KEY_SPACE, KEY_Q]:
+			_close_letters()
+	elif event is InputEventMouseButton and event.pressed:
+		_close_letters()
+	return true
+
+func _close_letters() -> void:
+	var last := letters_panel.current_id()
+	if letters_panel.dismiss() and Story.letter(last).get("ending", false) and not story.ending:
+		_play_ending()
+
+## Anton's letter read: the Eye closes like a book, the windows of Kestrel Landing light, and the winter goes on.
+func _play_ending() -> void:
+	story.ending = true
+	GameState.meta["pearls"] = _meta_int("pearls") + 10
+	_log("ENDING")
+	if test_capture or dream == null:
+		_sync_story_world()
+		return
+	dream.play(Story.ENDING_LINES, "THE EYE REMEMBERS", 1.0, 4.4)
+	await dream.finished
+	_sync_story_world()
+	_say("Across the lake the windows of Kestrel Landing are lit. +10 pearls. The lake is still yours.")
+	_banner("THE EYE REMEMBERS", Style.AMBER)
+
+## A keepsake rises with the junk: found for good (it stays across lakes) and put on Olga's shelf.
+func _found_keep(k: Dictionary) -> void:
+	story.keeps.append(k.id)
+	_log("KEEPSAKE %s" % k.id)
+	_banner("KEEPSAKE: %s" % k.name, Style.AMBER)
+	_say("%s\nOlga: %s" % [k.text, "Bring it to me when you are done. I will find a place." if story.keeps.size() == 1 else "On the shelf with the others."])
+	sfx.play("rare", -4.0, 1.1)
+	_check_story()
 
 func visitor_ctx() -> Dictionary:
 	return {"night": scenery._night, "weather": weather.cur if weather else "clear", "aurora": weather.aurora_on() if weather else false,
@@ -1762,6 +1877,7 @@ func _upgrade_desc(id: String) -> String:
 func _refresh() -> void:
 	_sync_active()
 	_check_goals()
+	_check_story()
 	coins_target = floor(GameState.currency)
 	if coins_shown < 0.0:
 		coins_shown = coins_target
@@ -2167,7 +2283,7 @@ func _process(delta: float) -> void:
 	var a := raw if _in_range(raw) else ""
 	if not captured:
 		prompt_label.text = ""
-	elif journal_panel.visible or refreeze_panel.visible:
+	elif journal_panel.visible or refreeze_panel.visible or letters_panel.visible:
 		prompt_label.text = ""   # (the tithe prompt used to print across the journal)
 	elif raw != "" and a == "":
 		prompt_label.text = "" if raw == "ice" else "Too far - walk closer"
@@ -2453,7 +2569,7 @@ func _update_crosshair(a: String, captured: bool) -> void:
 	if captured and not guide.intro_active:
 		if a == "eye":
 			kind = 2
-		elif a.begins_with("hole:") or a.begins_with("buy:") or a == "olga" or a.begins_with("depot:") or a.begins_with("rig:") or a.begins_with("item:") or a.begins_with("rack:") or a.begins_with("prop:"):
+		elif a.begins_with("hole:") or a.begins_with("buy:") or a == "olga" or a.begins_with("depot:") or a.begins_with("rig:") or a.begins_with("item:") or a.begins_with("rack:") or a.begins_with("prop:") or a == "mailbox":
 			kind = 1
 		elif a == "ice" and tool == 0 and _can_drill_at(Vector3(aim_pos.x, 0.0, aim_pos.z)):
 			kind = 1
@@ -4303,7 +4419,7 @@ func _in_range(a: String) -> bool:
 	if a == "eye":
 		var pp: Vector3 = $Player.global_position
 		return Vector2(pp.x, pp.z).length() - EYE_R <= RANGE_EYE
-	if a.begins_with("buy:") or a.begins_with("rack:"): return aim_flat <= RANGE_SIGN
+	if a.begins_with("buy:") or a.begins_with("rack:") or a == "mailbox": return aim_flat <= RANGE_SIGN
 	if a.begins_with("item:"): return aim_flat <= RANGE_ITEM
 	if a == "ice" or a.begins_with("hole:"): return aim_flat <= RANGE_ICE
 	return true
@@ -4422,6 +4538,9 @@ func _prompt_for(a: String) -> String:
 		return _ground_text(_ground_by_id(int(a.substr(5))))
 	if a.begins_with("rack:"):
 		return _rack_text(int(a.substr(5)))
+	if a == "mailbox":
+		var nu := Story.unread(story).size()
+		return "Click: read Olga's letters (%d new)" % nu if nu > 0 else ("Click: reread Olga's letters" if not story.got.is_empty() else "Olga's mailbox (empty)")
 	if a.begins_with("buy:"):
 		var id := a.substr(4)
 		if not unlocked[id]:
@@ -4633,6 +4752,11 @@ func _refreeze_key(key: int) -> bool:
 	return false
 
 func _refreeze() -> void:
+	refreeze_panel.visible = false
+	story.dreams = int(story.dreams) + 1
+	if not test_capture and dream != null:   # the Eye dreams of the winter you just finished, then the lake freezes again
+		dream.play(Story.dream_lines(_meta_int("lakes"), int(stats.eye_fed)), "THE EYE DREAMS")
+		await dream.finished
 	_bank_and_reset()
 	get_tree().reload_current_scene()
 
@@ -4935,6 +5059,11 @@ func _new_game() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if title_active or (title != null and not guide.intro_active):   # the title owns the keyboard (its own Enter handler); nothing leaks into the world behind it
 		return
+	if dream != null and dream.active:
+		return
+	if _letters_input(event):
+		get_viewport().set_input_as_handled()
+		return
 	if guide.intro_active:
 		if guide.intro_t > guide.skip_after and ((event is InputEventMouseButton and event.pressed) or (event is InputEventKey and event.pressed and event.keycode in [KEY_SPACE, KEY_ENTER, KEY_E])):
 			guide.skip_intro()
@@ -5057,6 +5186,9 @@ func _spend(cost: float) -> bool:
 	return true
 
 func _click(a: String) -> void:
+	if a == "mailbox":
+		_open_letters()
+		return
 	if a.begins_with("item:"):
 		_click_ground(_ground_by_id(int(a.substr(5))))
 		return
@@ -5388,7 +5520,10 @@ func _show_card(best: Dictionary, count: int, new_species: bool, new_record: boo
 	var rar := _rarity(best.name)
 	card_rarity.text = "%s%s%s" % [rar[0], "  -  VISITOR" if Visitors.is_visitor(best.name) else "", "  -  NEW SPECIES" if new_species else ""]
 	card_rarity.add_theme_color_override("font_color", rar[1])
-	card_name.text = best.name
+	var kp: Dictionary = Story.keep(String(best.get("keep", "")))
+	card_name.text = String(kp.name) if not kp.is_empty() else best.name
+	if not kp.is_empty():
+		card_rarity.text = "KEEPSAKE"
 	card_name.add_theme_color_override("font_color", best.color.lerp(Color.WHITE, 0.35))
 	var extra := ""
 	if count > 1:

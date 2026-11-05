@@ -286,3 +286,9 @@ Built in layers with a headless suite (`tools/run_opening.sh`, 60+ checks), a re
   (`Engine.time_scale` is restored by a real-time timer and in `_exit_tree`.)
 - **Photo mode (P):** hides the interface and the held tool, scroll zooms, click or Enter saves a PNG to `user://photos/` with a flash.
 - **Foley:** steps differ on ice and snow bank, buckets clank when set down, picked up or kicked.
+
+## The Eye's story (letters, keepsakes, dreams, ending)
+- Told in small things, not cutscenes: see `docs/STORY.md`. A mailbox at the hut, 14 letters, 8 keepsakes in the junk and on a shelf, a dream
+  per refreeze, and an ending that lights the village. State lives in `GameState.meta["story"]` (survives refreezing).
+- `keep` is set at draw time (when the fish leaves the lake's stock), not at catch time, so a keepsake found by an auto-rod is not lost.
+- The ending never locks anything; it pays 10 pearls once.

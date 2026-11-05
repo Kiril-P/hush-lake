@@ -166,6 +166,14 @@ func build(env: Environment, sun: DirectionalLight3D, hut: Node3D) -> void:
 	_lighthouse()
 	_village()
 
+var village_mat: StandardMaterial3D
+
+## After the ending the windows of Kestrel Landing stay lit all day (they are only ever seen glowing at night otherwise).
+func light_village(on: bool) -> void:
+	for g in glow_mats:
+		if g[0] == village_mat:
+			g[1] = 4.0 if on else 0.8   # (the game re-lights the sky five times a second, which applies it)
+
 const LIGHTHOUSE_R := 265.0
 const VILLAGE_R := 335.0
 
@@ -958,6 +966,7 @@ func _village() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 17
 	var win := _mat(Color(1.0, 0.72, 0.3), 1.0)
+	village_mat = win
 	glow_mats.append([win, 0.8, 4.0])
 	for i in 8:
 		var pos := bearing_pos(-128.0 + rng.randf_range(-9.0, 9.0), VILLAGE_R + rng.randf_range(-18.0, 18.0))
