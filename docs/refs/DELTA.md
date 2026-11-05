@@ -13,7 +13,7 @@ Status: DONE = in the build and visible in `docs/refs/sheets/r2` (before | refer
 | 6 | White hex/sector borders too loud (9/20) | Locked-sector frost now cold blue, line alpha .95 -> .8 | DONE |
 | 7 | Blizzard should lose the long view (3/3 weather shots) | Fog + gloom already did most; the new fog makes trees dissolve | DONE (verify in play) |
 | 8 | Ice facets, thin cracks, softer shard edges | Shader already has cracks; shard softening | LATER |
-| 9 | Chimney smoke and low ground fog | Chimney plume exists; ground fog layer | LATER |
+| 9 | Chimney smoke and low ground fog | Chimney plume exists. Tried `fog_height` 1.5 / density 0.045 (round 3, `docs/refs/after/r3`): no visible change at eye height, so reverted. A real mist would need a fog-card mesh or volumetric fog (a perf cost) | TRIED, REVERTED |
 | 10 | Snow caps on machines, cyan edge light on belts | | LATER |
 
 Rejected as fantasy: painterly clouds, mirror reflections (no SSR), volumetric god-rays beyond the Eye's shaft, invented sign text.

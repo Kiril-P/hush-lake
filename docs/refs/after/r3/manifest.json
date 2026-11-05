@@ -1,0 +1,13 @@
+{
+	"game": "Hush Lake",
+	"shots": [
+		{
+			"eye_stage": 0,
+			"file": "01_camp_noon.png",
+			"id": "01_camp_noon",
+			"time_of_day": 0.0,
+			"weather": "clear",
+			"what": "the camp on the ice beside the Eye, clear midday"
+		}
+	]
+}
