@@ -114,7 +114,7 @@ func action_phase(g: Node, p: Node3D) -> void:
 	key_down(KEY_W, true)
 	await step.call("walk", 90)
 	key_down(KEY_W, false)
-	for tk in [KEY_2, KEY_1, KEY_3, KEY_6, KEY_7, KEY_1]:
+	for tk in [KEY_2, KEY_1, KEY_3, KEY_2, KEY_1, KEY_B]:
 		g.unlocked["t_auto"] = true
 		key_down(tk, true)
 		key_down(tk, false)
@@ -124,7 +124,7 @@ func action_phase(g: Node, p: Node3D) -> void:
 	g.kick_charge = 1.0
 	g._release_kick()
 	await step.call("kick + 30 fish sliding", 90)
-	g._pick_up_fish()
+	g._sweep_fish()
 	await step.call("pickup", 20)
 	var h: Dictionary = g._make_hole(Vector3(-20, 0, 30))
 	await step.call("drill hole", 6)

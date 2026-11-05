@@ -27,15 +27,15 @@ func _ready() -> void:
 	check("drill spot is drillable ice", g._can_drill_at(spot))
 	check("drill spot is in the Shallows", g.model.sectors[g.model.tile_sector[g._cell_at(spot)]].unlocked)
 	check("step 1: take out the drill (tool is drill by default? else equip)", step(g) in ["drill", "tool0"])
-	g.tool = 1
+	g.equip(1)
 	check("step 1b: wrong tool asks for the drill", step(g) == "tool0")
-	g.tool = 0
+	g.equip(0)
 	check("step 1c: drill the hole", step(g) == "drill" and gd.current().where != null)
 	var t: Dictionary = g._make_hole(spot)
 	check("hole made", not t.is_empty())
-	g.tool = 0
+	g.equip(0)
 	check("step 2: take out the rod", step(g) == "tool1")
-	g.tool = 1
+	g.equip(1)
 	check("step 2b: cast a line", step(g) == "cast" and gd.current().where != null)
 	g._click("hole:%d" % t.idx)
 	check("step 3: wait for the bite", step(g) == "wait")
@@ -50,7 +50,8 @@ func _ready() -> void:
 	check("step 6: push the fish into the Eye", step(g) == "push0" and gd.current().where != null)
 	var fw: Vector3 = gd.current().where
 	check("the marker is on the fish that lies on the ice", Vector2(fw.x - t.pos.x, fw.z - t.pos.z).length() < 12.0)
-	g.carry.append_array(g.yard.collect(Vector3.ZERO, 9999.0, 1))   # scoop it up (E)
+	for sf in g.yard.collect(Vector3.ZERO, 9999.0, 1):   # scoop it up (E)
+		g._add_fish_to_hands(sf, true)
 	check("step 6b: carried fish go to the Eye by hand", step(g) == "carry0")
 	var w: Variant = gd.current().where
 	check("eye target is on the pupil", w != null and absf(Vector2(w.x, w.z).length() - 4.0) < 2.5)
@@ -58,7 +59,7 @@ func _ready() -> void:
 	g._feed_by_hand()
 	await get_tree().create_timer(2.5).timeout
 	check("fed the eye once", g.stats.eye_fed >= 1)
-	g.carry.clear()
+	g.inv.take_cargo()
 	g.stats.eye_fed = max(1, g.stats.eye_fed)
 	GameState.currency = 1.0
 	check("step 7: keep fishing toward a bucket", step(g) == "cast" and "Bucket" in gd.current().hint)
@@ -69,20 +70,25 @@ func _ready() -> void:
 	var c: Dictionary = gd.current()
 	check("after the bucket the strip follows the goals", c.id.begins_with("goal"))
 	# full hands override
-	g.carry.clear()
-	for i in g.capacity():
-		g.carry.append(g._make_fish(g.SPECIES[0]) if g.has_method("_make_fish") else {})
+	g.inv.clear()
+	g.inv.slots[0] = Inventory.tool_item(0)
+	g.inv.slots[1] = Inventory.tool_item(1)
+	g.inv.slots[2] = Inventory.bucket_item()
+	for i in g._bucket_cap():
+		g.inv.slots[2].fish.append(g._make_fish(g.SPECIES[0]))
 	check("full hands point at the eye", step(g) == "full")
-	g.carry.clear()
+	g.inv.take_cargo()
 	# --- hand-off feel: a bucket of fish is thrown one at a time, speeding up, and the streak climbs
-	g.carry.clear()
-	for i in 6:
-		g.carry.append(g._make_fish(g.SPECIES[0]))
+	g.inv.clear()
+	g.inv.slots[0] = Inventory.fish_item(g._make_fish(g.SPECIES[0]))
+	g.inv.slots[1] = Inventory.bucket_item()
+	for i in 5:
+		g.inv.slots[1].fish.append(g._make_fish(g.SPECIES[0]))
 	var fed0: int = g.stats.eye_fed
 	var peak := 0
-	var staged: int = g.carry.size()
+	var staged: int = g.inv.cargo_count()
 	g._feed_by_hand()
-	check("feeding empties the hands at once", g.carry.is_empty())
+	check("feeding empties the hands at once", not g.carrying())
 	await get_tree().create_timer(0.3).timeout
 	check("fish go in one at a time, not all at once", g.stats.eye_fed - fed0 < 6)
 	for i in 30:

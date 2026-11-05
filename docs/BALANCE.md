@@ -55,3 +55,6 @@ Still true: a few tens of thousands of unspent coins at the very end of a lake. 
 
 ## After physical fish (sim re-run)
 `tools/econ_sim.gd` now charges push/carry time per fish (hole distance 14 m + 4 m per Eye stage; push each fish at 1.5 s + distance/9 + 0.6 s, or scoop a bucketful and carry, whichever is faster). Optimal player empties the first lake in ~54 min (active 100%) and ~71 min (active 50%). Milestone times matter more than the end time: see `tools/first10.sh` for the human-like first 10 minutes (first feed ~11 s, bucket ~17 s). Not retuned: the council's rule was to retune only if the first lake fell outside 55-90 min of play.
+
+## After the three slots (buckets are things you carry)
+Buckets are physical: you buy several (6 coins, x1.9 each, max 5) and each holds 4 fish (Bucket Size upgrade: 4, 6, 9, 13, 18, 25). With three slots you realistically haul two buckets plus a tool, so `capacity()` (used by the sim) is `min(buckets, 2) x bucket size` and 1 with no bucket. The sled bonus of the snowmobile (+10 carry) is gone: level 3 is just the fastest ride. Re-run: optimal play empties the first lake in ~50 min (active 100%) and ~68 min (active 50%), a little faster than before at 100% (cheaper bucket steps); not retuned (the 50% case sits inside 55-90). The first-10 bot: bucket at ~16 s, Auto-Rod at ~222 s (it makes two trips to the tool rack).

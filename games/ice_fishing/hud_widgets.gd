@@ -52,44 +52,90 @@ class ToolIcon extends Control:
 
 	func _draw() -> void:
 		var col := Color(1.0, 0.78, 0.35) if active else (Color(0.9, 0.9, 0.95, 0.95) if lit else Color(0.55, 0.58, 0.72, 0.7))
-		var w := 2.2
-		var o := Vector2(2, 2)
-		match kind:
-			0:   # hand auger: shaft, spiral flights, T-handle
-				draw_line(o + Vector2(7, 24), o + Vector2(21, 6), col, w, true)
-				for i in 4:
-					var p := o + Vector2(9 + i * 3.3, 21 - i * 4.4)
-					draw_line(p + Vector2(-3, -2.2), p + Vector2(3, 2.2), col, w * 0.8, true)
-				draw_line(o + Vector2(17, 5), o + Vector2(25, 9), col, w, true)
-			1:   # rod: a bending blank, reel and line with a hook
-				draw_polyline(PackedVector2Array([o + Vector2(5, 25), o + Vector2(14, 14), o + Vector2(22, 6), o + Vector2(26, 8)]), col, w, true)
-				draw_circle(o + Vector2(9, 20), 3.0, col)
-				draw_line(o + Vector2(26, 8), o + Vector2(26, 18), col, 1.2, true)
-				draw_arc(o + Vector2(24.5, 20), 1.8, 0.0, PI, 8, col, 1.5, true)
-			2:   # auto-rod: a derrick
-				draw_line(o + Vector2(6, 25), o + Vector2(14, 5), col, w, true)
-				draw_line(o + Vector2(22, 25), o + Vector2(14, 5), col, w, true)
-				draw_line(o + Vector2(9, 18), o + Vector2(19, 18), col, 1.6, true)
-				draw_line(o + Vector2(4, 12), o + Vector2(24, 12), col, w, true)
-				draw_circle(o + Vector2(14, 4), 2.0, col)
-			3:   # smoker: a hut with a chimney and a curl of smoke
-				draw_rect(Rect2(o + Vector2(6, 12), Vector2(16, 13)), col, false, w)
-				draw_line(o + Vector2(4, 13), o + Vector2(14, 7), col, w, true)
-				draw_line(o + Vector2(24, 13), o + Vector2(14, 7), col, w, true)
-				draw_line(o + Vector2(19, 9), o + Vector2(19, 3), col, w, true)
-				draw_arc(o + Vector2(21, 2), 2.5, PI, TAU, 8, col, 1.4, true)
-			4:   # gut table: a top, legs and a knife
-				draw_line(o + Vector2(3, 12), o + Vector2(25, 12), col, w + 0.6, true)
-				draw_line(o + Vector2(6, 12), o + Vector2(4, 25), col, w, true)
-				draw_line(o + Vector2(22, 12), o + Vector2(24, 25), col, w, true)
-				draw_line(o + Vector2(9, 8), o + Vector2(19, 8), col, 1.6, true)
-				draw_line(o + Vector2(19, 8), o + Vector2(22, 5), col, 1.6, true)
-			5:   # belt: rails and marching chevrons
-				draw_line(o + Vector2(2, 10), o + Vector2(26, 10), col, w, true)
-				draw_line(o + Vector2(2, 20), o + Vector2(26, 20), col, w, true)
-				for i in 3:
-					var x := 7.0 + i * 7.0
-					draw_polyline(PackedVector2Array([o + Vector2(x - 2, 12), o + Vector2(x + 2, 15), o + Vector2(x - 2, 18)]), col, 1.8, true)
-			_:   # builder: a hammer
-				draw_line(o + Vector2(6, 25), o + Vector2(18, 10), col, w + 0.6, true)
-				draw_rect(Rect2(o + Vector2(13, 3), Vector2(13, 8)), col, true)
+		HudWidgets.paint_tool(self, kind, col)
+
+## The line art of a tool icon (kind 0..6, see TOOLS in the game) on any CanvasItem, inside its _draw().
+static func paint_tool(c: CanvasItem, kind: int, col: Color) -> void:
+	var w := 2.2
+	var o := Vector2(2, 2)
+	match kind:
+		0:   # hand auger: shaft, spiral flights, T-handle
+			c.draw_line(o + Vector2(7, 24), o + Vector2(21, 6), col, w, true)
+			for i in 4:
+				var p := o + Vector2(9 + i * 3.3, 21 - i * 4.4)
+				c.draw_line(p + Vector2(-3, -2.2), p + Vector2(3, 2.2), col, w * 0.8, true)
+			c.draw_line(o + Vector2(17, 5), o + Vector2(25, 9), col, w, true)
+		1:   # rod: a bending blank, reel and line with a hook
+			c.draw_polyline(PackedVector2Array([o + Vector2(5, 25), o + Vector2(14, 14), o + Vector2(22, 6), o + Vector2(26, 8)]), col, w, true)
+			c.draw_circle(o + Vector2(9, 20), 3.0, col)
+			c.draw_line(o + Vector2(26, 8), o + Vector2(26, 18), col, 1.2, true)
+			c.draw_arc(o + Vector2(24.5, 20), 1.8, 0.0, PI, 8, col, 1.5, true)
+		2:   # auto-rod: a derrick
+			c.draw_line(o + Vector2(6, 25), o + Vector2(14, 5), col, w, true)
+			c.draw_line(o + Vector2(22, 25), o + Vector2(14, 5), col, w, true)
+			c.draw_line(o + Vector2(9, 18), o + Vector2(19, 18), col, 1.6, true)
+			c.draw_line(o + Vector2(4, 12), o + Vector2(24, 12), col, w, true)
+			c.draw_circle(o + Vector2(14, 4), 2.0, col)
+		3:   # smoker: a hut with a chimney and a curl of smoke
+			c.draw_rect(Rect2(o + Vector2(6, 12), Vector2(16, 13)), col, false, w)
+			c.draw_line(o + Vector2(4, 13), o + Vector2(14, 7), col, w, true)
+			c.draw_line(o + Vector2(24, 13), o + Vector2(14, 7), col, w, true)
+			c.draw_line(o + Vector2(19, 9), o + Vector2(19, 3), col, w, true)
+			c.draw_arc(o + Vector2(21, 2), 2.5, PI, TAU, 8, col, 1.4, true)
+		4:   # gut table: a top, legs and a knife
+			c.draw_line(o + Vector2(3, 12), o + Vector2(25, 12), col, w + 0.6, true)
+			c.draw_line(o + Vector2(6, 12), o + Vector2(4, 25), col, w, true)
+			c.draw_line(o + Vector2(22, 12), o + Vector2(24, 25), col, w, true)
+			c.draw_line(o + Vector2(9, 8), o + Vector2(19, 8), col, 1.6, true)
+			c.draw_line(o + Vector2(19, 8), o + Vector2(22, 5), col, 1.6, true)
+		5:   # belt: rails and marching chevrons
+			c.draw_line(o + Vector2(2, 10), o + Vector2(26, 10), col, w, true)
+			c.draw_line(o + Vector2(2, 20), o + Vector2(26, 20), col, w, true)
+			for i in 3:
+				var x := 7.0 + i * 7.0
+				c.draw_polyline(PackedVector2Array([o + Vector2(x - 2, 12), o + Vector2(x + 2, 15), o + Vector2(x - 2, 18)]), col, 1.8, true)
+		_:   # builder: a hammer
+			c.draw_line(o + Vector2(6, 25), o + Vector2(18, 10), col, w + 0.6, true)
+			c.draw_rect(Rect2(o + Vector2(13, 3), Vector2(13, 8)), col, true)
+
+## One slot of the dock: a tool, a bucket with a fish heap, a fish in its own colour, or a faint empty ring.
+class ItemIcon extends Control:
+	var item := {}
+	var kind := -1       # the tool art to draw when the item is a tool
+	var active := false
+
+	func _init() -> void:
+		custom_minimum_size = Vector2(46, 44)
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func set_item(it: Dictionary, tool_kind: int) -> void:
+		item = it
+		kind = tool_kind
+
+	func _draw() -> void:
+		var col := Color(1.0, 0.78, 0.35) if active else Color(0.9, 0.9, 0.95, 0.95)
+		match String(item.get("k", "")):
+			"tool":
+				draw_set_transform(Vector2(4, 4), 0.0, Vector2(1.3, 1.3))
+				HudWidgets.paint_tool(self, kind, col)
+			"bucket":
+				var pail := Color(0.72, 0.78, 0.9) if not active else Color(1.0, 0.85, 0.5)
+				var n := int(item.fish.size()) if item.has("fish") else 0
+				var top := PackedVector2Array([Vector2(8, 15), Vector2(38, 15), Vector2(34, 40), Vector2(12, 40)])
+				draw_colored_polygon(top, Color(pail.r * 0.35, pail.g * 0.38, pail.b * 0.45, 0.9))
+				for i in mini(n, 5):   # fish tails poking out of the mouth
+					var fx := 14.0 + i * 5.0
+					draw_colored_polygon(PackedVector2Array([Vector2(fx, 16), Vector2(fx + 4, 6 + (i % 2) * 3), Vector2(fx + 7, 16)]), Color(0.45, 0.95, 0.9, 0.95))
+				draw_polyline(PackedVector2Array([Vector2(8, 15), Vector2(12, 40), Vector2(34, 40), Vector2(38, 15)]), pail, 2.4, true)
+				draw_line(Vector2(6, 15), Vector2(40, 15), pail, 3.0, true)
+				draw_arc(Vector2(23, 15), 15.0, PI, TAU, 16, pail, 1.8, true)
+			"fish":
+				var fc: Color = item.f.color if item.has("f") else Color(0.6, 0.9, 0.9)
+				var body := PackedVector2Array([Vector2(6, 22), Vector2(14, 14), Vector2(28, 14), Vector2(36, 22), Vector2(28, 30), Vector2(14, 30)])
+				draw_colored_polygon(body, fc)
+				draw_colored_polygon(PackedVector2Array([Vector2(36, 22), Vector2(44, 14), Vector2(44, 30)]), fc.darkened(0.2))
+				draw_circle(Vector2(13, 20), 1.8, Color(0.05, 0.08, 0.15))
+				if active:
+					draw_polyline(PackedVector2Array([Vector2(6, 22), Vector2(14, 14), Vector2(28, 14), Vector2(36, 22), Vector2(28, 30), Vector2(14, 30), Vector2(6, 22)]), Color(1.0, 0.78, 0.35), 1.8, true)
+			_:
+				draw_arc(Vector2(23, 22), 11.0, 0.0, TAU, 24, Color(1, 1, 1, 0.14), 2.0, true)

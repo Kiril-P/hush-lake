@@ -79,7 +79,7 @@ func _ready() -> void:
 	var g = _new_game()
 	await get_tree().process_frame
 	check("autosave off in test slot", not GameState.autosave)
-	check("starts with 1 carry slot", g.capacity() == 1)
+	check("starts with the drill, the rod and one free slot", g.capacity() == 1 and g.inv.free_count() == 1 and g.inv.cargo_count() == 0)
 	check("cells built for the whole lake, no holes yet", g.tiles.size() == 133 and g.holes.is_empty())
 	check("cell lookup round-trips for every cell", g.tiles.keys().all(func(c): return g._cell_at(g._hex_pos(c)) == c))
 	check("the Eye sits on the platform cell", g.tiles[Vector2i.ZERO].state == "platform")
@@ -105,7 +105,7 @@ func _ready() -> void:
 	check("a second hole fits a few metres away", g._can_drill_at(p1 + Vector3(0, 0, 3.0)))
 
 	# --- core loop: cast, bite, catch
-	g.tool = 1
+	g.equip(1)
 	g._click("hole:%d" % t.idx)
 	check("cast starts", t.cast == 1)
 	t.timer = 0.0
@@ -115,22 +115,23 @@ func _ready() -> void:
 	g._click("hole:%d" % t.idx)
 	check("clicking the bite hooks the fish and starts the fight", t.cast == 3 and t.hooked.size() == 1)
 	g._click("hole:%d" % t.idx)
-	check("clicking mid-fight does nothing", t.cast == 3 and g.carry.is_empty() and g.yard.count() == 0)
+	check("clicking mid-fight does nothing", t.cast == 3 and not g.carrying() and g.yard.count() == 0)
 	t.fight = 0.0
 	g._tick_hole(t, 0.1)
-	check("the catch drops onto the ice as a real fish", g.yard.count() == 1 and g.carry.is_empty() and t.cast == 0)
-	g.carry.append_array(g.yard.collect(Vector3.ZERO, 9999.0, 1))   # (the physical side has its own test: tools/run_yard.sh)
-	check("the catch has a length and a record", g.carry.size() == 1 and g.carry[0].len > 0.0 and g.records.has(g.carry[0].name))
+	check("the catch drops onto the ice as a real fish", g.yard.count() == 1 and not g.carrying() and t.cast == 0)
+	for cf in g.yard.collect(Vector3.ZERO, 9999.0, 1):   # (the physical side has its own test: tools/run_yard.sh)
+		g._add_fish_to_hands(cf, true)
+	check("the catch has a length and a record", g.inv.cargo_count() == 1 and g.inv.cargo()[0].len > 0.0 and g.records.has(g.inv.cargo()[0].name))
 	check("catch removes a fish from the lake", g.model.tile_left(t.c) == left_before - 1)
 	g._click("hole:%d" % t.idx)
 	check("casting needs no free hands: the catch lies on the ice", t.cast == 1)
 	g._end_cast(t)
 
 	# --- feed the Eye by hand: counts toward its stages
-	var eye_worth: float = g.carry[0].base * g.carry[0].mult * g.sale_mult() * g.EYE_MULT
+	var eye_worth: float = g.inv.cargo()[0].base * g.inv.cargo()[0].mult * g.sale_mult() * g.EYE_MULT
 	var coins0 := GameState.currency
 	g._feed_by_hand()
-	check("feeding empties hands", g.carry.is_empty())
+	check("feeding empties hands", not g.carrying())
 	await get_tree().create_timer(1.6).timeout
 	check("the Eye pays 1.25x and counts the fish", g.stats.eye_fed == 1 and GameState.currency >= coins0 + eye_worth - 0.01)
 
@@ -183,19 +184,19 @@ func _ready() -> void:
 	GameState.currency = coins_keep
 
 	# --- Olga talks but never buys
-	g.carry.append(g.roll_fish())
+	g._add_fish_to_hands(g.roll_fish(), true)
 	coins0 = GameState.currency
 	g._click("olga")
 	await get_tree().create_timer(0.5).timeout
-	check("Olga does not take fish or pay for them", g.carry.size() == 1 and GameState.currency == coins0)
-	g.carry.clear()
+	check("Olga does not take fish or pay for them", g.inv.cargo_count() == 1 and GameState.currency == coins0)
+	g.inv.take_cargo()
 	g._click("olga")
 	check("Olga talks when your hands are empty", g.msg_label.text.begins_with("Olga:"))
 
 	# --- bucket
 	GameState.currency = 100.0
 	g._buy("bucket")
-	check("bucket raises capacity", g.capacity() == 3)
+	check("a bucket is a real thing in your hands: it holds fish and raises your capacity", g.inv.bucket_count() == 1 and g.capacity() == g._bucket_cap())
 
 	# --- stations need fished-out patches
 	g.unlocked["t_smoker"] = true
@@ -204,28 +205,28 @@ func _ready() -> void:
 	g.unlocked["t_belt"] = true
 	GameState.currency = 5000.0
 	var t2 = g._make_hole(g._hex_pos(Vector2i(0, 1)))
-	g.tool = 4
+	g.equip(4)
 	g._click("hole:%d" % t2.idx)
 	check("cannot build table on a patch that still has fish", t2.state == "hole")
 	empty_tile(g, Vector2i(0, 1))
 	var t3 = empty_tile(g, Vector2i(-1, 1))
-	g.tool = 4
+	g.equip(4)
 	g._click("hole:%d" % t2.idx)
-	g.tool = 3
+	g.equip(3)
 	g._click("hole:%d" % t3.idx)
 	check("table and smoker build on fished-out holes", t2.state == "table" and t3.state == "smoker")
 	for i in 3:
-		g.carry.append(g.roll_fish())
+		g._add_fish_to_hands(g.roll_fish(), true)
 	var w0: float = g.carry_worth()
 	g._use_smoker(t3)
 	t3.smoke_t = 0.0
 	g._use_smoker(t3)
 	check("smoking multiplies value", g.carry_worth() > w0 * 2.0)
-	g.carry.clear()
+	g.inv.take_cargo()
 
 	# --- auto-rod draws from the finite stock
 	var ta = g._make_hole(g._hex_pos(Vector2i(1, -1)))
-	g.tool = 2
+	g.equip(2)
 	g._click("hole:%d" % ta.idx)
 	check("auto-rod builds", ta.state == "auto")
 	var before: int = g.model.tile_left(ta.c)
@@ -233,11 +234,11 @@ func _ready() -> void:
 	g._tick_hole(ta, 0.1)
 	check("auto-rod takes a fish from its patch", g.model.tile_left(ta.c) == before - 1 and ta.stash.size() == 1)
 	g._click("hole:%d" % ta.idx)
-	check("auto-rod stash collects", g.carry.size() == 1)
-	g.carry.clear()
+	check("auto-rod stash collects", g.inv.cargo_count() >= 1)
+	g.inv.take_cargo()
 
 	# --- belts: rod -> belt -> Eye, fish ride as instances
-	g.tool = 5
+	g.equip(5)
 	var cost: int = g.belt_cost(ta)
 	g._click("hole:%d" % ta.idx)
 	check("a belt runs from the rod to the Eye", ta.belt != null and g.belts.size() == 1 and g.stats.belts == 1)
@@ -261,7 +262,7 @@ func _ready() -> void:
 	var cheap := {"base": 1.0, "mult": 1.0}
 	var prize := {"base": 10.0, "mult": 1.0}
 	check("a bare belt pays plain value", is_equal_approx(g._belt_flag_mult(ta.belt, prize), 1.0))
-	g.tool = 6
+	g.equip(6)
 	g.build_item = 0
 	g._click("hole:%d" % ta.idx)
 	check("cannery installs on a belt", ta.belt.get("cannery", false) and g.stats.cans == 1)
@@ -274,15 +275,15 @@ func _ready() -> void:
 	check("sorter installs on the same belt", ta.belt.get("sorter", false) and g.stats.sorters == 1)
 	check("sorter only boosts fish worth 5+", is_equal_approx(g._belt_flag_mult(ta.belt, cheap), g.CANNERY_MULT) and is_equal_approx(g._belt_flag_mult(ta.belt, prize), g.CANNERY_MULT * g.SORTER_MULT))
 	g.build_item = 0
-	g.tool = 0
+	g.equip(0)
 
 	# --- an emptied rod can be picked up, taking its belt with it
-	g.carry.clear()
+	g.inv.take_cargo()
 	while g.model.tile_left(ta.c) > 0:
 		g.model.draw(ta.c)
 	g._after_draw(ta)
 	var coins1 := GameState.currency
-	g.tool = 0
+	g.equip(0)
 	g._click("hole:%d" % ta.idx)
 	check("empty auto-rod can be picked up for a refund", ta.state == "hole" and GameState.currency > coins1)
 	check("picking up the rod removes its belt", ta.belt == null and g.belts.is_empty())
@@ -301,8 +302,7 @@ func _ready() -> void:
 	check("new goals exist for the auto-rod, belt and Eye", goal_idx(g, "Build an Auto-Rod") >= 0 and goal_idx(g, "Lay a belt to the Eye") >= 0 and goal_idx(g, "Feed the Eye 25 fish") >= 0)
 
 	# --- depot: a sled runs your catch to the Eye
-	g.build_item = 2
-	g.tool = 6
+	g.equip(6, 2)
 	var dpos := Vector3(-17.5, 0.0, 0.0)
 	check("a depot can go on open Shallows ice", g._can_place_at(dpos, 2.6))
 	check("a depot cannot go on the Eye's rim", not g._can_place_at(Vector3(-9.0, 0.0, 0.0), 2.6))
@@ -312,12 +312,12 @@ func _ready() -> void:
 	g._click("ice")
 	check("clicking open ice builds a depot, and the next one costs more", g.depots.size() == 1 and g.stats.depots == 1 and g._build_cost(2) > depot_cost0)
 	check("a second depot cannot overlap the first", not g._can_place_at(dpos + Vector3(1.0, 0, 0), 2.6))
-	g.carry.append(g.roll_fish())
-	g.carry.append(g.roll_fish())
+	g._add_fish_to_hands(g.roll_fish(), true)
+	g._add_fish_to_hands(g.roll_fish(), true)
 	var fed_d: int = g.stats.eye_fed
 	g.get_node("Player").position = dpos + Vector3(0, g.EYE_H, 5.0)
 	g._click("depot:0")
-	check("a depot empties your hands", g.carry.is_empty())
+	check("a depot empties your hands", not g.carrying())
 	await get_tree().create_timer(2.4).timeout
 	check("the depot's sled delivers the fish to the Eye", g.stats.eye_fed == fed_d + 2)
 	g.get_node("Player").position = Vector3(-8.2, g.EYE_H, 14.3)
@@ -345,7 +345,7 @@ func _ready() -> void:
 		var ok: bool = g.rigs.size() == g.rig_cap()
 		g.rigs.resize(1)
 		return ok).call())
-	g.tool = 0
+	g.equip(0)
 
 	# --- snowmobile: V to ride, faster, level 3 tows a sled
 	check("you cannot ride without buying a snowmobile", (func():
@@ -358,12 +358,12 @@ func _ready() -> void:
 	g._toggle_ride()
 	check("buying a snowmobile lets you ride", g.riding and g.ride_view.visible)
 	check("riding is much faster than walking", g.walk_speed() > walk0 * 2.3)
-	var cap0: int = g.capacity()
+	var spd1: float = g.walk_speed()
 	g._buy("snowmobile")
 	g._buy("snowmobile")
-	check("snowmobile level 3 tows a sled while riding", g.capacity() == cap0 + g.SLED_BONUS)
+	check("snowmobile level 3 is faster still", g.walk_speed() > spd1)
 	g._toggle_ride()
-	check("hopping off restores walking speed and capacity", not g.riding and g.capacity() == cap0 and absf(g.walk_speed() - walk0) < 0.01)
+	check("hopping off restores walking speed", not g.riding and absf(g.walk_speed() - walk0) < 0.01)
 	GameState.upgrades.erase("snowmobile")
 	g.build_item = 0
 
@@ -409,7 +409,7 @@ func _ready() -> void:
 		if g.order.type == "species":
 			if g.order.need > g.model.species_left(g.order.species) + g._species_held(g.order.species):
 				order_bad = true
-		elif g.order.need > g.model.total_left() + g.carry.size():
+		elif g.order.need > g.model.total_left() + g.inv.cargo_count():
 			order_bad = true
 	check("orders are finishable", not order_bad)
 	var minnows_removed: int = g.model.species_left("Minnow")
@@ -474,7 +474,7 @@ func _ready() -> void:
 	add_child(gx)
 	await get_tree().process_frame
 	check("new lake boots with the rolled modifier", gx.model.mod == next_mod and gx.model.total_left() == gx.model.total_initial())
-	check("new lake boots with starting perks and lake number", gx.capacity() == 3 and _meta_lakes(gx) == 1 and gx.stats.sectors == 0)
+	check("new lake boots with starting perks (a bucket from Warm Pockets) and lake number", gx.inv.bucket_count() == 1 and _meta_lakes(gx) == 1 and gx.stats.sectors == 0)
 	check("new lake HUD names the modifier", gx.lake_label.text.contains(gx.model.mod_info().name))
 	gx.queue_free()
 	await get_tree().process_frame
@@ -488,11 +488,11 @@ func _ready() -> void:
 	# --- save / load round-trip: holes, stations and belts survive
 	var tb = g._make_hole(g._hex_pos(Vector2i(0, -1)) + Vector3(0, 0, -2.0))
 	GameState.currency = 5000.0
-	g.tool = 2
+	g.equip(2)
 	g._click("hole:%d" % tb.idx)
-	g.tool = 5
+	g.equip(5)
 	g._click("hole:%d" % tb.idx)
-	g.tool = 6
+	g.equip(6)
 	g.build_item = 0
 	g._click("hole:%d" % tb.idx)
 	GameState.upgrades["conveyor"] = 1
@@ -534,9 +534,28 @@ func _ready() -> void:
 	var cells: Array = g2.tiles.keys()
 	var sids: Array = g2.model.sectors.keys()
 	for i in 4000:
-		g2.tool = randi() % 7
+		g2.equip(randi() % 7)
 		g2.build_item = randi() % 4
 		var r := randi() % 14
+		var ri := randi() % 12   # hands: the slots, drops, pickups, the rack and the kit never break anything
+		match ri:
+			0: g2._select_slot(randi() % 3)
+			1: g2._drop_active(randf() < 0.5)
+			2: g2._pick_up()
+			3: g2._take_from_bucket()
+			4: g2._cycle_build()
+			5: g2._sweep_fish()
+			6: g2._click_rack(randi() % 3)
+			7:
+				if not g2.ground.is_empty():
+					g2._click_ground(g2.ground[randi() % g2.ground.size()])
+			8:
+				var fe: Variant = g2.yard.pick(g2.cam.global_position, -g2.cam.global_basis.z, 9999.0, -1.0)
+				if fe != null:
+					g2._grab_fish(fe)
+			9: g2._throw_held(randf())
+			10: g2._feed_by_hand()
+			11: g2._kick_buckets(g2.get_node("Player").global_position, Vector3(0, 0, -1), 10.0)
 		if r < 4 and not g2.holes.is_empty():
 			g2._click("hole:%d" % g2.holes[randi() % g2.holes.size()].idx)
 		elif r == 4:
@@ -574,7 +593,10 @@ func _ready() -> void:
 		g2._update_belt_fish(0.25)
 		g2._process(0.05)
 		g2._refresh()
-	check("fuzz: carry within capacity", g2.carry.size() <= g2.capacity())
+	check("fuzz: three slots, each empty or a real item", g2.inv.slots.size() == 3 and g2.inv.slots.all(func(sl): return sl.is_empty() or sl.k in ["tool", "fish", "bucket"]))
+	check("fuzz: one of each tool in the world (in a slot, on the ice, or on the rack)", [0, 1, 2].all(func(tt): return g2.inv.slots.filter(func(sl): return sl.get("k", "") == "tool" and int(sl.t) == tt).size() + g2.ground.filter(func(gr): return gr.item.k == "tool" and int(gr.item.t) == tt).size() <= 1))
+	check("fuzz: no bucket holds more than it can", g2.inv.buckets().all(func(bi): return g2.inv.slots[bi].fish.size() <= g2._bucket_cap()) and g2.ground.all(func(gr): return gr.item.k != "bucket" or gr.item.fish.size() <= g2._bucket_cap()))
+	check("fuzz: every thing on the ice has a collider and a node", g2.ground.all(func(gr): return is_instance_valid(gr.node)))
 	check("fuzz: coins not negative", GameState.currency >= 0.0)
 	check("fuzz: journal sane", g2.journal.size() <= g2.SPECIES.size())
 	check("fuzz: lake counts stay consistent", sectors_consistent(g2.model))

@@ -17,6 +17,7 @@ const PUPIL_R := 4.8      # the open hole in the middle
 # you find as goals unlock them.
 const SHOP_SPOTS := {
 	"bucket":   [38.0, 24.0],
+	"pail":     [4.0, 24.0],
 	"bait":     [55.0, 24.0],
 	"boots":    [72.0, 24.0],
 	"drill":    [89.0, 24.0],

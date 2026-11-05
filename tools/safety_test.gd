@@ -44,13 +44,23 @@ func reload(g, slot: String):
 	await get_tree().process_frame
 	return g2
 
+## Your hands loaded with a bucket of n fish (and the drill and rod), the way a hauling trip looks.
+func load_bucket(g, n: int) -> void:
+	g.inv.clear()
+	g.inv.slots[0] = Inventory.tool_item(0)
+	g.inv.slots[1] = Inventory.tool_item(1)
+	g.inv.slots[2] = Inventory.bucket_item()
+	for i in n:
+		g.inv.slots[2].fish.append(g._make_fish(g.SPECIES[0]))
+	g._hands_changed()
+
 func _ready() -> void:
 	var slot := "test_safety"
 	var g = await fresh(slot)
 
 	# --- a fish drawn from the lake is never lost on save/load
 	var t: Dictionary = g._make_hole(g.guide.drill_spot)
-	g.tool = 1
+	g.equip(1)
 	g._click("hole:%d" % t.idx)
 	t.timer = 0.0
 	g._tick_hole(t, 0.1)
@@ -65,18 +75,16 @@ func _ready() -> void:
 	g.yard.clear_all()
 	GameState.currency = 0.0
 	g.stats.eye_fed = 0
-	g.carry.clear()
-	for i in 3:
-		g.carry.append(g._make_fish(g.SPECIES[0]))
+	load_bucket(g, 3)
 	var worth := 0.0
-	for f in g.carry:
+	for f in g.inv.cargo():
 		worth += f.base * f.mult * g.sale_mult() * g.EYE_MULT
 	g._feed_by_hand()
-	check("thrown fish are tracked until they pay", g.flying.size() == 3 and g.carry.is_empty())
+	check("thrown fish are tracked until they pay", g.flying.size() == 3 and not g.carrying())
 	var earned_b: float = g.stats.earned
 	g = await reload(g, slot)
 	check("a quit mid-throw: the fish are paid on load, once, at exactly their worth", g.stats.eye_fed == 3 and absf(g.stats.earned - earned_b - worth) < 0.01)
-	check("and nothing is left over", g.flying.is_empty() and g.carry.is_empty())
+	check("and nothing is left over", g.flying.is_empty() and not g.carrying())
 
 	# --- offline: crossing the last stage pays the awakening exactly once
 	var pearls0: int = int(GameState.meta.get("pearls", 0))
@@ -100,7 +108,7 @@ func _ready() -> void:
 
 	# --- pause freezes the lake
 	var t2: Dictionary = g.holes[0]
-	g.tool = 1
+	g.equip(1)
 	g._end_cast(t2)
 	t2.cast = 2
 	t2.timer = 1.0
@@ -120,9 +128,7 @@ func _ready() -> void:
 
 	# --- fish in the air do not land while paused
 	g.stats.eye_fed = 0
-	g.carry.clear()
-	for i in 2:
-		g.carry.append(g._make_fish(g.SPECIES[0]))
+	load_bucket(g, 2)
 	g._feed_by_hand()
 	g.ever_captured = true
 	await get_tree().create_timer(0.2).timeout
@@ -219,8 +225,7 @@ func _ready() -> void:
 	g.yard.clear_all()
 
 	# --- a depot sled in flight is saved too
-	g.carry.clear()
-	g.carry.append(g._make_fish(g.SPECIES[0]))
+	load_bucket(g, 1)
 	var dp: Vector3 = Vector3(-17.5, 0.0, 0.0)
 	g._build_depot(dp, false)
 	var fed_d: int = g.stats.eye_fed
@@ -290,7 +295,7 @@ func _ready() -> void:
 	var g3 = await fresh("test_safety2")
 	var near_h: Dictionary = g3._make_hole(g3.guide.drill_spot)
 	var far_h: Dictionary = g3._make_hole(g3.guide.drill_spot + Vector3(0, 0, 9.0))
-	g3.tool = 1
+	g3.equip(1)
 	g3.get_node("Player").position = Vector3(near_h.pos.x, g3.EYE_H, near_h.pos.z + 2.0)
 	far_h.cast = 2
 	var gw: Variant = g3.guide.current().where

@@ -8,16 +8,19 @@ A first-person cozy ice-fishing incremental in Godot 4.7. Feed the Eye under the
 | Key | Does |
 |---|---|
 | WASD | walk (walk into fish to push them) |
-| left click on a fish | GRAB it (it hangs in your hand and sways as you turn); click again on empty ice to drop it |
-| hold right mouse, let go | THROW the fish in your hand (arc preview; look up a little for a lob); with empty hands it is a kick |
-| 1-7 | tools: drill, rod, auto-rod, smoker, gut table, belt, build |
-| click | use the tool / buy / feed |
+| 1 2 3 / mouse wheel | the slot in your hand: you carry THREE things (a tool, a fish or a bucket) and hold one |
+| left click on a fish | GRAB it: into the bucket you hold, else into a free slot (it hangs in your hand and sways as you turn); click empty ice to drop it |
+| hold right mouse, let go | THROW the fish in your hand (arc preview; look up a little for a lob); with anything else in hand it is a kick (a kick tips a placed bucket over) |
+| click | use the tool in hand (Drill, Rod, Builder's Kit) / buy / feed |
+| click the Eye, a depot or a smoker | give it everything you carry (loose fish and whole buckets) |
 | F | same as right mouse |
-| throw at a depot or smoker | it goes in (the depot sends it to the Eye; the smoker starts a batch) |
-| E | stow your held fish in the bucket / with empty hands sweep up the fish at your feet |
-| Z | take one fish out of the bucket into your hand |
+| throw at a depot, a smoker or a placed bucket | it goes in |
+| Q | put what you hold down (a fish slides off; a tool or bucket stays where it lands) |
+| E | pick up what you look at (a tool or bucket on the ice), else sweep the fish at your feet into your buckets, then your hands |
+| Z | take one fish out of the bucket in your hand (needs a free slot) |
+| click a bucket on the ice | put the fish in your hand into it, or take one out |
+| B | the Builder's Kit does one build at a time: switch it (Auto-Rod, Smoker, Gut Table, Belt, Cannery, Sorter, Depot, Ice-Breaker) |
 | H | ask Olga what to do next |
-| Q | (build tool) switch what you build |
 | V | snowmobile once bought |
 | Tab | field journal |
 | R | refreeze (after clearing sectors) |
@@ -26,7 +29,7 @@ A first-person cozy ice-fishing incremental in Godot 4.7. Feed the Eye under the
 Notes for playtesters are in `PLAYTEST.md` (what to look for, what to write down).
 
 ## Checks (no human needed)
-`tools/run_yard.sh` (fish physics) · `run_hands.sh` (grab, hold, throw, stow) · `run_sectors.sh` (sector borders and states) · `run_ui.sh` (menu, settings, HUD feel) · `run_safety.sh` (saves, offline, pause) · `run_guide.sh` (onboarding) · `run_audio.sh` (sound levels) · `run_smoke.sh` (everything, several minutes) · `first10.sh` (a bot plays the first 10 minutes) · `play_bot.sh` (windowed, real input) · `perf_render.sh` (rendered frame times) · `shot.sh` / `showroom.sh` (screenshots).
+`tools/run_yard.sh` (fish physics) · `run_hands.sh` (the three slots, grab, throw, buckets, tools on the ice, the rack) · `run_sectors.sh` (sector borders and states) · `run_ui.sh` (menu, settings, HUD feel) · `run_safety.sh` (saves, offline, pause) · `run_guide.sh` (onboarding) · `run_audio.sh` (sound levels) · `run_smoke.sh` (everything, several minutes) · `first10.sh` (a bot plays the first 10 minutes) · `play_bot.sh` (windowed, real input) · `perf_render.sh` (rendered frame times) · `shot.sh` / `showroom.sh` (screenshots).
 
 ## Docs
 `docs/STYLE.md` (the look), `docs/DECISIONS.md` (why things are the way they are), `docs/BALANCE.md`, `docs/ROADMAP.md`.

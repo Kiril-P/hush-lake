@@ -32,25 +32,25 @@ const DRILL_SPOT_FROM := Vector3(-8.2, 0.0, 14.3)
 const HINTS := {
 	"Earn 50 coins": ["Keep fishing and feeding the Eye. Every fish pays as it is swallowed.", ""],
 	"Fish a patch empty": ["Fish the same area dry. The lake map (bottom left) shows what is left in each patch.", ""],
-	"Build an Auto-Rod": ["Press 3, then click a hole you drilled. It fishes on its own - click it to collect.", "hole"],
-	"Lay a belt to the Eye": ["Press 6, then click your Auto-Rod. A belt carries its catch into the Eye.", "auto"],
-	"Feed the Eye 25 fish": ["Belts feed it while you build more Auto-Rods (3).", "eye"],
+	"Build an Auto-Rod": ["Take the Builder's Kit from the rack by Olga's hut, then click a hole you drilled (B switches what it builds). It fishes on its own - click it to collect.", "kit:hole"],
+	"Lay a belt to the Eye": ["With the kit in hand press B until it says Belt, then click your Auto-Rod. A belt carries its catch into the Eye.", "kit:auto"],
+	"Feed the Eye 25 fish": ["Belts feed it while you build more Auto-Rods with the kit.", "eye"],
 	"Buy a Snowmobile": ["Walk to its stall and click the sign. Then press V to ride.", "stall:snowmobile"],
-	"Build a Cannery on a belt": ["Press 7, press Q until it says Cannery, then click a belt's Auto-Rod.", "auto"],
-	"Build a Depot": ["Press 7, press Q until it says Depot, then click open ice. Drop fish there for a sled to run them in.", ""],
-	"Build an Ice-Breaker": ["Press 7, press Q until it says Ice-Breaker, then click open ice. It is big and expensive and it never stops.", ""],
-	"Drill 4 holes": ["Press 1 and hold click on fresh ice. Wide Drill opens several at once.", ""],
+	"Build a Cannery on a belt": ["With the kit press B until it says Cannery, then click a belt's Auto-Rod.", "kit:auto"],
+	"Build a Depot": ["With the kit press B until it says Depot, then click open ice. Drop or throw fish in for a sled to run them to the Eye.", "kit"],
+	"Build an Ice-Breaker": ["With the kit press B until it says Ice-Breaker, then click open ice. It is big and expensive and it never stops.", "kit"],
+	"Drill 4 holes": ["Hold the Drill and hold click on fresh ice. Wide Drill opens several at once.", ""],
 	"Clear the Shallows": ["Fish every hole in the Shallows dry. Sonar shows where fish still hide.", ""],
-	"Earn 250 coins": ["Gut Tables (5) and Smokers (4) make each fish worth more. Build them on fished-out holes.", ""],
-	"Build 3 Auto-Rods": ["Press 3 and click holes. More rods, more fish, no walking.", "hole"],
+	"Earn 250 coins": ["Gut Tables and Smokers (B switches the kit) make each fish worth more. Build them on fished-out holes.", "kit"],
+	"Build 3 Auto-Rods": ["With the kit on Auto-Rod, click holes. More rods, more fish, no walking.", "kit:hole"],
 	"Clear 3 sectors": ["Empty every hole in a sector to open the next. The lake map shows how far along you are.", ""],
 	"Tithe the Eye": ["With empty hands, click the Eye twice to offer it coins. Every gift makes fish worth more.", "eye"],
 	"Reach Eye stage 3": ["Feed it more. Belts, rigs and tithes all count.", "eye"],
 }
 const GENERIC_HINTS := {
-	"autos": "Press 3 and click holes you drilled. More rods, no walking.",
+	"autos": "With the kit on Auto-Rod, click holes you drilled. More rods, no walking.",
 	"sectors": "Empty every hole in a sector to open the next.",
-	"rigs": "Press 7, press Q until it says Ice-Breaker, then click open ice.",
+	"rigs": "With the kit press B until it says Ice-Breaker, then click open ice.",
 	"tithe": "With empty hands, click the Eye twice to offer it coins.",
 	"eye_stage": "Feed the Eye. Rigs and tithes count too.",
 	"eye_fed": "Push fish into the Eye. Belts do it for you.",
@@ -306,6 +306,16 @@ func _resolve(where: String) -> Variant:
 			return Vector3(game.hut_pos.x, 0.0, game.hut_pos.z)
 		"drill":
 			return drill_spot
+		"rack":
+			return Vector3(game.rack_pos.x, 0.0, game.rack_pos.z)
+		"kit":   # the builder's kit lives on the rack until you take it
+			if game.inv.find_tool(2) < 0:
+				return Vector3(game.rack_pos.x, 0.0, game.rack_pos.z)
+			return null
+	if where.begins_with("kit:"):
+		if game.inv.find_tool(2) < 0:
+			return Vector3(game.rack_pos.x, 0.0, game.rack_pos.z)
+		return _resolve(where.substr(4))
 	if where.begins_with("stall:"):
 		var spot: Array = game.SceneryScript.SHOP_SPOTS[where.substr(6)]
 		var bp: Vector3 = game.SceneryScript.bearing_pos(spot[0], spot[1])
@@ -328,7 +338,7 @@ func _hole_with_cast(c: int) -> bool:
 func current() -> Dictionary:
 	var g := game
 	var s: Dictionary = g.stats
-	var carrying: bool = not g.carry.is_empty()
+	var carrying: bool = g.carrying()
 	if _hole_with_cast(2):
 		return _step("bite", "It's biting!", "Click now!", _cast_hole_pos(2))
 	if g.yard.count() > 0 and is_early() and not carrying:
@@ -340,22 +350,28 @@ func current() -> Dictionary:
 	if is_early():
 		if s.holes == 0:
 			if g.tool != 0:
-				return _step("tool0", "Take out the drill", "Press 1 to equip it.", _resolve("drill"))
+				var ds: int = g.inv.find_tool(0)
+				if ds < 0:
+					return _step("tool0", "Take the drill", "It hangs on the tool rack by Olga's hut: walk there and click it.", _resolve("rack"))
+				return _step("tool0", "Take out the drill", "Press %d to hold it." % (ds + 1), _resolve("drill"))
 			return _step("drill", "Drill a hole in the ice", "Hold click on the marked spot until the ring fills.", _resolve("drill"))
 		if carrying:
 			if s.eye_fed == 0:
 				return _step("carry0", "Take your fish to the Eye", "Walk to the glowing rim and click. It pays as it swallows.", _resolve("eye"))
 			return _step("carry", "Feed it to the Eye", "Walk to the rim and click. Every fish is coins.", _resolve("eye"))
 		if s.eye_fed >= 1 and GameState.currency >= GameState.cost("bucket", g.UPGRADES.bucket.base, g.UPGRADES.bucket.growth):
-			return _step("bucket", "Buy a Bucket", "Walk to its stall and click the sign. You will carry more fish per trip.", _resolve("stall:bucket"))
+			return _step("bucket", "Buy a Bucket", "Walk to its stall and click the sign. Click fish into it, or press E to sweep them up.", _resolve("stall:bucket"))
 		if _hole_with_cast(3):
 			return _step("fight", "Hold on!", "It is fighting. It drops onto the ice when it tires: then push it into the Eye.", _cast_hole_pos(3))
 		if _hole_with_cast(1):
 			return _step("wait", "Wait for a bite", "A dip in the float is only a nibble. Click when it splashes and the marker pops up.", _cast_hole_pos(1))
 		if _nearest_hole("hole", true) == null:
-			return _step("drill2", "Drill another hole", "Press 1, then hold click on the ice.", _resolve("drill"))
+			return _step("drill2", "Drill another hole", "Hold the drill, then hold click on the ice.", _resolve("drill"))
 		if g.tool != 1:
-			return _step("tool1", "Take out the rod", "Press 2 to equip it.", _resolve("hole"))
+			var rs: int = g.inv.find_tool(1)
+			if rs < 0:
+				return _step("tool1", "Take the rod", "It hangs on the tool rack by Olga's hut: walk there and click it.", _resolve("rack"))
+			return _step("tool1", "Take out the rod", "Press %d to hold it." % (rs + 1), _resolve("hole"))
 		var more := "Click your hole to cast a line."
 		if s.eye_fed >= 1:
 			more = "Cast again. Save up for a Bucket at the stalls (%d coins)." % GameState.cost("bucket", g.UPGRADES.bucket.base, g.UPGRADES.bucket.growth)
@@ -532,9 +548,10 @@ func _tick_marker(delta: float, to: Variant, show: bool) -> void:
 # ---------- tips ----------
 func _candidate_tips() -> Array:
 	var out := []
-	for i in range(2, game.TOOLS.size()):
-		if game._tool_unlocked(i):
-			out.append(["tool%d" % i, "New tool: %s. Press %d to use it." % [game.TOOLS[i], i + 1]])
+	if not game._kit_modes().is_empty():
+		out.append(["kit", "Olga hung a Builder's Kit on the tool rack by her hut. Click it there (your hands swap), then B switches what it builds."])
+	if GameState.level("bucket") >= 1 and game.inv.bucket_count() + game.ground.size() >= 1:
+		out.append(["bucket1", "Your bucket: click a fish to scoop it, E sweeps up what is at your feet, Q sets the bucket down, Z takes one out. A placed bucket takes thrown fish."])
 	if game.yard.count() >= 2 and game.no_kicks_yet():
 		out.append(["kick", "Click a fish to grab it. Hold right mouse and let go to throw it (or kick it from the ice). The harder you hold, the farther it flies."])
 	for id in game.UPGRADES:

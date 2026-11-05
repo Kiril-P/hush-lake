@@ -95,9 +95,11 @@ func _ready() -> void:
 		g.cam.rotation.x = deg_to_rad(-14.0)
 		g.day_t = 0.0
 		g.scenery.set_time(0.0)
+		g.inv.slots[2] = Inventory.bucket_item()
 		for i in 10:
-			g.carry.append(g._make_fish(g.SPECIES[i % 4]))
-		g._refresh_view()
+			g.inv.slots[2].fish.append(g._make_fish(g.SPECIES[i % 4]))
+		g.inv.active = 2
+		g._hands_changed()
 		for i in 20:
 			await get_tree().process_frame
 		g._feed_by_hand()
@@ -324,6 +326,55 @@ func _ready() -> void:
 		await get_tree().create_timer(0.35).timeout
 		get_viewport().get_texture().get_image().save_png("res://renders/shot_hands_d.png")   # in flight
 		print("saved hands")
+	# the three slots: a held bucket, buckets and a tool on the ice, the tool rack
+	if only == "items":
+		var pi: Node3D = g.get_node("Player")
+		pi.position = Vector3(-8.2, 1.7, 14.3)
+		pi.rotation.y = deg_to_rad(-30.0)
+		g.cam.rotation.x = deg_to_rad(-10.0)
+		g.day_t = 0.0
+		g.scenery.set_time(0.0)
+		g.unlocked["t_auto"] = true
+		g.goal_done.fill(true)
+		g.test_capture = true
+		GameState.upgrades["bucket"] = 3
+		var fwi: Vector3 = -pi.global_basis.z
+		var rti: Vector3 = pi.global_basis.x
+		g.inv.slots[2] = Inventory.bucket_item([g._make_fish(g.SPECIES[0]), g._make_fish(g.SPECIES[1]), g._make_fish(g.SPECIES[3]), g._make_fish(g.SPECIES[2])])
+		g.inv.active = 2
+		var b1: Vector3 = pi.position + fwi * 3.6 + rti * 1.4
+		var b2: Vector3 = pi.position + fwi * 5.2 - rti * 1.6
+		g._place_ground(Inventory.bucket_item([g._make_fish(g.SPECIES[0]), g._make_fish(g.SPECIES[1]), g._make_fish(g.SPECIES[0]), g._make_fish(g.SPECIES[3]), g._make_fish(g.SPECIES[1]), g._make_fish(g.SPECIES[0])]), Vector3(b1.x, 0, b1.z), false)
+		g._place_ground(Inventory.bucket_item(), Vector3(b2.x, 0, b2.z), false)
+		var rt: Vector3 = pi.position + fwi * 2.2 - rti * 3.2
+		g.inv.slots[1] = {}
+		g._place_ground(Inventory.tool_item(1), Vector3(rt.x, 0, rt.z), false)
+		g._hands_changed()
+		for i in 25:
+			await get_tree().process_frame
+		g.refreeze_panel.visible = false   # (stray key presses from whoever is at the keyboard must not end up in the pictures)
+		g.msg_label.text = ""
+		get_viewport().get_texture().get_image().save_png("res://renders/shot_items_a.png")   # holding a bucket, buckets and a rod on the ice
+		g.cam.rotation.x = deg_to_rad(-38.0)
+		for i in 15:
+			await get_tree().process_frame
+		g.refreeze_panel.visible = false
+		g.msg_label.text = ""
+		get_viewport().get_texture().get_image().save_png("res://renders/shot_items_b.png")   # looking down at them
+		g._select_slot(0)
+		var rk: Vector3 = g.rack_pos
+		pi.position = Vector3(rk.x, 1.7, rk.z) + Vector3(0.0, 0.0, 0.0) + (Vector3(-8.2 - rk.x, 0, 14.3 - rk.z)).normalized() * 5.0
+		var look := Vector3(rk.x, 1.7, rk.z) - pi.position
+		pi.rotation.y = atan2(-look.x, -look.z)
+		g.cam.rotation.x = deg_to_rad(-6.0)
+		g.inv.slots[0] = {}
+		g._hands_changed()
+		for i in 25:
+			await get_tree().process_frame
+		g.refreeze_panel.visible = false
+		g.msg_label.text = ""
+		get_viewport().get_texture().get_image().save_png("res://renders/shot_items_c.png")   # the tool rack
+		print("saved items")
 	# the panels: journal, catch card, refreeze
 	if only == "ui":
 		var pu: Node3D = g.get_node("Player")
@@ -423,7 +474,7 @@ func _ready() -> void:
 		g.unlocked["t_auto"] = true
 		g.unlocked["t_build"] = true
 		for combo in [["tool_auger0", 0, 0], ["tool_auger3", 0, 3], ["tool_rod0", 1, 0], ["tool_rod3", 1, 3], ["tool_build", 6, 0]]:
-			g.tool = combo[1]
+			g.equip(combo[1], 0)
 			GameState.upgrades["drill"] = combo[2] if combo[1] == 0 else 0
 			GameState.upgrades["lines"] = combo[2] if combo[1] == 1 else 0
 			g._sync_tool_view()
@@ -443,7 +494,7 @@ func _ready() -> void:
 		var fwd: Vector3 = -pf2.global_basis.z
 		var hp3: Vector3 = pf2.position * Vector3(1, 0, 1) + fwd * Vector3(1, 0, 1) * 4.5
 		var hh: Dictionary = g._make_hole(hp3)
-		g.tool = 1
+		g.equip(1)
 		g._sync_tool_view()
 		g._refresh()
 		await get_tree().create_timer(0.3).timeout

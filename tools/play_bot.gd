@@ -70,7 +70,7 @@ func _ready() -> void:
 	# 2. pick the rod with the real key, cast, wait for the bite, catch
 	key(KEY_2)
 	await frames(3)
-	check("key 2 selects the rod", g.tool == 1)
+	check("key 2 selects the rod (slot 2)", g.tool == 1 and g.inv.active == 1)
 	aim_at(h.pos + Vector3(0, 0.2, 0))
 	await frames(3)
 	check("aiming at the hole finds the hole", g._aim() == "hole:0")
@@ -91,10 +91,12 @@ func _ready() -> void:
 	while g.yard.count() == 0 and fought < 4.0:
 		await get_tree().create_timer(0.1).timeout
 		fought += 0.1
-	check("the fish drops onto the ice after the fight", g.yard.count() == 1 and g.carry.is_empty())
+	check("the fish drops onto the ice after the fight", g.yard.count() == 1 and not g.carrying())
 	await get_tree().create_timer(1.5).timeout
-	g.carry.append_array(g.yard.collect(Vector3.ZERO, 9999.0, 1))
-	check("(bot scoops it up for the hand-feed check)", g.carry.size() == 1)
+	var picked: Array = g.yard.collect(Vector3.ZERO, 9999.0, 1)
+	for pf in picked:
+		g._add_fish_to_hands(pf, true)
+	check("(bot scoops it up for the hand-feed check: it is in your third slot)", g.inv.cargo_count() == 1 and g.inv.slots[2].get("k", "") == "fish")
 
 	# 3. carry it to the Eye and click on it
 	aim_at(Vector3(0, 0.2, 0))
@@ -106,22 +108,32 @@ func _ready() -> void:
 	while g.stats.eye_fed < 1 and fed_wait < 6.0:
 		await get_tree().create_timer(0.1).timeout
 		fed_wait += 0.1
-	check("the Eye ate the fish", g.stats.eye_fed == 1 and g.carry.is_empty())
+	check("the Eye ate the fish", g.stats.eye_fed == 1 and not g.carrying())
 
 	# 4. auto-rod + belt: the catch rides into the Eye on its own
 	GameState.currency = 500.0
 	g.unlocked["t_auto"] = true
 	g.unlocked["t_belt"] = true
-	key(KEY_3)
+	var spot_back: Vector3 = player.global_position
+	var rk: Vector3 = g.rack_pos
+	player.global_position = Vector3(rk.x, g.EYE_H, rk.z) + (Vector3(spot_back.x - rk.x, 0, spot_back.z - rk.z)).normalized() * 3.4
+	aim_at((g.rack_mounts[2] as Node3D).global_position)
+	await frames(3)
+	check("aiming at the rack finds the builder's kit", g._aim() == "rack:2" and g.prompt_label.text.contains("Builder"))
+	mouse(true)
+	mouse(false)
+	await frames(3)
+	check("clicking the rack puts the kit in your free slot and in your hand", g.inv.find_tool(2) == 2 and g.tool == 2)
+	player.global_position = spot_back
 	aim_at(h.pos + Vector3(0, 0.2, 0))
 	await frames(3)
 	mouse(true)
 	mouse(false)
 	await frames(3)
 	check("click builds an auto-rod on the hole", h.state == "auto")
-	key(KEY_6)
+	key(KEY_B)
 	await frames(3)
-	check("key 6 selects the belt", g.tool == 5)
+	check("B switches the kit to the belt", g.tool == 5)
 	mouse(true)
 	mouse(false)
 	await frames(3)
@@ -165,13 +177,11 @@ func _ready() -> void:
 	# 6. build a depot through the real click path
 	g.unlocked["t_build"] = true
 	GameState.currency = 500.0
-	key(KEY_7)
+	key(KEY_B)
+	key(KEY_B)
+	key(KEY_B)
 	await frames(3)
-	check("key 7 selects Build", g.tool == 6)
-	key(KEY_Q)
-	key(KEY_Q)
-	await frames(3)
-	check("Q cycles to Depot", g.build_item == 2)
+	check("B cycles the kit to Depot", g.tool == 6 and g.build_item == 2)
 	var dspot := Vector3(-17.5, 0.0, 0.0)
 	player.global_position = Vector3(-14.0, g.EYE_H, 5.0)
 	aim_at(dspot)
@@ -182,7 +192,9 @@ func _ready() -> void:
 	await frames(3)
 	check("click builds a depot on open ice", g.depots.size() == 1)
 	await get_tree().create_timer(0.6).timeout   # (new buildings grow in for a third of a second)
-	g.carry.append(g.roll_fish())
+	g.inv.slots[0] = {}
+	g._add_fish_to_hands(g.roll_fish(), true)
+	g._select_slot(2)
 	aim_at(g.depots[0].pos + Vector3(0, 1.0, 0)) if g.depots.size() > 0 else null
 	await frames(3)
 	check("aiming at the depot finds it", g._aim() == "depot:0")

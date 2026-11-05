@@ -19,14 +19,16 @@ var _slide := 0.0
 
 const CONTROLS := [
 	["Moving", [["W A S D", "walk"], ["V", "ride the snowmobile (once you own one)"], ["Mouse", "look"], ["Esc", "pause / menu"]]],
-	["Fishing", [["1", "hand auger: hold click on ice to drill"], ["2", "rod: click a hole to cast, click again when it bites"], ["3 - 7", "auto-rod, smoker, gut table, belt, build (as they unlock)"], ["Q", "build tool: switch what to build"]]],
-	["Fish on the ice", [["Click a fish", "grab it (it hangs in your hand)"], ["Click empty ice", "drop what you hold"], ["Hold right mouse / F", "charge a throw (or a kick with empty hands), let go to release"], ["Click the Eye / a depot / a smoker", "feed it what you hold"], ["E", "stow the held fish in your bucket, or sweep up fish at your feet"], ["Z", "take a fish out of the bucket"]]],
+	["Your hands (three slots)", [["1  2  3 / wheel", "pick the slot in your hand: a tool, a fish or a bucket"], ["Q", "put what you hold down (a tool or bucket stays where it lands)"], ["E", "pick up what you look at, or sweep the fish at your feet into a bucket"], ["Z", "take a fish out of the bucket in your hand"]]],
+	["Tools", [["Drill", "hold click on ice to drill a hole"], ["Rod", "click a hole to cast, click again when it bites"], ["Builder's Kit", "from the tool rack by Olga's hut: B switches what it builds"]]],
+	["Fish and buckets", [["Click a fish", "grab it (into a slot, or the bucket you hold)"], ["Click empty ice", "drop a fish, or set a bucket down where you aim"], ["Hold right mouse / F", "charge a throw (or a kick), let go to release; a kick tips a bucket over"], ["Click the Eye / a depot / a smoker", "feed it everything you carry"], ["Click a bucket on the ice", "put a fish in, or take one out"]]],
 	["Everything else", [["H", "ask Olga what to do next"], ["Tab", "field journal"], ["R", "refreeze the lake (after clearing sectors)"], ["M", "mute"]]],
 ]
 
 const HOWTO := [
 	["The Eye", "Under the ice at the centre of Hush Lake lies the Eye. It is always hungry and it pays in coins, and as it eats it wakes."],
-	["Fish", "Drill a hole (1), cast (2) and click when the float splashes. Your catch drops onto the ice."],
+	["Fish", "Hold the drill (slot 1) on the ice to dig a hole, take the rod (slot 2), cast and click when the float splashes. Your catch drops onto the ice."],
+	["Your hands", "You carry three things: tools, fish and buckets, one in your hand at a time. A bucket holds many fish: click fish into it, press E to sweep them up, or throw them in. Buy more buckets and set them around. Q puts what you hold down."],
 	["Getting it to the Eye", "Click a fish to grab it, hold right mouse and let go to throw it at the Eye (look a little up for a lob). Or walk into it, or kick it. The Eye pulls close fish in."],
 	["Machines", "Auto-rods fish for you, belts carry the catch to the Eye, canneries and sorters make it worth more, depots and smokers take thrown fish."],
 	["Sectors", "The lake is nineteen sectors. Frosted ones are locked: empty a neighbouring sector to open them."],

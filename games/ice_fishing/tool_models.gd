@@ -86,7 +86,7 @@ static func mitten(parent: Node, pos: Vector3, side := 1.0, tilt := 0.0) -> Node
 	return m
 
 ## Hand auger. Returns {spin, tip: null}. The spinning part (shaft, flights, bit) is `spin`, the T-handle stays put.
-static func auger(body: Node3D, tc: Color, tier: int) -> Dictionary:
+static func auger(body: Node3D, tc: Color, tier: int, hands := true) -> Dictionary:
 	# T-handle: a crossbar with turned wooden grips, a brass collar and the neck
 	bar_x(body, Vector3(0, 0.005, 0.12), 0.26, 0.014, WOOD)
 	for sx in [-0.125, 0.125]:
@@ -112,12 +112,13 @@ static func auger(body: Node3D, tc: Color, tier: int) -> Dictionary:
 	if tier >= 2:   # power augers get a motor housing
 		box(body, Vector3(0, 0.0, -0.01), Vector3(0.11, 0.1, 0.15), STEEL_DARK, 0.0, 0.45, 0.4)
 		box(body, Vector3(0, 0.07, -0.01), Vector3(0.06, 0.02, 0.1), AMBER, 0.8)
-	mitten(body, Vector3(0.125, 0.005, 0.12), 1.0, 0.0)
-	mitten(body, Vector3(-0.125, 0.005, 0.12), -1.0, 0.0)
+	if hands:
+		mitten(body, Vector3(0.125, 0.005, 0.12), 1.0, 0.0)
+		mitten(body, Vector3(-0.125, 0.005, 0.12), -1.0, 0.0)
 	return {"spin": spin, "tip": null}
 
 ## Fishing rod. Returns {spin: null, tip: Node3D at the rod tip} (the line is drawn from the tip).
-static func rod(body: Node3D, tc: Color, tier: int) -> Dictionary:
+static func rod(body: Node3D, tc: Color, tier: int, hands := true) -> Dictionary:
 	var blank := tc if tier > 0 else WOOD
 	# cork grip with a brass end cap, then three tapering blank sections with wraps between them
 	rod_seg(body, 0.2, 0.0, 0.024, 0.021, CORK)
@@ -147,18 +148,20 @@ static func rod(body: Node3D, tc: Color, tier: int) -> Dictionary:
 	tip.position = Vector3(0, 0, -0.97)
 	body.add_child(tip)
 	ball(tip, Vector3.ZERO, Vector3(0.016, 0.016, 0.016), AMBER, 1.4)   # a lit bead: you can see where the line leaves
-	mitten(body, Vector3(0.0, -0.005, 0.1), 1.0, 0.0)
-	mitten(body, Vector3(-0.01, -0.07, 0.06), -1.0, 10.0)
+	if hands:
+		mitten(body, Vector3(0.0, -0.005, 0.1), 1.0, 0.0)
+		mitten(body, Vector3(-0.01, -0.07, 0.06), -1.0, 10.0)
 	return {"spin": null, "tip": tip}
 
 ## A work hammer-and-wrench set for the build tools: `accent` says which machine you are about to place.
-static func builder(body: Node3D, accent: Color) -> Dictionary:
+static func builder(body: Node3D, accent: Color, hands := true) -> Dictionary:
 	rod_seg(body, 0.1, -0.34, 0.022, 0.018, WOOD)
 	rod_seg(body, 0.1, 0.02, 0.026, 0.026, CORK)
 	box(body, Vector3(0, 0.0, -0.4), Vector3(0.2, 0.085, 0.09), STEEL, 0.0, 0.35, 0.7)
 	box(body, Vector3(0, 0.0, -0.4), Vector3(0.05, 0.095, 0.095), accent, 0.7)
 	box(body, Vector3(0.12, 0.0, -0.4), Vector3(0.05, 0.06, 0.07), STEEL_DARK, 0.0, 0.4, 0.7)
-	mitten(body, Vector3(0.0, 0.0, 0.07), 1.0, 0.0)
+	if hands:
+		mitten(body, Vector3(0.0, 0.0, 0.07), 1.0, 0.0)
 	return {"spin": null, "tip": null}
 
 ## Your boot, for kicking: a chunky leather boot with amber laces and a fur cuff. Points along -Z (the toe leads).

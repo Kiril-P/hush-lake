@@ -20,7 +20,7 @@ All UI colors and widgets live in `shared/style.gd` (`Style`); do not hardcode U
 - Mountains/trees: blue-slate and teal-green. Wood and lit windows are the warm notes.
 
 ## HUD
-- Top-left card: coin chip, bucket bar, Eye stage bar, lake facts. Top-right: goals. Bottom: tool cards (amber ring = active, dim = locked). Messages sit above the tool cards, not over the cards.
+- Top-left card: coin chip, bucket bar, Eye stage bar, lake facts. Top-right: goals. Bottom middle: three slots (amber ring = the one in your hand, its name above it). Messages sit above the slots, not over them. The tool rack by Olga's hut is a pale board so dark steel and amber tools read against it.
 - Crosshair is a small cream ring. Title card (`HUSH LAKE`) shows whenever the mouse is free.
 - Font: system rounded sans (Avenir Next Rounded, falling back to Trebuchet/Verdana). No font files bundled yet.
 

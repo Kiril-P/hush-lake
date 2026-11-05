@@ -1,6 +1,7 @@
 extends Node
-## Headless test for the hands: grab a fish by looking at it, carry it, drop it, charge and throw it along an arc (land it in the
-## Eye), stow it in the bucket and take it out again, deliver it from your hand, and save it. Run: tools/run_hands.sh
+## Headless test for the hands and the three slots: grab a fish by looking at it, carry it in a slot, drop it, charge and throw it along
+## an arc (land it in the Eye), buckets (hold, scoop, set down, throw fish into, take fish out of, tip over), tools on the ice and the
+## rack, deliver from your hands, and save it all. Run: tools/run_hands.sh
 
 var fails := 0
 
@@ -12,6 +13,16 @@ func check(name: String, ok: bool) -> void:
 func sim(g, secs: float, player := Vector3(0, 1.7, 95)) -> void:
 	for i in int(secs * 60.0):
 		g.yard.step(1.0 / 60.0, player)
+
+## A fish straight into your hand (slot 3, made active), the way a grab leaves it.
+func hold(g, f: Dictionary) -> void:
+	g.inv.slots[2] = Inventory.fish_item(f)
+	g.inv.active = 2
+	g._hands_changed()
+
+func empty_hand(g) -> void:
+	g.inv.slots[g.inv.active] = {}
+	g._hands_changed()
 
 func face(g, pos: Vector3, yaw_deg: float, pitch_deg: float) -> void:
 	var pl: Node3D = g.get_node("Player")
@@ -47,9 +58,10 @@ func _ready() -> void:
 	# --- grab
 	yard.clear_all()
 	ahead = yard.spawn(g._make_fish(g.SPECIES[1]), Vector3(-30, yard.GROUND, 66.5), Vector3.ZERO)
-	check("grab puts the fish in your hand", g._grab_fish() and not g.held.is_empty() and yard.count() == 0)
+	check("you start with the drill and the rod in slots 1 and 2, the drill in hand", g.inv.slots[0].t == 0 and g.inv.slots[1].t == 1 and g.inv.active == 0 and g.tool == 0)
+	check("grab puts the fish in your free slot and makes it your hand", g._grab_fish() and g._held_kind() == "fish" and g.inv.active == 2 and yard.count() == 0)
 	check("...and shows it in front of you", g.hold_node.get_child_count() > 0)
-	check("hands hold one fish at a time", not g._grab_fish())
+	check("with all three slots full a grab is refused", not g._grab_fish())
 
 	# --- the held fish sways when you turn
 	g._update_hand(0.016)
@@ -60,17 +72,25 @@ func _ready() -> void:
 
 	# --- drop
 	face(g, Vector3(-30, 1.7, 70), 0.0, -10.0)
-	check("clicking on empty ice drops it at your feet", g._drop_held() and g.held.is_empty() and yard.count() == 1)
+	check("clicking on empty ice drops it at your feet (and you are back to the drill)", g._drop_active() and g._held_fish().is_empty() and yard.count() == 1 and g.tool == 0)
 	var dropped: Dictionary = yard.fish[0]
 	sim(g, 3.0)
 	check("it lands and rests a metre or two ahead of you", absf(dropped.pos.z - 70.0) < 6.0 and dropped.pos.y < 0.2)
 	g._grab_fish(dropped)
 
+	# --- things put down never hide a hole from your crosshair
+	var hole_t: Dictionary = g._make_hole(Vector3(-30, 0, 66))
+	var spot: Vector3 = g._valid_spot(Vector3(hole_t.pos.x + 0.4, 0, hole_t.pos.z))
+	check("a drop spot is nudged off a hole", Vector2(spot.x - hole_t.pos.x, spot.z - hole_t.pos.z).length() >= 1.85)
+	g.holes.erase(hole_t)
+	hole_t.node.queue_free()
+
 	# --- throw: farther with more charge, and where you look
 	var dist := {}
 	for frac in [0.1, 0.5, 1.0]:
 		yard.clear_all()
-		g._grab_fish(yard.spawn(g._make_fish(g.SPECIES[0]), Vector3(-30, yard.GROUND, 66.5), Vector3.ZERO)) if g.held.is_empty() else null
+		if g._held_fish().is_empty():
+			g._grab_fish(yard.spawn(g._make_fish(g.SPECIES[0]), Vector3(-30, yard.GROUND, 66.5), Vector3.ZERO))
 		face(g, Vector3(-30, 1.7, 70), 0.0, 0.0)
 		var z0: float = g.cam.global_position.z
 		g._throw_held(frac)
@@ -82,7 +102,7 @@ func _ready() -> void:
 	check("a full charge throws a long way (>=25 m, landing plus skid) but not across the whole lake (<=65 m)", dist[1.0] >= 25.0 and dist[1.0] <= 65.0)
 	# looking up lobs it higher and farther (until 45 degrees)
 	yard.clear_all()
-	g.held = g._make_fish(g.SPECIES[0])
+	hold(g, g._make_fish(g.SPECIES[0]))
 	face(g, Vector3(-30, 1.7, 70), 0.0, 0.0)
 	var v_flat: Vector3 = g._throw_velocity(1.0)
 	var t_flat: float = FishYard.flight_time(g._throw_origin(), v_flat)
@@ -92,7 +112,7 @@ func _ready() -> void:
 	var t_up: float = FishYard.flight_time(g._throw_origin(), v_up)
 	var land_up: float = (FishYard.arc_point(g._throw_origin(), v_up, t_up) - g._throw_origin()).length()
 	check("looking up a little lobs it farther", land_up > land_flat + 3.0)
-	g.held = {}
+	empty_hand(g)
 
 	# --- aim a throw into the Eye
 	yard.clear_all()
@@ -112,42 +132,203 @@ func _ready() -> void:
 			best_pitch = float(deg)
 	check("some aim at 80%% charge lands a throw on the pupil from 30 m (best error %.1f m at %d deg)" % [best_err, int(best_pitch)], best_err < 3.5)
 	g.cam.rotation.x = deg_to_rad(best_pitch)
-	g.held = g._make_fish(g.SPECIES[1])
+	hold(g, g._make_fish(g.SPECIES[1]))
 	var coins0 := GameState.currency
 	g._throw_held(0.8)
 	sim(g, 6.0, Vector3(0, 1.7, 95))
 	await get_tree().create_timer(0.3).timeout
 	check("the fish you threw is swallowed by the Eye and paid", g.stats.eye_fed == 1 and GameState.currency > coins0)
 
-	# --- stow and take out
+	# --- slots: select, cycle
+	empty_hand(g)
+	g._select_slot(0)
+	check("number keys pick a slot (1 = the drill)", g.inv.active == 0 and g.tool == 0)
+	g._select_slot(1)
+	check("2 = the rod in your hand", g.inv.active == 1 and g.tool == 1)
+	g._cycle_slot(1)
+	check("the wheel cycles to the third slot: empty hands", g.inv.active == 2 and g.tool == -1 and g._held_kind() == "")
+	g._cycle_slot(1)
+	check("...and wraps around to the first", g.inv.active == 0)
+
+	# --- a bucket: buying gives you one in your free slot
+	GameState.currency = 500.0
+	g._buy("bucket")
+	check("buying a bucket puts a real bucket in your free slot", g.inv.slots[2].get("k", "") == "bucket" and GameState.level("bucket") == 1)
+	check("a bucket holds %d fish" % g._bucket_cap(), g._bucket_cap() >= 4)
+	g._select_slot(2)
+	check("holding the bucket shows it in front of you", g._held_kind() == "bucket" and g.hold_node.get_child_count() > 0 and g.tool == -1)
 	yard.clear_all()
-	g.carry.clear()
-	g.held = g._make_fish(g.SPECIES[0])
-	check("E stows the held fish in the bucket", g._stow_held() and g.held.is_empty() and g.carry.size() == 1)
-	g.held = g._make_fish(g.SPECIES[0])
-	check("a full bucket (capacity 1) refuses and you keep the fish", not g._stow_held() and not g.held.is_empty() and g.carry.size() == 1)
-	g.held = {}
-	check("Z takes one out of the bucket into your hand", g._take_from_bucket() and not g.held.is_empty() and g.carry.is_empty())
-	check("...and nothing more to take", not g._take_from_bucket())
+	face(g, Vector3(-30, 1.7, 70), 0.0, -18.0)
+	var f1: Dictionary = yard.spawn(g._make_fish(g.SPECIES[1]), Vector3(-30, yard.GROUND, 66.5), Vector3.ZERO)
+	check("clicking a fish while holding a bucket scoops it into the bucket (not a slot)", g._grab_fish() and g.inv.slots[2].fish.size() == 1 and g.inv.active == 2 and g.inv.free_count() == 0)
+	yard.spawn(g._make_fish(g.SPECIES[0]), Vector3(-30, yard.GROUND, 69), Vector3.ZERO)
+	yard.spawn(g._make_fish(g.SPECIES[0]), Vector3(-29, yard.GROUND, 69.5), Vector3.ZERO)
+	yard.spawn(g._make_fish(g.SPECIES[0]), Vector3(-31, yard.GROUND, 69.5), Vector3.ZERO)
+	g._sweep_fish()
+	check("E sweeps up the fish at your feet into the bucket", g.inv.slots[2].fish.size() == 4 and yard.count() == 0)
+	check("carrying shows up everywhere you would look", g.carrying() and g.inv.cargo_count() == 4 and g.carry_label.text.contains("4 fish"))
+	check("a held bucket takes fish up to its size", g.free_space() == g._bucket_cap() - 4)
+	var bucket_fish: int = g.inv.slots[2].fish.size()
+	check("Z with no free slot says so and keeps the fish in the bucket", not g._take_from_bucket() and g.inv.slots[2].fish.size() == bucket_fish)
+
+	# --- put the rod down to free a slot, take one out with Z
+	g._select_slot(1)
+	g._drop_active()
+	check("Q puts the rod down on the ice, it lies there as a thing you can pick up", g.inv.slots[1].is_empty() and g.ground.size() == 1 and g.ground[0].item.k == "tool" and g.ground[0].item.t == 1)
+	var rod_g: Dictionary = g.ground[0]
+	g._select_slot(2)
+	check("Z takes one fish out of the bucket into your hand", g._take_from_bucket() and g._held_kind() == "fish" and g.inv.active == 1 and g.inv.slots[2].fish.size() == bucket_fish - 1)
+	check("throwing it sends you back to the bucket you were holding", g._throw_held(0.3) and g.inv.active == 2 and g._held_kind() == "bucket")
+	yard.clear_all()
+
+	# --- set the bucket down: it stays where it lands, and takes fish thrown into it
+	face(g, Vector3(-30, 1.7, 70), 0.0, -5.0)
+	g._drop_active(false)
+	check("Q sets the bucket down in front of you, fish and all", g.ground.size() == 2 and g.inv.slots[2].is_empty() and g.ground[1].item.k == "bucket" and g.ground[1].item.fish.size() == bucket_fish - 1)
+	var bg: Dictionary = g.ground[1]
+	while bg.item.fish.size() > 1:   # (room for two more whatever the bucket size is)
+		bg.item.fish.pop_back()
+	var bpos: Vector3 = bg.pos
+	var before: int = bg.item.fish.size()
+	yard.spawn(g._make_fish(g.SPECIES[0]), Vector3(bpos.x, 1.0, bpos.z + 5.0), Vector3(0, 0, -7.0))   # lobbed at it
+	sim(g, 2.0)
+	check("a fish thrown at the bucket lands in it", bg.item.fish.size() == before + 1 and yard.count() == 0)
+	yard.spawn(g._make_fish(g.SPECIES[0]), Vector3(bpos.x + 5.0, yard.GROUND, bpos.z), Vector3(-6.0, 0, 0))   # slid along the ice
+	sim(g, 2.0)
+	check("a fish kicked along the ice into it goes in too", bg.item.fish.size() == before + 2)
+	g.inv.slots[2] = {}
+	var cap: int = g._bucket_cap()
+	while bg.item.fish.size() < cap:
+		bg.item.fish.append(g._make_fish(g.SPECIES[0]))
+	yard.spawn(g._make_fish(g.SPECIES[0]), Vector3(bpos.x, 1.0, bpos.z + 5.0), Vector3(0, 0, -7.0))
+	sim(g, 2.0)
+	check("a full bucket lets the fish slide past", bg.item.fish.size() == cap and yard.count() == 1)
+	yard.clear_all()
+
+	# --- take a fish out of a bucket on the ice, and pick the bucket up
+	g._select_slot(2)
+	var n_before: int = bg.item.fish.size()
+	g._click_ground(bg)
+	check("clicking a bucket on the ice takes a fish out into your hand", g._held_kind() == "fish" and bg.item.fish.size() == n_before - 1)
+	g._click_ground(bg)
+	check("...and a held fish clicked on it goes back in", g._held_fish().is_empty() and bg.item.fish.size() == n_before)
+	g.inv.slots[0] = {}
+	g.inv.slots[1] = {}
+	g.inv.slots[2] = {}
+	g._take_ground(bg)
+	check("E picks the whole bucket up with its fish", g.inv.cargo_count() == n_before and g.ground.size() == 1 and g.inv.find_tool(2) == -1 and g.inv.buckets().size() == 1)
+
+	# --- tools on the ice: pick up, and swap when your hands are full
+	g._take_ground(rod_g)
+	check("a tool on the ice is picked up into a free slot", g.inv.find_tool(1) >= 0 and g.ground.is_empty())
+	g.inv.clear()
+	g.inv.slots[0] = Inventory.tool_item(0)
+	g.inv.slots[1] = Inventory.tool_item(1)
+	g.inv.slots[2] = Inventory.bucket_item([g._make_fish(g.SPECIES[0]), g._make_fish(g.SPECIES[1]), g._make_fish(g.SPECIES[0])])
+	g._hands_changed()
+	var full_bucket_slot := 2
+	check("now all three slots are full (drill, rod, bucket)", g.inv.free_count() == 0)
+	g._select_slot(1)
+	g._drop_active()
+	check("with the rod put down, a slot is free again", g.ground.size() == 1 and g.inv.free_count() == 1)
+	g._remove_ground(g.ground[0])
+	g.inv.slots[1] = Inventory.tool_item(1)   # (hands full again)
+	g._place_ground(Inventory.tool_item(2), Vector3(-30, 0, 60), false)
+	g._select_slot(0)
+	g._take_ground(g.ground[0])
+	check("picking something up with full hands swaps it with what you hold (the drill goes down where it lay)", g.ground.size() == 1 and g.ground[0].item.t == 0 and g.inv.slots[0].t == 2)
+	g._remove_ground(g.ground[0])
+	g.inv.slots[0] = Inventory.tool_item(0)
+	g._hands_changed()
+
+	# --- kick a placed bucket over
+	yard.clear_all()
+	g._select_slot(full_bucket_slot)
+	face(g, Vector3(-30, 1.7, 70), 0.0, -5.0)
+	g._drop_active(false)
+	var kb: Dictionary = g.ground[0]
+	face(g, Vector3(-30, 1.7, kb.pos.z + 2.0), 0.0, -5.0)
+	g.get_node("Player").position.x = kb.pos.x
+	var had: int = kb.item.fish.size()
+	g._start_kick()
+	g.kick_charge = 0.8
+	g._release_kick()
+	check("kicking a placed bucket tips its fish out onto the ice", kb.item.fish.is_empty() and yard.count() == had)
+	yard.clear_all()
+	g._remove_ground(kb)
+
+	# --- the rack: tools you do not hold hang there
+	g.inv.clear()
+	g.inv.slots[0] = Inventory.tool_item(0)
+	g.inv.slots[1] = Inventory.tool_item(1)
+	g._hands_changed()
+	check("the rack shows no tool you are carrying", not g.rack_mounts[0].visible and not g.rack_mounts[1].visible)
+	g.inv.slots[0] = {}
+	g._hands_changed()
+	check("...and shows the drill once you put it down", g.rack_mounts[0].visible)
+	g._click_rack(0)
+	check("clicking the drill on the rack puts it in a free slot", g.inv.find_tool(0) >= 0 and g.tool == 0)
+	g._click_rack(2)
+	check("the kit stays on the rack, empty, until a build tool is unlocked", g.inv.find_tool(2) < 0)
+	g.unlocked["t_auto"] = true
+	g.unlocked["t_smoker"] = true
+	g._refresh()
+	check("once unlocked the kit hangs on the rack", g.rack_mounts[2].visible)
+	g._click_rack(2)
+	check("taking it uses the free slot; its mode starts on what you have unlocked", g.inv.find_tool(2) >= 0 and g.tool == 2)
+	g._cycle_build()
+	check("B switches what the kit builds", g.tool == 3)
+	g.inv.slots[2] = {}
+	g.inv.slots[2] = Inventory.bucket_item([g._make_fish(g.SPECIES[0])])
+	g._click_rack(2)
+	check("taking a tool with full hands swaps: your active item goes down", g.inv.find_tool(2) >= 0)
+	g.unlocked["t_auto"] = false
+	g.unlocked["t_smoker"] = false
+	g.inv.clear()
+	g.inv.slots[0] = Inventory.tool_item(0)
+	g.inv.slots[1] = Inventory.tool_item(1)
+	g._hands_changed()
 
 	# --- deliver from your hand
 	g.stats.eye_fed = 0
-	g.carry.clear()
-	g.held = g._make_fish(g.SPECIES[1])
+	hold(g, g._make_fish(g.SPECIES[1]))
 	g._feed_by_hand()
-	check("clicking the Eye with a fish in hand feeds it (moved to the throw queue)", g.held.is_empty() and g.flying.size() == 1)
+	check("clicking the Eye with a fish in hand feeds it (moved to the throw queue)", g._held_fish().is_empty() and g.flying.size() == 1)
 	await get_tree().create_timer(2.0).timeout
 	check("...and it pays", g.stats.eye_fed == 1)
+	# a bucketful in one click
+	g.inv.clear()
+	g.inv.slots[0] = Inventory.tool_item(0)
+	g.inv.slots[1] = Inventory.bucket_item([g._make_fish(g.SPECIES[0]), g._make_fish(g.SPECIES[0]), g._make_fish(g.SPECIES[1])])
+	g.inv.slots[2] = Inventory.fish_item(g._make_fish(g.SPECIES[0]))
+	g._hands_changed()
+	g.stats.eye_fed = 0
+	g._feed_by_hand()
+	check("clicking the Eye feeds everything you carry: the bucket's fish and the loose one", g.flying.size() == 4 and g.inv.cargo_count() == 0 and g.inv.slots[1].k == "bucket")
+	await get_tree().create_timer(3.0).timeout
+	check("...and all of them pay", g.stats.eye_fed == 4)
 
 	# --- species orders, prompts, save
-	g.held = g._make_fish(g.SPECIES[1])
-	check("the prompt on the Eye says it will be thrown in", g._prompt_for("eye").contains("throw it in"))
+	g.inv.clear()
+	g.inv.slots[0] = Inventory.tool_item(0)
+	g.inv.slots[1] = Inventory.tool_item(1)
+	hold(g, g._make_fish(g.SPECIES[1]))
+	check("the prompt on the Eye says it will be put in", g._prompt_for("eye").contains("put it in"))
 	check("Olga's prompt knows you carry fish", g._prompt_for("olga").contains("doesn't buy"))
 	check("a held Perch counts as out of the lake for orders", g._species_held("Perch") >= 1)
+	for leftover in g.ground.duplicate():
+		g._remove_ground(leftover)
+	g._place_ground(Inventory.bucket_item([g._make_fish(g.SPECIES[2])]), Vector3(-40, 0, 70), false)
+	g.bmode = 1
 	g._on_about_to_save()
-	check("a fish in hand is saved (as one lying at your feet)", GameState.extra.loose.size() >= 1)
-	g.held = {}
-	g._set_hold_visual()
+	var sv: Dictionary = GameState.extra
+	check("the slots, the bucket on the ice and its fish are saved", sv.slots.size() == 3 and sv.slots[2].k == "fish" and sv.ground.size() == 1 and sv.ground[0].item.fish.size() == 1 and sv.active == 2)
+	g._remove_ground(g.ground[0])
+	g.inv.clear()
+	g._restore(sv)
+	check("...and come back as they were (fish in slot 3, the bucket and its fish back on the ice)", g.inv.slots[2].k == "fish" and g.inv.slots[0].t == 0 and g.ground.size() == 1 and g.ground[0].item.fish.size() == 1 and g.bmode == 1)
+	g._remove_ground(g.ground[0])
+	empty_hand(g)
 
 	# --- thrown fish go into machines: a depot sends them to the Eye, a smoker starts smoking them
 	yard.clear_all()
@@ -179,6 +360,7 @@ func _ready() -> void:
 	yard.clear_all()
 
 	# --- the held fish shows nothing when your hands are empty
+	g._select_slot(0)
 	g._update_hand(0.016)
 	check("with empty hands nothing hangs in front of you", not g.hold_node.visible)
 	print("HANDS %s (%d failures)" % ["PASS" if fails == 0 else "FAIL", fails])

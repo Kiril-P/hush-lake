@@ -3,7 +3,7 @@ extends Node3D
 ##
 ## STORY: Olga has watched the Eye under Hush Lake for most of her life. She does not buy fish:
 ## she talks, hints and remembers. YOU feed the Eye, which pays in coins as it wakes.
-## You start with bare hands: ONE fish at a time. A bucket (shop) lets you carry more;
+## You carry three things at a time (three slots: tools, fish, buckets). Buckets (shop) hold many fish and can be set down anywhere;
 ## auto-rods and belts deliver for you. Optional processing stations (gutting table, smoker) multiply value.
 ##
 ## Borrowed from the reference games:
@@ -32,7 +32,6 @@ const BELT_SPEED := 4.5
 const BELT_MAX_FISH := 600
 const MIN_HOLE_GAP := 1.6
 const RIDE_SPEED := [1.0, 2.4, 3.0, 3.6]   # snowmobile levels 0..3
-const SLED_BONUS := 10                      # snowmobile level 3 tows a sled: +10 carry while riding
 const CANNERY_MULT := 1.5                   # a cannery on a belt: every fish riding it is worth x1.5
 const SORTER_MULT := 1.6                    # a sorter: fish worth 5+ get x1.6
 const DEPOT_MULT := 1.05                    # a depot's sled run pays a little less than hand-feeding the Eye
@@ -88,14 +87,19 @@ const REFREEZE_MIN_SECTORS := 6   # clear this many sectors before you may refre
 const EMPTY_LAKE_PEARLS := 5      # bonus pearls for emptying the whole lake
 # Pearls are the permanent currency. Earned by clearing sectors, spent between lakes. Cost = base * (level + 1).
 const PERKS := {
-	"pockets": {"name": "Warm Pockets", "desc": "start each lake with +1 bucket level", "cost": 2, "max": 3},
+	"pockets": {"name": "Warm Pockets", "desc": "start each lake with +1 bucket", "cost": 2, "max": 3},
 	"seed":    {"name": "Seed Money",   "desc": "start each lake with +40 coins",      "cost": 1, "max": 5},
 	"favour":  {"name": "Olga's Favour", "desc": "+10% sale value, always",            "cost": 3, "max": 5},
 	"hands":   {"name": "Quick Hands",  "desc": "start with +1 drill speed level",     "cost": 2, "max": 3},
 }
 const SECTOR_PERK := 0.02   # +2% sale value per cleared sector
 const COMBO_WINDOW := 14.0   # long enough to push a catch to the Eye between casts
-const CAPACITIES := [1, 3, 6, 10, 16, 24, 36, 50]
+const BUCKET_CAPS := [4, 6, 9, 13, 18, 25]   # fish one bucket holds, by Bucket Size level
+const RANGE_ITEM := 5.5     # you can pick up a tool or bucket this far away (looking at it)
+const DROP_REACH := 1.7     # Q puts what is in your hand down this far in front of you
+const SWEEP_REACH := 3.5
+const RACK_BEARING := -46.0   # the tool rack stands by Olga's hut
+const RACK_RADIUS := 24.0
 const TOOLS := ["Drill", "Rod", "Auto-Rod", "Smoker", "Gut Table", "Belt", "Build"]
 const TOOL_UNLOCK := ["", "", "t_auto", "t_smoker", "t_table", "t_belt", "t_build"]
 
@@ -112,7 +116,8 @@ const SPECIES := [
 
 # shop: "start" = available from the beginning, otherwise unlocked by a goal
 const UPGRADES := {
-	"bucket":   {"name": "Bucket",      "base": 6.0,   "growth": 2.2,  "max": 7, "start": true},
+	"bucket":   {"name": "Bucket",      "base": 6.0,   "growth": 1.9,  "max": 5, "start": true, "desc": "another bucket: place them around"},
+	"pail":     {"name": "Bucket Size", "base": 35.0,  "growth": 2.1,  "max": 5, "desc": "every bucket holds more"},
 	"bait":     {"name": "Bait",        "base": 10.0,  "growth": 1.6,  "max": 8, "start": true, "desc": "bites come sooner"},
 	"boots":    {"name": "Boots",       "base": 12.0,  "growth": 1.8,  "max": 5, "start": true, "desc": "walk faster"},
 	"drill":    {"name": "Drill Speed", "base": 18.0,  "growth": 1.6,  "max": 6, "start": true, "desc": "drill & gut faster"},
@@ -120,7 +125,7 @@ const UPGRADES := {
 	"market":   {"name": "Lure Polish", "base": 25.0,  "growth": 1.85, "max": 12, "desc": "+10% fish value"},
 	"sonar":    {"name": "Sonar",       "base": 40.0,  "growth": 2.0,  "max": 3, "desc": "see the fish under the ice"},
 	"wide":     {"name": "Wide Drill",  "base": 60.0,  "growth": 2.2,  "max": 3, "desc": "drilling opens neighbours"},
-	"snowmobile": {"name": "Snowmobile", "base": 90.0, "growth": 2.6, "max": 3, "desc": "V to ride: faster. Lv3 tows a sled (+10 carry)"},
+	"snowmobile": {"name": "Snowmobile", "base": 90.0, "growth": 2.6, "max": 3, "desc": "V to ride: faster and faster"},
 	"kick":     {"name": "Kick Power", "base": 20.0,  "growth": 1.8,  "max": 5, "start": true, "desc": "kicks send fish farther"},
 	"conveyor": {"name": "Belt Motor",  "base": 140.0, "growth": 2.3,  "max": 4, "desc": "belts run faster, +15% value"},
 }
@@ -128,27 +133,27 @@ const UPGRADES := {
 # goals: stat keys are counters (stats[...]), "lvl:<upgrade>", "found:<species>", or "journal"
 const GOALS := [
 	{"text": "Drill your first hole", "stat": "holes", "target": 1, "reward": 4,
-		"line": "Olga: Every last fish out of this lake, dear. Start with the Shallows. Cast a line (2)."},
+		"line": "Olga: Every last fish out of this lake, dear. Start with the Shallows. Cast a line with the Rod (2)."},
 	{"text": "Catch a fish", "stat": "caught", "target": 1, "reward": 4,
-		"line": "Olga: Now push it into the Eye, dear. Walk into it, or kick it with the right mouse."},
+		"line": "Olga: Now get it to the Eye, dear. Walk into it, kick it (right mouse), or grab it and throw."},
 	{"text": "Feed a fish to the Eye", "stat": "eye_fed", "target": 1, "reward": 5,
 		"line": "Olga: There. It looked at you, didn't it? Save up for a bucket at the stalls."},
 	{"text": "Buy a Bucket", "stat": "lvl:bucket", "target": 1, "reward": 10,
-		"line": "Olga: Three at a time! Now we're a business.", "unlock": ["lines", "market"]},
+		"line": "Olga: A bucket! Click fish into it, or throw them in. Buy more and set them around the ice.", "unlock": ["lines", "market", "pail"]},
 	{"text": "Earn 50 coins", "stat": "earned", "target": 50, "reward": 15,
-		"line": "Olga: An Auto-Rod (3) will fish a hole for you. Click it to collect.", "unlock": ["t_auto"]},
+		"line": "Olga: A Builder's Kit now hangs on my rack. Its Auto-Rod will fish a hole for you. Click it to collect.", "unlock": ["t_auto"]},
 	{"text": "Fish a patch empty", "stat": "tiles_cleared", "target": 1, "reward": 20,
 		"line": "Olga: That patch is fished out. Sonar shows what's still under the ice.", "unlock": ["sonar"]},
 	{"text": "Build an Auto-Rod", "stat": "autos", "target": 1, "reward": 30,
-		"line": "Olga: Now a belt (6) can carry its catch straight into the Eye.", "unlock": ["t_belt"]},
+		"line": "Olga: Now the kit can lay a belt (B switches what it builds) to carry its catch straight into the Eye.", "unlock": ["t_belt"]},
 	{"text": "Lay a belt to the Eye", "stat": "belts", "target": 1, "reward": 40,
 		"line": "Olga: Watch them go. It is always hungry, that one."},
 	{"text": "Feed the Eye 25 fish", "stat": "eye_fed", "target": 25, "reward": 60,
-		"line": "Olga: ...Did it just blink? There's a snowmobile at the stalls now, and Build (7) for the machines.", "unlock": ["snowmobile", "t_build"]},
+		"line": "Olga: ...Did it just blink? There's a snowmobile at the stalls now, and the kit builds bigger machines.", "unlock": ["snowmobile", "t_build"]},
 	{"text": "Buy a Snowmobile", "stat": "lvl:snowmobile", "target": 1, "reward": 80,
 		"line": "Olga: Press V to ride. Mind the ice, dear."},
 	{"text": "Build a Cannery on a belt", "stat": "cans", "target": 1, "reward": 90,
-		"line": "Olga: Canned fish fetch half again. Q cycles what you build."},
+		"line": "Olga: Canned fish fetch half again. B cycles what the kit builds."},
 	{"text": "Build a Depot", "stat": "depots", "target": 1, "reward": 80,
 		"line": "Olga: Drop fish at a depot and a sled runs them to the Eye. Less walking."},
 	{"text": "Build an Ice-Breaker", "stat": "rigs", "target": 1, "reward": 400,
@@ -259,8 +264,14 @@ var drill_snd_t := 0.0
 var rail_mat: StandardMaterial3D
 var scenery: Node3D
 var hut_pos := Vector3.ZERO
-var tool := 0
-var carry: Array = []      # fish dicts: {name, base, color, mult, gutted, smoked}
+var inv := Inventory.new()   # your three slots and the one in your hand (see inventory.gd)
+var tool := -1             # what the item in your hand lets you do: 0 drill, 1 rod, 2..6 a build mode (the builder's kit), -1 nothing
+var bmode := 2             # which build the builder's kit is set to (an index into TOOLS, 2..6)
+var return_slot := -1      # grabbing a fish puts it in your hand; when it leaves your hand you go back to this slot
+var ground: Array = []     # tools and buckets lying on the ice: {id, item, node, pos, yaw}
+var ground_serial := 0
+var rack_mounts: Array = []   # the rack's three mounted tools (shown while the tool is on the rack)
+var rack_pos := Vector3.ZERO
 var journal := {}          # species name -> count
 var stats := {"holes": 0, "caught": 0, "deliveries": 0, "earned": 0.0, "autos": 0, "smokes": 0, "gutted": 0, "tiles_cleared": 0, "sectors": 0, "ended": 0, "eye_fed": 0, "belts": 0, "cans": 0, "sorters": 0, "depots": 0, "rigs": 0, "rides": 0, "tithe": 0, "awakened": 0}
 var unlocked := {}
@@ -325,9 +336,13 @@ var start_label: Label
 var journal_panel: PanelContainer
 var journal_label: Label
 var journal_grid: GridContainer
-var hotbar: Array[Label] = []
-var hotbar_panels: Array[PanelContainer] = []
-var hotbar_icons: Array = []
+var dock_panels: Array[PanelContainer] = []
+var dock_icons: Array = []
+var dock_keys: Array[Label] = []
+var dock_badges: Array[Label] = []
+var dock_name: Label
+var dock_sig := ""
+var dock_active_last := -1
 var crosshair: HudWidgets.Crosshair
 var carry_bar: ProgressBar
 var eye_bar: ProgressBar
@@ -356,13 +371,12 @@ var saved_label: Label
 var saved_t := 0.0
 var coins_shown := -1.0
 var coins_target := 0.0
-var hotbar_last_tool := -1
 var eye_pulse_t := 0.0
 var test_capture := false     # headless tools cannot capture the mouse: they ask the game to behave as if it were
 var kick_rings: Array = []
 var hold_block := false
-var held: Dictionary = {}       # the fish in your hand: {} when empty (a physical hold, not an inventory slot)
-var hold_node: Node3D           # its model in front of the camera
+var hold_node: Node3D           # the fish or bucket in your hand, in front of the camera
+var hold_sig := ""              # what hold_node shows right now
 var hold_sway := Vector2.ZERO   # the held fish lags behind when you turn
 var prev_look := Vector2.ZERO
 var arc_dots: Array = []        # the throw preview: dots along the arc
@@ -451,6 +465,8 @@ func _ready() -> void:
 	_make_sector_patches()
 	_setup_lanterns()
 	var resumed := _restore(GameState.extra)
+	if not resumed:
+		_start_kit()
 	_paint_all()
 	GameState.currency_changed.connect(_on_currency_changed)
 	_apply_settings()
@@ -470,7 +486,7 @@ func _ready() -> void:
 		if _meta_int("lakes") > 0:
 			_banner("%s #%d: %s" % [model.mod_info().name, _meta_int("lakes") + 1, model.mod_info().desc], Color(0.7, 0.9, 1.0))
 		if GameState.save_slot.begins_with("test"):
-			_say("Olga: The Eye wants feeding, dear. Press 1 and hold click anywhere on the ice. Push what you catch into the Eye.")
+			_say("Olga: The Eye wants feeding, dear. Hold click anywhere on the ice with the drill. Get what you catch into the Eye.")
 		else:
 			guide.want_intro = true
 
@@ -611,6 +627,7 @@ func _build_world() -> void:
 		s.add_child(ld)
 		sign_descs[id] = ld
 		scenery.decorate_stall(s, id)
+	_build_rack()
 
 ## A fish cell: no mesh, no collider. It owns a stock of fish and a shoal of shadows you can see under the ice.
 func _make_tile(c: Vector2i) -> void:
@@ -1061,8 +1078,8 @@ void fragment() {
 	msg_label = Label.new()
 	msg_label.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	msg_label.anchor_top = 1.0
-	msg_label.offset_top = -190.0
-	msg_label.offset_bottom = -92.0
+	msg_label.offset_top = -240.0
+	msg_label.offset_bottom = -142.0
 	msg_label.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
 	msg_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	msg_label.add_theme_font_size_override("font_size", 19)
@@ -1105,35 +1122,46 @@ void fragment() {
 	work_bar.visible = false
 	work_bar.modulate.a = 0.0   # the crosshair's ring shows this progress now
 	ui.add_child(work_bar)
-	# bottom: one card per tool, the active one ringed in amber
-	var bar := HBoxContainer.new()
-	bar.add_theme_constant_override("separation", 8)
-	bar.anchor_left = 0.5
-	bar.anchor_right = 0.5
-	bar.anchor_top = 1.0
-	bar.anchor_bottom = 1.0
-	bar.offset_top = -20.0
-	bar.offset_bottom = -20.0
-	bar.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	bar.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	ui.add_child(bar)
-	for i in TOOLS.size():
+	# bottom middle: your three slots. The one in your hand is raised and ringed in amber, its name floats above
+	var dock := VBoxContainer.new()
+	dock.add_theme_constant_override("separation", 6)
+	dock.anchor_left = 0.5
+	dock.anchor_right = 0.5
+	dock.anchor_top = 1.0
+	dock.anchor_bottom = 1.0
+	dock.offset_top = -20.0
+	dock.offset_bottom = -20.0
+	dock.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	dock.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	ui.add_child(dock)
+	dock_name = _plain(dock, 18, Style.AMBER)
+	dock_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 10)
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	dock.add_child(row)
+	for i in Inventory.SLOTS:
 		var sp := PanelContainer.new()
-		sp.custom_minimum_size = Vector2(108, 58)
+		sp.custom_minimum_size = Vector2(84, 80)
 		sp.add_theme_stylebox_override("panel", Style.slot(false, true))
-		bar.add_child(sp)
-		hotbar_panels.append(sp)
-		var hb := HBoxContainer.new()
-		hb.add_theme_constant_override("separation", 4)
-		sp.add_child(hb)
-		var icon := HudWidgets.ToolIcon.new(i)
-		hb.add_child(icon)
-		hotbar_icons.append(icon)
-		var hl := _plain(hb, 17)
-		hl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		hl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		hl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		hotbar.append(hl)
+		row.add_child(sp)
+		dock_panels.append(sp)
+		var box := Control.new()
+		box.custom_minimum_size = Vector2(64, 60)
+		sp.add_child(box)
+		var icon := HudWidgets.ItemIcon.new()
+		icon.position = Vector2(9, 8)
+		box.add_child(icon)
+		dock_icons.append(icon)
+		var kl := _plain(box, 14, Style.MUTED)
+		kl.text = str(i + 1)
+		kl.position = Vector2(0, -4)
+		dock_keys.append(kl)
+		var bl := _plain(box, 14, Style.CREAM)
+		bl.position = Vector2(26, 42)
+		bl.size = Vector2(38, 18)
+		bl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		dock_badges.append(bl)
 	journal_label = Label.new()
 	journal_label.add_theme_font_size_override("font_size", 24)
 	var jbox := VBoxContainer.new()
@@ -1356,13 +1384,13 @@ func _float_text(pos: Vector3, text: String, color := Color(1, 1, 1), px := 0.01
 	tw.tween_property(l, "modulate:a", 0.0, 1.2).set_delay(0.5)
 	tw.chain().tween_callback(l.queue_free)
 
-func capacity() -> int:
-	var c: int = CAPACITIES[mini(GameState.level("bucket"), CAPACITIES.size() - 1)]
-	if riding and GameState.level("snowmobile") >= 3:
-		c += SLED_BONUS
-	return c
+func capacity() -> int:   # fish you can carry kitted out for hauling: two buckets (the third slot is a tool), or one fish in your hand
+	return maxi(mini(GameState.level("bucket"), 2) * _bucket_cap(), 1)
 
-func next_capacity() -> int: return CAPACITIES[mini(GameState.level("bucket") + 1, CAPACITIES.size() - 1)]
+func _bucket_cap() -> int:
+	return BUCKET_CAPS[mini(GameState.level("pail"), BUCKET_CAPS.size() - 1)]
+
+func next_capacity() -> int: return BUCKET_CAPS[mini(GameState.level("pail") + 1, BUCKET_CAPS.size() - 1)]
 func lines() -> int: return 1 + GameState.level("lines")
 func sale_mult() -> float:
 	return (1.0 + 0.10 * GameState.level("market") + SECTOR_PERK * stats.sectors + 0.1 * perk_level("favour")
@@ -1380,7 +1408,8 @@ func _auto_wait(t: Dictionary) -> float: return randf_range(AUTO_WAIT[0], AUTO_W
 func auto_cost() -> float: return ceil(AUTO_BASE * pow(AUTO_GROWTH, _count("auto")))
 func smoker_cost() -> float: return ceil(90.0 * pow(1.5, _count("smoker")))
 func table_cost() -> float: return ceil(60.0 * pow(1.5, _count("table")))
-func free_space() -> int: return capacity() - carry.size()
+func free_space() -> int: return inv.room(_bucket_cap())   # fish that still fit in your buckets and empty slots
+func carrying() -> bool: return inv.cargo_count() > 0
 
 func _count(state: String) -> int:
 	var n := 0
@@ -1391,7 +1420,7 @@ func _count(state: String) -> int:
 
 func carry_worth() -> float:
 	var w := 0.0
-	for f in carry:
+	for f in inv.cargo():
 		w += f.base * f.mult
 	return w * sale_mult()
 
@@ -1572,17 +1601,21 @@ func _tool_unlocked(i: int) -> bool:
 
 func _upgrade_desc(id: String) -> String:
 	if id == "bucket":
-		return "carry %d at a time" % next_capacity()
+		return "another bucket (holds %d). Place them around" % _bucket_cap()
+	if id == "pail":
+		return "every bucket holds %d" % next_capacity()
 	return UPGRADES[id].desc
 
 func _refresh() -> void:
+	_sync_active()
 	_check_goals()
 	coins_target = floor(GameState.currency)
 	if coins_shown < 0.0:
 		coins_shown = coins_target
 		coins_label.text = _fmt_num(coins_shown)
-	carry_label.text = "Bucket %d / %d   worth %d%s" % [carry.size(), capacity(), floor(carry_worth()), ("   |   %d on the ice" % yard.count()) if yard.count() > 0 else ""]
-	carry_bar.value = float(carry.size()) / maxf(1.0, float(capacity()))
+	var cc := inv.cargo_count()
+	carry_label.text = "%s%s" % [("Carrying %d fish   worth %d" % [cc, floor(carry_worth())]) if cc > 0 else "Carrying nothing", ("   |   %d on the ice" % yard.count()) if yard.count() > 0 else ""]
+	carry_bar.value = float(cc) / maxf(1.0, float(cc + free_space()))
 	eye_label.text = "The Eye   stage %d / %d   %d fed" % [eye_stage(), EYE_STAGES.size(), stats.eye_fed]
 	eye_bar.value = _eye_progress()
 	var est := eye_stage()
@@ -1603,27 +1636,6 @@ func _refresh() -> void:
 			cost_text = "MAX"
 		sign_labels[id].text = "%s  Lv%d\n%s" % [u.name, lvl, cost_text]
 		sign_descs[id].text = _upgrade_desc(id)
-	for i in TOOLS.size():
-		var label: String = TOOLS[i] if _tool_unlocked(i) else "???"
-		if _tool_unlocked(i) and i == 0: label = DRILL_NAMES[mini(GameState.level("drill"), DRILL_NAMES.size() - 1)]
-		if _tool_unlocked(i) and i == 1: label = ROD_NAMES[mini(GameState.level("lines"), ROD_NAMES.size() - 1)]
-		var suffix := ""
-		if _tool_unlocked(i):
-			if i == 2: suffix = "\n%d" % auto_cost()
-			if i == 3: suffix = "\n%d" % smoker_cost()
-			if i == 4: suffix = "\n%d" % table_cost()
-			if i == 5: suffix = "\n12+"
-			if i == 6: suffix = "\n%s %d" % [BUILD_ITEMS[build_item], _build_cost(build_item)]
-		hotbar[i].text = "%d  %s%s" % [i + 1, label, suffix]
-		hotbar[i].add_theme_color_override("font_color", Style.AMBER if i == tool else (Style.CREAM if _tool_unlocked(i) else Style.MUTED))
-		hotbar_panels[i].add_theme_stylebox_override("panel", Style.slot(i == tool, not _tool_unlocked(i)))
-		if i == tool and hotbar_last_tool != tool:
-			hotbar_panels[i].pivot_offset = hotbar_panels[i].size * 0.5
-			hotbar_panels[i].scale = Vector2.ONE * 1.12
-			hotbar_panels[i].create_tween().tween_property(hotbar_panels[i], "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-		hotbar_icons[i].lit = _tool_unlocked(i)
-		hotbar_icons[i].active = i == tool
-		hotbar_icons[i].queue_redraw()
 	if scenery:
 		scenery.set_eye_glow(float(model.cleared_count()) / model.sectors.size() * 1.4)
 		scenery.set_eye_open(minf(eye_open_frac(), 0.8) if awaken_hold else eye_open_frac())
@@ -1633,7 +1645,8 @@ func _refresh() -> void:
 		_update_journal()
 	map_ctrl.queue_redraw()
 	_sync_tool_view()
-	hotbar_last_tool = tool
+	_refresh_dock()
+	_refresh_rack()
 
 func _update_journal() -> void:
 	journal_label.text = "FIELD JOURNAL    %d / %d found" % [journal.size(), SPECIES.size()]
@@ -1659,31 +1672,6 @@ func _update_journal() -> void:
 	var foot := _plain(journal_grid, 14, Style.MUTED)
 	foot.text = ""
 
-func _refresh_view() -> void:
-	for c in view.get_children():
-		c.queue_free()
-	if capacity() > 1:
-		var bucket := MeshInstance3D.new()
-		var cm := CylinderMesh.new()
-		cm.top_radius = 0.17
-		cm.bottom_radius = 0.12
-		cm.height = 0.28
-		bucket.mesh = cm
-		bucket.material_override = _mat(Color(0.55, 0.38, 0.22))
-		view.add_child(bucket)
-		var n := mini(carry.size(), 10)
-		for i in n:
-			var f := _fish_mesh(carry[i], view, 0.8)
-			(f as FishNode).amp = 0.3
-			f.position = Vector3(randf_range(-0.07, 0.07), 0.15 + 0.02 * i, randf_range(-0.07, 0.07))
-			f.rotation = Vector3(randf_range(-0.4, 0.4), randf() * TAU, randf_range(-0.4, 0.4))
-	elif carry.size() == 1:
-		var f := _fish_mesh(carry[0], view, 1.2)
-		(f as FishNode).amp = 0.9
-		f.rotation = Vector3(0.3, 0.6, 0.2)
-	view.rotation = Vector3(0.1, 0.3, 0.0)
-	_no_shadows(view)
-
 ## Things held in front of the camera must not cast shadows: they showed up as dark polygons on the ice that belong to no object.
 func _no_shadows(n: Node) -> void:
 	if n is GeometryInstance3D:
@@ -1691,17 +1679,14 @@ func _no_shadows(n: Node) -> void:
 	for c in n.get_children():
 		_no_shadows(c)
 
-func _add_carry(f: Dictionary) -> void:
-	carry.append(f)
-
 # ---------- tools in hand ----------
 func _sync_tool_view() -> void:
-	var sig := "%d-%d-%d" % [tool, GameState.level("drill"), GameState.level("lines")]
+	var sig := "%d-%d-%d-%d" % [tool, GameState.level("drill"), GameState.level("lines"), bmode]
 	if sig == tool_sig:
 		return
 	if tool_sig != "":   # not on the first build: the old tool drops away, the new one swings up
 		tool_swap = 1.0
-		sfx.play("tick", -8.0, 0.8 + 0.06 * tool)
+		sfx.play("tick", -8.0, 0.8 + 0.06 * maxi(tool, 0))
 	tool_sig = sig
 	for c in tool_view.get_children():
 		c.queue_free()
@@ -1711,7 +1696,10 @@ func _sync_tool_view() -> void:
 	tool_line = null
 	tool_tip = null
 	tool_base_z = 0.0
+	tool_view.visible = tool >= 0
 	match tool:
+		-1:  # a fish, a bucket or empty hands: nothing in the tool hand
+			pass
 		0:  # auger: spins while you hold click
 			var tier := mini(GameState.level("drill"), TIER_COLORS.size() - 1)
 			tool_base_x = deg_to_rad(-12)   # shaft out front, slightly down, leaning across the screen on a diagonal so it reads as a drill and not a log
@@ -1725,8 +1713,7 @@ func _sync_tool_view() -> void:
 			tool_tip = parts.tip
 		_:  # the builder's kit: the accent says what you are placing
 			tool_base_x = deg_to_rad(-10)
-			var accents := [Color(1.0, 0.78, 0.35), Color(0.95, 0.5, 0.2), Color(0.55, 0.9, 0.95), Color(0.3, 0.75, 0.85), Color(1.0, 0.9, 0.6)]
-			ToolModels.builder(tool_body, accents[clampi(tool - 2, 0, accents.size() - 1)])
+			ToolModels.builder(tool_body, _kit_accent())
 	tool_body.rotation.x = tool_base_x
 	tool_body.rotation.z = tool_base_z
 	_no_shadows(tool_body)
@@ -1785,9 +1772,14 @@ func _burst(pos: Vector3, color: Color, count := 10, speed := 3.0, life := 0.7, 
 # ---------- orders (Olga's repeatable requests) ----------
 func _species_held(sp: String) -> int:
 	var n := 0
-	for f in carry:
+	for f in inv.cargo():
 		if f.name == sp:
 			n += 1
+	for g in ground:   # a bucket lying on the ice still holds fish that are out of the lake
+		if g.item.k == "bucket":
+			for f in g.item.fish:
+				if f.name == sp:
+					n += 1
 	for t in holes:
 		for f in t.stash:
 			if f.name == sp:
@@ -1796,8 +1788,6 @@ func _species_held(sp: String) -> int:
 			for f in t.hooked:
 				if f.name == sp:
 					n += 1
-	if not held.is_empty() and held.name == sp:
-		n += 1
 	for e in yard.fish:   # fish on the ice, in the air toward the Eye, or riding a belt are out of the lake but not yet delivered
 		if e.f.name == sp:
 			n += 1
@@ -1840,7 +1830,7 @@ func _new_order() -> void:
 		"smoked":
 			unit = 7.0
 			o.need = 3 + step
-	var avail: int = model.total_left() + carry.size()
+	var avail: int = model.total_left() + inv.cargo_count()
 	if avail < 3:
 		order = {}  # nothing worth asking for; the lake is practically empty
 		return
@@ -1961,7 +1951,8 @@ func _process(delta: float) -> void:
 	else:
 		prompt_label.text = _prompt_for(a)
 	_tick_yard(delta, captured)
-	if captured and a == "" and (not held.is_empty() or yard.near($Player.global_position, PICKUP_RADIUS + 1.0) > 0) and not guide.intro_active:
+	var in_hand := _held_kind() in ["fish", "bucket"]
+	if captured and (a == "" or (a == "ice" and in_hand)) and (in_hand or yard.near($Player.global_position, PICKUP_RADIUS + 1.0) > 0) and not guide.intro_active:
 		prompt_label.text = _yard_hint()
 	guide.tick(delta, captured)
 	if guide.intro_active:
@@ -2110,12 +2101,12 @@ func _snow_fx(pos: Vector3, amount: int, power: float) -> void:
 func _kick_max() -> float:
 	return KICK_BASE_MAX + 3.0 * GameState.level("kick")
 
-func _hold_hint() -> String:
-	return "Click: drop   Right mouse (hold): throw   E: stow in bucket" + ("   Z: take one out" if not carry.is_empty() else "")
-
 func _yard_hint() -> String:
-	if not held.is_empty():
-		return _hold_hint()
+	match _held_kind():
+		"fish":
+			return "Click: drop   Right mouse (hold): throw   Q: put down   Click the Eye or a bucket: put it in"
+		"bucket":
+			return "Click: set the bucket down   Click a fish: scoop it   E: sweep up   Z: take one out   Kick tips a bucket over"
 	if _aim_fish() != null:
 		return "Click: grab this fish   Right mouse / F: kick   E: sweep up"
 	var pl: Node3D = $Player
@@ -2219,11 +2210,11 @@ func _update_crosshair(a: String, captured: bool) -> void:
 	if captured and not guide.intro_active:
 		if a == "eye":
 			kind = 2
-		elif a.begins_with("hole:") or a.begins_with("buy:") or a == "olga" or a.begins_with("depot:") or a.begins_with("rig:"):
+		elif a.begins_with("hole:") or a.begins_with("buy:") or a == "olga" or a.begins_with("depot:") or a.begins_with("rig:") or a.begins_with("item:") or a.begins_with("rack:"):
 			kind = 1
 		elif a == "ice" and tool == 0 and _can_drill_at(Vector3(aim_pos.x, 0.0, aim_pos.z)):
 			kind = 1
-		if kind == 0 and held.is_empty() and yard.count() > 0 and _aim_fish() != null:
+		if kind == 0 and yard.count() > 0 and _aim_fish() != null:
 			kind = 3   # a fish you can grab
 		if kind == 0 and yard.count() > 0:
 			var pl: Node3D = $Player
@@ -2243,47 +2234,164 @@ func _update_crosshair(a: String, captured: bool) -> void:
 func _aim_fish() -> Variant:
 	return yard.pick(cam.global_position, -cam.global_basis.z, GRAB_REACH)
 
-func _hands_have_fish() -> bool:
-	return not carry.is_empty() or not held.is_empty()
+func _held_kind() -> String:
+	return String(inv.cur().get("k", ""))
 
-## Moves what is in your hand into the bucket list so the delivery functions (Eye, depot) treat it like the rest.
-func _hold_to_carry() -> void:
-	if held.is_empty():
-		return
-	carry.append(held)
-	held = {}
-	_set_hold_visual()
+## The fish in your hand ({} when your hand holds a tool, a bucket or nothing).
+func _held_fish() -> Dictionary:
+	var it := inv.cur()
+	return it.f if it.get("k", "") == "fish" else {}
+
+func _hands_have_fish() -> bool:
+	return inv.cargo_count() > 0
+
+# the builder's kit does one thing at a time: [tool id, build item], cycled with B through whatever is unlocked
+const KIT := [[2, -1], [3, -1], [4, -1], [5, -1], [6, 0], [6, 1], [6, 2], [6, 3]]
+
+func _kit_modes() -> Array:
+	var out := []
+	for i in KIT.size():
+		if _tool_unlocked(KIT[i][0]):
+			out.append(i)
+	return out
+
+func _kit_name(i: int) -> String:
+	var k: Array = KIT[i]
+	return TOOLS[k[0]] if k[0] != 6 else BUILD_ITEMS[k[1]]
+
+func _sync_active() -> void:
+	var m := _kit_modes()
+	if not m.is_empty() and not m.has(bmode):
+		bmode = m[0]
+	var it := inv.cur()
+	var nt := -1
+	if it.get("k", "") == "tool":
+		nt = int(it.t) if int(it.t) < 2 else int(KIT[bmode][0])
+	tool = nt
+
+## Something in your hands changed (a pickup, a drop, a swap, a delivery): the held model, the slots and everything that reads them follow.
+func _hands_changed() -> void:
+	if inv.cur().is_empty() and return_slot >= 0 and return_slot != inv.active and not inv.slots[return_slot].is_empty():
+		inv.active = return_slot   # a fish left your hand: back to what you were holding
+	return_slot = -1 if inv.cur().is_empty() or inv.cur().get("k", "") != "fish" else return_slot
+	_sync_active()
 	_refresh_view()
+	_refresh()
+
+func _select_slot(i: int) -> void:
+	if inv.select(i):
+		return_slot = -1
+		sfx.play("tick", -8.0, 0.9 + 0.08 * i)
+		_sync_active()
+		_refresh_view()
+		_refresh()
+
+func _cycle_slot(dir: int) -> void:
+	_select_slot(posmod(inv.active + dir, Inventory.SLOTS))
+
+func _cycle_build() -> void:
+	var m := _kit_modes()
+	if m.is_empty() or inv.cur().get("k", "") != "tool" or int(inv.cur().t) != 2:
+		return
+	bmode = m[(m.find(bmode) + 1) % m.size()]
+	if KIT[bmode][0] == 6:
+		build_item = int(KIT[bmode][1])
+	sfx.play("tick", -6.0, 1.2)
+	_sync_active()
+	_say("Kit: %s%s" % [_kit_name(bmode), ("  (%d coins)" % _build_cost(build_item)) if tool == 6 else ""])
+	_refresh()
+
+## Puts a tool in your hand whatever it takes (tests, debug and cutscenes: players take tools from the rack). 0 drill, 1 rod,
+## 2..6 a build mode of the kit (for 6, `build` picks Cannery/Sorter/Depot/Ice-Breaker).
+func equip(t: int, build := 0) -> void:
+	var slot_t := mini(t, 2)
+	var si := inv.find_tool(slot_t)
+	if si < 0:
+		for gr in ground.duplicate():   # (one of each tool in the world: a copy on the ice comes back to your hand)
+			if gr.item.k == "tool" and int(gr.item.t) == slot_t:
+				_remove_ground(gr)
+		si = inv.free_slot()
+		if si < 0:
+			si = inv.active
+			for i in Inventory.SLOTS:   # full: a tool makes room, never a bucket or a fish
+				if inv.slots[i].get("k", "") == "tool":
+					si = i
+					break
+		inv.slots[si] = Inventory.tool_item(slot_t)
+	inv.active = si
+	if t >= 2:
+		for i in KIT.size():
+			if KIT[i][0] == t and (t != 6 or KIT[i][1] == build):
+				bmode = i
+		if t == 6:
+			build_item = build
+	return_slot = -1
+	_hands_changed()
+
+## Puts a fish where your hands can take it: into the bucket you hold, else an empty slot (it is in your hand now), else another bucket.
+## `bucket_first` flips that for a sweep. False when you have no room at all.
+func _add_fish_to_hands(f: Dictionary, bucket_first := false) -> bool:
+	var before := inv.active
+	var si := inv.add_fish(f, _bucket_cap(), bucket_first)
+	if si < 0:
+		return false
+	if inv.slots[si].get("k", "") == "fish" and si != inv.active:
+		return_slot = before if not inv.slots[before].is_empty() else -1
+		inv.active = si
+	return true
 
 func _grab_fish(target: Variant = null) -> bool:
-	if not held.is_empty():
-		return false
 	var e: Variant = target if target != null else _aim_fish()
 	if e == null:
 		return false
+	if free_space() <= 0:
+		_say("Hands full. Q puts what you hold down, or keep the fish in a bucket.")
+		sfx.play("deny")
+		return false
 	var at: Vector3 = e.pos
-	held = yard.take(e)
-	_set_hold_visual()
+	var f := yard.take(e)
+	_add_fish_to_hands(f)
+	_hands_changed()
 	hold_node.position = HOLD_REST + Vector3(0, -0.25, 0.2)   # it comes up from below
 	_snow_fx(at, 4, 0.5)
 	sfx.play("plop", -2.0, 1.5)
 	view_pop = 0.8
-	_refresh()
 	return true
 
 func _set_hold_visual() -> void:
+	var it := inv.cur()
+	var k := String(it.get("k", ""))
+	var sig := ""
+	match k:
+		"fish": sig = "fish:%s:%.1f" % [it.f.name, float(it.f.get("len", 0.0))]
+		"bucket": sig = "bucket:%d:%d" % [it.fish.size(), _bucket_cap()]
+	if sig == hold_sig:
+		return
+	var fresh := hold_sig == "" or not hold_sig.begins_with(k)   # a new thing grows in; the same bucket just gains a fish
+	hold_sig = sig
 	for c in hold_node.get_children():
 		c.queue_free()
 	hold_node.scale = Vector3.ONE
-	if held.is_empty():
+	if k == "":
 		return
-	var fm := _fish_mesh(held, hold_node, 0.95)
-	(fm as FishNode).amp = 1.8
-	fm.rotation = Vector3(0.15, PI * 0.5 + 0.7, 0.25)   # across the lower right of the view, its side showing   # nose away from you, a little turned so you see its side
+	if k == "fish":
+		var fm := _fish_mesh(it.f, hold_node, 0.95)
+		(fm as FishNode).amp = 1.8
+		fm.rotation = Vector3(0.15, PI * 0.5 + 0.7, 0.25)   # across the lower right of the view, its side showing
+	elif k == "bucket":
+		var parts: Dictionary = ItemModels.bucket(hold_node)
+		var root: Node3D = parts.root
+		root.scale = Vector3.ONE * 0.36
+		root.position = Vector3(0.05, -0.2, 0.0)
+		root.rotation = Vector3(0.12, 0.5, 0.0)
+		ItemModels.set_pile(parts.pile, it.fish.map(func(f): return f.color), float(it.fish.size()) / float(_bucket_cap()))
+	else:
+		return
 	_no_shadows(hold_node)
-	hold_node.scale = Vector3.ONE * 0.4
-	var tw := hold_node.create_tween()
-	tw.tween_property(hold_node, "scale", Vector3.ONE, 0.2).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	if fresh:
+		hold_node.scale = Vector3.ONE * 0.4
+		var tw := hold_node.create_tween()
+		tw.tween_property(hold_node, "scale", Vector3.ONE, 0.2).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 
 func _throw_dir() -> Vector3:
 	return (-cam.global_basis.z).rotated(cam.global_basis.x, THROW_LIFT).normalized()
@@ -2298,11 +2406,10 @@ func _throw_velocity(frac: float) -> Vector3:
 	return _throw_dir() * _throw_power(frac) + Vector3(yard.player_vel.x, 0, yard.player_vel.z) * 0.6
 
 func _throw_held(frac: float) -> bool:
-	if held.is_empty():
+	var f := _held_fish()
+	if f.is_empty():
 		return false
-	var f := held
-	held = {}
-	_set_hold_visual()
+	inv.slots[inv.active] = {}
 	var e := yard.spawn(f, _throw_origin(), _throw_velocity(frac))
 	e.spin = randf_range(-14.0, 14.0)
 	sfx.play("cast", -3.0, 0.85 + frac * 0.5)
@@ -2310,52 +2417,463 @@ func _throw_held(frac: float) -> bool:
 	view_pop = 0.5
 	fov_kick = maxf(fov_kick, 1.5 + frac * 3.0)
 	shake = maxf(shake, 0.004 + 0.01 * frac)
-	_refresh_view()
-	_refresh()
+	_hands_changed()
 	return true
 
-func _drop_held() -> bool:
-	if held.is_empty():
-		return false
-	var f := held
-	held = {}
-	_set_hold_visual()
-	var fwd := -cam.global_basis.z
+## Where Q (or a click on empty ice with a bucket) puts something down.
+func _drop_spot(at_aim: bool) -> Vector3:
+	var pl: Node3D = $Player
+	var fwd := -pl.global_basis.z
 	fwd.y = 0.0
 	fwd = fwd.normalized()
-	yard.spawn(f, cam.global_position + fwd * 0.9 + Vector3(0, -0.8, 0), fwd * 2.0 + Vector3(0, 1.2, 0))
-	sfx.play("plop", -4.0, 1.1)
-	_refresh()
+	var p := pl.global_position + fwd * DROP_REACH
+	if at_aim and aim_flat <= RANGE_ICE:
+		p = Vector3(aim_pos.x, 0.0, aim_pos.z)
+	return _valid_spot(p)
+
+## Things never end up inside the Eye, on the shore, inside a stall or on top of each other.
+func _valid_spot(p: Vector3) -> Vector3:
+	var q := Vector2(p.x, p.z)
+	var lim: float = scenery.edge_at(q.x, q.y) - 2.5
+	if q.length() > lim:
+		q = q.normalized() * lim
+	if q.length() < EYE_R + 1.6:
+		q = (q.normalized() if q.length() > 0.01 else Vector2.RIGHT) * (EYE_R + 1.6)
+	for o in scenery.obstacles:
+		var off := q - Vector2(o.x, o.y)
+		if off.length() < o.z + 0.9:
+			q = Vector2(o.x, o.y) + (off.normalized() if off.length() > 0.01 else Vector2.RIGHT) * (o.z + 0.9)
+	for h in holes:   # a thing lying on a hole would hide it from your crosshair
+		var offh := q - Vector2(h.pos.x, h.pos.z)
+		if offh.length() < 1.9:
+			q = Vector2(h.pos.x, h.pos.z) + (offh.normalized() if offh.length() > 0.01 else Vector2.RIGHT) * 1.9
+	for g in ground:
+		var off2 := q - Vector2(g.pos.x, g.pos.z)
+		if off2.length() < 1.3:
+			q = Vector2(g.pos.x, g.pos.z) + (off2.normalized() if off2.length() > 0.01 else Vector2.RIGHT) * 1.3
+	return Vector3(q.x, 0.0, q.y)
+
+## Q: puts what is in your hand down in front of you. A fish slides off; a tool or bucket lands and stays where it lands.
+func _drop_active(at_aim := false) -> bool:
+	var it := inv.cur()
+	if it.is_empty():
+		return false
+	if it.k == "fish":
+		inv.slots[inv.active] = {}
+		var fwd := -cam.global_basis.z
+		fwd.y = 0.0
+		fwd = fwd.normalized()
+		yard.spawn(it.f, cam.global_position + fwd * 0.9 + Vector3(0, -0.8, 0), fwd * 2.0 + Vector3(0, 1.2, 0))
+		sfx.play("plop", -4.0, 1.1)
+	else:
+		var item := inv.take(inv.active)
+		_place_ground(item, _drop_spot(at_aim), true)
+		sfx.play("plop", -3.0, 0.8)
+	_hands_changed()
 	return true
 
-func _stow_held() -> bool:
-	if held.is_empty():
+## Z: takes one fish out of the bucket in your hand and holds it (it needs a free slot).
+func _take_from_bucket() -> bool:
+	var it := inv.cur()
+	if it.get("k", "") != "bucket" or it.fish.is_empty():
 		return false
-	if free_space() <= 0:
-		_say("Your bucket is full. Throw it into the Eye, or drop it.")
+	var fs := inv.free_slot()
+	if fs < 0:
+		_say("No free slot: put something down (Q) to hold a fish.")
 		sfx.play("deny")
 		return false
-	carry.append(held)
-	held = {}
-	_set_hold_visual()
-	sfx.play("plop", -2.0, 1.3)
-	_refresh_view()
-	_refresh()
+	var f: Dictionary = it.fish.pop_back()
+	inv.slots[fs] = Inventory.fish_item(f)
+	return_slot = inv.active
+	inv.active = fs
+	sfx.play("plop", -3.0, 1.4)
+	_hands_changed()
 	return true
 
-func _take_from_bucket() -> bool:
-	if not held.is_empty() or carry.is_empty():
-		return false
-	held = carry.pop_back()
-	_set_hold_visual()
-	sfx.play("plop", -3.0, 1.4)
-	_refresh_view()
-	_refresh()
+# ---------- things lying on the ice: tools and buckets ----------
+func _tool_tier(t: int) -> int:
+	return mini(GameState.level("drill" if t == 0 else "lines"), TIER_COLORS.size() - 1)
+
+func _kit_accent() -> Color:
+	var accents := [Color(1.0, 0.78, 0.35), Color(0.95, 0.5, 0.2), Color(0.55, 0.9, 0.95), Color(0.3, 0.75, 0.85), Color(1.0, 0.9, 0.6)]
+	return accents[clampi(int(KIT[bmode][0]) - 2, 0, accents.size() - 1)]
+
+func _ground_by_id(id: int) -> Dictionary:
+	for g in ground:
+		if g.id == id:
+			return g
+	return {}
+
+func _ground_has_tool(t: int) -> bool:
+	for g in ground:
+		if g.item.k == "tool" and int(g.item.t) == t:
+			return true
+	return false
+
+func _make_ground_node(g: Dictionary) -> void:
+	var it: Dictionary = g.item
+	var root := Node3D.new()
+	add_child(root)
+	root.position = g.pos
+	root.rotation.y = g.yaw
+	g["node"] = root
+	var shadow := MeshInstance3D.new()   # a soft disc keeps a pale thing grounded on pale ice
+	var cm := CylinderMesh.new()
+	cm.top_radius = 1.0
+	cm.bottom_radius = 1.0
+	cm.height = 0.01
+	cm.radial_segments = 14
+	shadow.mesh = cm
+	shadow.material_override = _shadow_material()
+	shadow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	root.add_child(shadow)
+	var shape: Shape3D
+	var cpos := Vector3(0, 0.4, 0)
+	if it.k == "bucket":
+		var parts: Dictionary = ItemModels.bucket(root)
+		g["pile"] = parts.pile
+		shadow.scale = Vector3(0.75, 1.0, 0.75)
+		shadow.position = Vector3(0, -0.03, 0)
+		var cyl := CylinderShape3D.new()
+		cyl.radius = 0.6
+		cyl.height = 0.9
+		shape = cyl
+		_refresh_bucket_node(g)
+	else:
+		var t := int(it.t)
+		ItemModels.ground_tool(root, t, _tool_tier(t), TIER_COLORS[_tool_tier(t)], _kit_accent())
+		shadow.scale = Vector3(0.7, 1.0, 1.1)
+		shadow.position = Vector3(0, -0.03, -0.35)
+		var bx := BoxShape3D.new()
+		bx.size = Vector3(1.0, 0.7, 2.0)
+		shape = bx
+		cpos = Vector3(0, 0.3, -0.35)
+		var ring := MeshInstance3D.new()   # an amber ring says "yours, pick me up"
+		var tm := TorusMesh.new()
+		tm.inner_radius = 0.95
+		tm.outer_radius = 1.05
+		tm.rings = 24
+		tm.ring_segments = 4
+		ring.mesh = tm
+		var rm := StandardMaterial3D.new()
+		rm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		rm.albedo_color = Color(1.0, 0.7, 0.2, 0.75)
+		rm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		rm.disable_fog = true
+		ring.material_override = rm
+		ring.position = Vector3(0, 0.03, -0.35)
+		ring.scale = Vector3(1.0, 1.0, 1.5)
+		ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		root.add_child(ring)
+	var body := StaticBody3D.new()
+	var cs := CollisionShape3D.new()
+	cs.shape = shape
+	body.add_child(cs)
+	body.position = cpos
+	body.set_meta("action", "item:%d" % g.id)
+	root.add_child(body)
+
+var _shadow_mat_cache: StandardMaterial3D
+func _shadow_material() -> StandardMaterial3D:
+	if _shadow_mat_cache == null:
+		_shadow_mat_cache = StandardMaterial3D.new()
+		_shadow_mat_cache.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_shadow_mat_cache.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_shadow_mat_cache.albedo_color = Color(0.05, 0.1, 0.3, 0.3)
+		_shadow_mat_cache.disable_fog = true
+	return _shadow_mat_cache
+
+func _refresh_bucket_node(g: Dictionary) -> void:
+	if g.has("pile") and is_instance_valid(g.pile):
+		ItemModels.set_pile(g.pile, g.item.fish.map(func(f): return f.color), float(g.item.fish.size()) / float(_bucket_cap()))
+
+## Sets a tool or bucket down on the ice (it stays until you pick it up). `toss` hops it from your hands to the spot.
+func _place_ground(item: Dictionary, pos: Vector3, toss := false) -> Dictionary:
+	ground_serial += 1
+	var g := {"id": ground_serial, "item": item, "pos": pos, "yaw": randf() * TAU}
+	_make_ground_node(g)
+	ground.append(g)
+	if item.k == "bucket":
+		yard.sinks.append({"pos": Vector3(pos.x, 0, pos.z), "r": 0.62, "h": 1.0, "id": "bucket:%d" % g.id,
+			"accept": func(): return g.item.fish.size() < _bucket_cap()})
+	if toss and not restoring:
+		var node: Node3D = g.node
+		var from := cam.global_position + (-cam.global_basis.z) * 0.8 + Vector3(0, -0.5, 0)
+		node.global_position = from
+		var tw := node.create_tween()
+		tw.tween_method(func(k: float): node.global_position = from.lerp(pos, k) + Vector3(0, sin(k * PI) * 0.9, 0), 0.0, 1.0, 0.28)
+		tw.tween_callback(func():
+			node.global_position = pos
+			_snow_fx(pos + Vector3(0, 0.1, 0), 6, 1.0)
+			sfx.play("thud", -10.0, 1.0))
+	return g
+
+func _remove_ground(g: Dictionary) -> void:
+	ground.erase(g)
+	if g.has("node") and is_instance_valid(g.node):
+		(g.node as Node).queue_free()
+	for i in range(yard.sinks.size() - 1, -1, -1):
+		if yard.sinks[i].id == "bucket:%d" % g.id:
+			yard.sinks.remove_at(i)
+
+## Gives you an item: in a free slot if there is one, else on the ice at your feet.
+func _give_item(item: Dictionary) -> void:
+	var fs := inv.free_slot()
+	if fs >= 0:
+		inv.slots[fs] = item
+		inv.active = fs
+		return_slot = -1
+	else:
+		_place_ground(item, _drop_spot(false), true)
+
+## Pick something up off the ice. With every slot full, it swaps with what is in your hand (that goes down where it lay).
+func _take_ground(g: Dictionary) -> bool:
+	var item: Dictionary = g.item
+	var spot: Vector3 = g.pos
+	var fs := inv.free_slot()
+	var old := {}
+	if fs >= 0:
+		inv.slots[fs] = item
+		inv.active = fs
+	else:
+		old = inv.cur()
+		inv.slots[inv.active] = item
+	return_slot = -1
+	_remove_ground(g)
+	if not old.is_empty():
+		if old.k == "fish":
+			yard.spawn(old.f, spot + Vector3(0, 0.5, 0), Vector3(0, 2.0, 0))
+		else:
+			_place_ground(old, spot, false)
+	sfx.play("plop", -3.0, 1.2)
+	view_pop = 0.6
+	_hands_changed()
 	return true
+
+## Take one fish out of a bucket lying on the ice.
+func _take_from_ground_bucket(g: Dictionary) -> bool:
+	var fl: Array = g.item.fish
+	if fl.is_empty():
+		return false
+	if free_space() <= 0:
+		_say("Hands full. Q puts what you hold down.")
+		sfx.play("deny")
+		return false
+	var f: Dictionary = fl.pop_back()
+	_add_fish_to_hands(f)
+	_refresh_bucket_node(g)
+	sfx.play("plop", -3.0, 1.4)
+	_hands_changed()
+	hold_node.position = HOLD_REST + Vector3(0, -0.25, 0.2)
+	return true
+
+func _click_ground(g: Dictionary) -> void:
+	if g.is_empty():
+		return
+	var it: Dictionary = g.item
+	if it.k == "bucket":
+		var hf := _held_fish()
+		if not hf.is_empty():
+			if it.fish.size() >= _bucket_cap():
+				_say("That bucket is full.")
+				sfx.play("deny")
+				return
+			it.fish.append(hf)
+			inv.slots[inv.active] = {}
+			_refresh_bucket_node(g)
+			sfx.play("plop", -2.0, 1.1)
+			_hands_changed()
+			return
+		if not it.fish.is_empty():
+			_take_from_ground_bucket(g)
+			return
+	_take_ground(g)
+
+func _ground_text(g: Dictionary) -> String:
+	if g.is_empty():
+		return ""
+	var it: Dictionary = g.item
+	if it.k == "bucket":
+		var n: int = it.fish.size()
+		if not _held_fish().is_empty() and n < _bucket_cap():
+			return "Click: put the fish in  (%d / %d)" % [n, _bucket_cap()]
+		if n > 0:
+			return "Click: take a fish out  (%d / %d)   E: pick the bucket up   Kick: tip it over" % [n, _bucket_cap()]
+		return "Click or E: pick up the bucket  (empty)"
+	return "Click or E: pick up the %s" % _tool_name(int(it.t))
+
+func _tool_name(t: int) -> String:
+	match t:
+		0: return DRILL_NAMES[mini(GameState.level("drill"), DRILL_NAMES.size() - 1)]
+		1: return ROD_NAMES[mini(GameState.level("lines"), ROD_NAMES.size() - 1)]
+	return "Builder's Kit"
+
+## Kicking a bucket tips it over: everything inside spills out ahead of the boot. Returns how many buckets tipped.
+func _kick_buckets(pos: Vector3, fwd: Vector3, power: float) -> int:
+	var n := 0
+	for g in ground:
+		if g.item.k != "bucket" or g.item.fish.is_empty():
+			continue
+		var off: Vector3 = g.pos - pos
+		off.y = 0.0
+		if off.length() > KICK_REACH + 0.4 or off.normalized().dot(fwd) < 0.45:
+			continue
+		var spilled: Array = g.item.fish
+		g.item.fish = []
+		for f in spilled:
+			var e := yard.spawn(f, g.pos + Vector3(0, 0.9, 0), fwd.rotated(Vector3.UP, randf_range(-0.55, 0.55)) * (power * 0.45 + randf_range(0.0, 3.0)) + Vector3(0, randf_range(3.5, 6.0), 0))
+			e.spin = randf_range(-10.0, 10.0)
+		_refresh_bucket_node(g)
+		_snow_fx(g.pos + Vector3(0, 0.3, 0), 8, 1.2)
+		sfx.play("kick", -4.0, 0.7)
+		n += 1
+	return n
+
+# ---------- the tool rack ----------
+func _click_rack(t: int) -> void:
+	if t == 2 and _kit_modes().is_empty():
+		_say("The kit is empty: complete goals to get the tools to put in it.")
+		return
+	var si := inv.find_tool(t)
+	if si >= 0:
+		_select_slot(si)
+		_say("You already carry the %s." % _tool_name(t))
+		return
+	for g in ground.duplicate():   # it lies out on the ice: it comes back to the rack (and then to your hands)
+		if g.item.k == "tool" and int(g.item.t) == t:
+			_remove_ground(g)
+			_say("The %s flew back to the rack." % _tool_name(t))
+	var item := Inventory.tool_item(t)
+	var fs := inv.free_slot()
+	if fs >= 0:
+		inv.slots[fs] = item
+		inv.active = fs
+	else:
+		var old := inv.cur()
+		inv.slots[inv.active] = item
+		if old.k == "bucket":
+			_place_ground(old, _drop_spot(false), true)
+		elif old.k == "fish":
+			yard.spawn(old.f, cam.global_position + Vector3(0, -1.0, 0) + (-cam.global_basis.z) * 0.9, Vector3(0, 2.0, 0))
+		# (a tool you swap out simply hangs back on the rack)
+	return_slot = -1
+	sfx.play("buy", -8.0, 1.2)
+	view_pop = 0.6
+	_hands_changed()
+
+func _rack_text(t: int) -> String:
+	if t == 2 and _kit_modes().is_empty():
+		return "Builder's Kit: complete goals to fill it"
+	if inv.find_tool(t) >= 0:
+		return "You carry the %s (slot %d)" % [_tool_name(t), inv.find_tool(t) + 1]
+	if _ground_has_tool(t):
+		return "Click: call your %s back from the ice" % _tool_name(t)
+	return "Click: take the %s%s" % [_tool_name(t), "  (your hands swap)" if inv.free_slot() < 0 else ""]
+
+func _build_rack() -> void:
+	var bp: Vector3 = SceneryScript.bearing_pos(RACK_BEARING, RACK_RADIUS)
+	var r := Node3D.new()
+	r.position = Vector3(bp.x, 0.0, bp.z)
+	add_child(r)
+	r.look_at(Vector3(0, 0, 0), Vector3.UP, true)
+	rack_pos = r.global_position
+	var slots: Array = ItemModels.rack(r)
+	_label3d(r, Vector3(0, 3.55, 0.25), "TOOL RACK", 0.012, false)
+	var names := ["DRILL", "ROD", "BUILDER'S KIT"]
+	for t in 3:
+		var mount := Node3D.new()
+		mount.position = slots[t]
+		r.add_child(mount)
+		var tp := mini(GameState.level("drill" if t == 0 else "lines"), TIER_COLORS.size() - 1)
+		var m := ItemModels.ground_tool(mount, t, tp, TIER_COLORS[tp], Color(1.0, 0.78, 0.35))
+		m.rotation_degrees.y = 90.0
+		m.position = Vector3(0.55, -0.12, 0.12)
+		m.scale = Vector3.ONE * 1.15
+		_no_shadows(m)
+		rack_mounts.append(mount)
+		var lb := _label3d(r, slots[t] + Vector3(0, -0.36, 0.0), names[t], 0.0045, false)   # (the name stays when the tool is away: you know what hangs there)
+		lb.modulate = Color(0.95, 0.85, 0.62)
+		var body := StaticBody3D.new()
+		var cs := CollisionShape3D.new()
+		var bx := BoxShape3D.new()
+		bx.size = Vector3(3.2, 0.72, 0.6)
+		cs.shape = bx
+		body.add_child(cs)
+		body.position = slots[t] + Vector3(0, -0.05, 0.1)
+		body.set_meta("action", "rack:%d" % t)
+		r.add_child(body)
+	scenery.obstacles.append(Vector3(bp.x, bp.z, 2.9))
+
+func _refresh_rack() -> void:
+	for t in rack_mounts.size():
+		var here: bool = (t < 2 or not _kit_modes().is_empty()) and inv.find_tool(t) < 0 and not _ground_has_tool(t)
+		(rack_mounts[t] as Node3D).visible = here
+
+# ---------- the slots (a compact dock in the middle of the bottom of the screen) ----------
+func _item_name(it: Dictionary) -> String:
+	match String(it.get("k", "")):
+		"tool":
+			var t := int(it.t)
+			if t < 2:
+				return _tool_name(t)
+			return "Builder's Kit: %s" % _kit_name(bmode)
+		"fish": return String(it.f.name)
+		"bucket": return "Bucket  %d / %d" % [it.fish.size(), _bucket_cap()]
+	return ""
+
+func _refresh_dock() -> void:
+	if dock_panels.is_empty():
+		return
+	var sig := "%d|%d|%d|%d|%d" % [inv.active, bmode, GameState.level("drill"), GameState.level("lines"), _bucket_cap()]
+	for s in inv.slots:
+		sig += "|" + _item_name(s)
+	if sig == dock_sig:
+		return
+	dock_sig = sig
+	for i in Inventory.SLOTS:
+		var it: Dictionary = inv.slots[i]
+		var act := i == inv.active
+		dock_panels[i].add_theme_stylebox_override("panel", Style.slot(act, it.is_empty()))
+		var kind := -1
+		if it.get("k", "") == "tool":
+			kind = int(it.t) if int(it.t) < 2 else int(KIT[bmode][0])
+		dock_icons[i].set_item(it, kind)
+		dock_icons[i].active = act
+		dock_icons[i].queue_redraw()
+		match String(it.get("k", "")):
+			"bucket": dock_badges[i].text = "%d/%d" % [it.fish.size(), _bucket_cap()]
+			_: dock_badges[i].text = ""
+		dock_keys[i].add_theme_color_override("font_color", Style.AMBER if act else Style.MUTED)
+		if act and dock_active_last != inv.active:
+			dock_panels[i].pivot_offset = dock_panels[i].size * 0.5
+			dock_panels[i].scale = Vector2.ONE * 1.14
+			dock_panels[i].create_tween().tween_property(dock_panels[i], "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		elif not act:
+			dock_panels[i].scale = Vector2.ONE
+	dock_active_last = inv.active
+	var nm := _item_name(inv.cur())
+	if tool == 6:
+		nm += "  (%d)" % _build_cost(build_item)
+	elif tool == 2:
+		nm += "  (%d)" % auto_cost()
+	elif tool == 3:
+		nm += "  (%d)" % smoker_cost()
+	elif tool == 4:
+		nm += "  (%d)" % table_cost()
+	elif tool == 5:
+		nm += "  (12+)"
+	dock_name.text = nm if nm != "" else "Empty hands"
+	if tool >= 2 and _kit_modes().size() > 1:
+		dock_name.text += "     B: switch"
+
+func _refresh_view() -> void:
+	_set_hold_visual()
+	_refresh_dock()
 
 ## Each frame: the held fish hangs in front of you, lags when you turn, bobs when you walk and draws back while you charge a throw.
 func _update_hand(delta: float) -> void:
-	if held.is_empty():
+	var hk := _held_kind()
+	if hk != "fish" and hk != "bucket":
 		hold_node.visible = false
 		return
 	hold_node.visible = not guide.intro_active
@@ -2366,19 +2884,19 @@ func _update_hand(delta: float) -> void:
 	hold_sway += Vector2(dl.x * 2.2, -dl.y * 2.2)
 	hold_sway *= exp(-9.0 * delta)
 	hold_sway = hold_sway.clamp(Vector2(-0.22, -0.22), Vector2(0.22, 0.22))
-	var c := maxf(kick_charge, 0.0)
+	var c := maxf(kick_charge, 0.0) if hk == "fish" else 0.0   # only a fish is thrown; a charge with a bucket in hand is a kick
 	var tm := Time.get_ticks_msec() * 0.001
 	var bob := Vector3(sin(bob_t) * 0.012, absf(sin(bob_t)) * -0.014, 0.0) if moving else Vector3(0, sin(tm * 2.0) * 0.004, 0)
 	hold_node.position = hold_node.position.lerp(HOLD_REST + Vector3(hold_sway.x, hold_sway.y, 0.0) + bob + Vector3(0.12, 0.1, 0.2) * c, minf(1.0, delta * 16.0))
 	hold_node.rotation = Vector3(-0.25 * c + hold_sway.y * 0.6, -hold_sway.x * 1.2, hold_sway.x * 0.8)
-	if hold_node.get_child_count() > 0:
+	if hk == "fish" and hold_node.get_child_count() > 0:
 		var fm: FishNode = hold_node.get_child(0) as FishNode
 		if fm:
 			fm.amp = 1.6 + 2.0 * c   # it wriggles harder the more you wind up
 
 ## The throw preview: dots along the arc and a ring where it will come down (aqua when that is the Eye's pull).
 func _update_arc() -> void:
-	var show := not held.is_empty() and kick_charge >= 0.0 and _cap() and not guide.intro_active and GameSettings.on("arc")
+	var show := not _held_fish().is_empty() and kick_charge >= 0.0 and _cap() and not guide.intro_active and GameSettings.on("arc")
 	while arc_dots.size() < 14:
 		var m := MeshInstance3D.new()
 		var sm := SphereMesh.new()
@@ -2437,14 +2955,14 @@ func _update_arc() -> void:
 
 func _start_kick() -> void:
 	kick_charge = 0.0
-	if held.is_empty():
+	if _held_fish().is_empty():
 		_boot_move(Vector3(0.28, -0.34, -0.3), Vector3(-18, 38, 6), 0.35)   # the foot draws back (with a fish in hand the arm winds up instead)
 
 ## Release the right mouse button: everything in front of your boots flies off the way you are facing.
 func _release_kick() -> void:
 	if kick_charge < 0.0:
 		return
-	if not held.is_empty():   # a fish in hand: the charge is a throw
+	if not _held_fish().is_empty():   # a fish in hand: the charge is a throw
 		var frac := kick_charge
 		kick_charge = -1.0
 		_throw_held(frac)
@@ -2456,6 +2974,7 @@ func _release_kick() -> void:
 	fwd.y = 0.0
 	fwd = fwd.normalized()
 	var hit := yard.kick(pl.global_position, fwd, power, KICK_REACH)
+	hit += _kick_buckets(pl.global_position, fwd, power)
 	_kick_tool(1.4)
 	_boot_swing(power)
 	view_pop = 0.5
@@ -2468,24 +2987,48 @@ func _release_kick() -> void:
 		sfx.play("tick", -8.0, 0.6)
 
 ## E: scoop the loose fish around your feet into your bucket (as many as it holds).
-func _pick_up_fish() -> void:
+func _pick_up() -> void:
+	# the thing you are looking at first (a tool or bucket on the ice), then fish around your feet, then the nearest thing within reach
+	var raw := _aim()
+	if raw.begins_with("item:"):
+		var g := _ground_by_id(int(raw.substr(5)))
+		if not g.is_empty():
+			_take_ground(g)
+			return
+	var pp: Vector3 = $Player.global_position
+	if yard.near(pp, PICKUP_RADIUS) > 0:
+		_sweep_fish()
+		return
+	var best := {}
+	var bd := SWEEP_REACH
+	for g in ground:
+		var d := Vector2(g.pos.x - pp.x, g.pos.z - pp.z).length()
+		if d < bd:
+			bd = d
+			best = g
+	if not best.is_empty():
+		_take_ground(best)
+		return
+	_say("Nothing within reach.")
+
+## E: scoop the loose fish around your feet into your buckets first, then your hands.
+func _sweep_fish() -> void:
 	var pp: Vector3 = $Player.global_position
 	if yard.near(pp, PICKUP_RADIUS) == 0:
 		_say("No fish within reach.")
 		return
 	if free_space() <= 0:
-		_say("Your bucket is full - feed the Eye (click it) or buy a bigger bucket.")
+		_say("Your hands and buckets are full: feed the Eye, or buy another bucket.")
 		sfx.play("deny")
 		return
 	var got := yard.collect(pp, PICKUP_RADIUS, free_space())
 	pickup_from = yard.last_collected.duplicate()
 	for f in got:
-		_add_carry(f)
+		_add_fish_to_hands(f, true)
 	_fly_to_hand(got)
 	sfx.play("plop", -2.0, 1.4)
 	view_pop = 1.0
-	_refresh_view()
-	_refresh()
+	_hands_changed()
 
 ## More than MAX_LOOSE fish on the ice: the oldest is taken for half pay, no streak, and fades where it lay.
 func _on_fish_overflow(f: Dictionary, holder: Node3D, _pos: Vector3) -> void:
@@ -2512,6 +3055,15 @@ func _on_fish_sunk(f: Dictionary, holder: Node3D, pos: Vector3, id: String) -> v
 			stats.deliveries += 1
 			_float_text(d.pos + Vector3(0, 3.4, 0), "in!", Color(0.8, 1.0, 0.9))
 			sfx.play("coin", -4.0, 0.85)
+	elif id.begins_with("bucket:"):
+		var bg := _ground_by_id(int(id.substr(7)))
+		if not bg.is_empty() and bg.item.fish.size() < _bucket_cap():
+			bg.item.fish.append(f)
+			_refresh_bucket_node(bg)
+			sfx.play("plop", -2.0, 0.9)
+			_float_text(bg.pos + Vector3(0, 1.3, 0), "%d / %d" % [bg.item.fish.size(), _bucket_cap()], Color(0.85, 0.95, 1.0), 0.012)
+		else:   # it filled in the same instant: the fish bounces back out
+			yard.spawn(f, pos + Vector3(0, 0.6, 0), Vector3(randf_range(-2, 2), 4.0, randf_range(-2, 2)))
 	elif id.begins_with("smoker:"):
 		var ti := int(id.substr(7))
 		if ti >= 0 and ti < holes.size() and holes[ti].state == "smoker":
@@ -2887,7 +3439,7 @@ func earn(amount: float) -> void:
 
 ## Olga never takes fish. She nudges you toward the next goal, or muses about the Eye.
 func _talk_olga() -> void:
-	if not carry.is_empty():
+	if carrying():
 		_say("Olga: Not to me, dear. It's the Eye that's hungry.")
 		return
 	if guide.is_early() or randf() < 0.75:
@@ -2923,19 +3475,17 @@ func _tithe() -> void:
 	_refresh()
 
 func _feed_by_hand() -> void:
-	_hold_to_carry()
-	if carry.is_empty():
+	var fs := inv.take_cargo()   # everything you carry: loose fish and whole buckets
+	if fs.is_empty():
 		_tithe()
 		return
 	var from := _hand_origin()
 	var gap := 0.0
-	for i in carry.size():  # one at a time, faster and faster: a rhythm you can feel
-		_fly_fish(carry[i], from, gap, "eye", EYE_MULT, true)
+	for i in fs.size():  # one at a time, faster and faster: a rhythm you can feel
+		_fly_fish(fs[i], from, gap, "eye", EYE_MULT, true)
 		gap += maxf(0.27 * pow(0.84, i), 0.085)
 	stats.deliveries += 1
-	carry.clear()
-	_refresh_view()
-	_refresh()
+	_hands_changed()
 
 # ---------- the Eye ----------
 ## Fish needed for stage i: later lakes are bigger, and so is the Eye's appetite.
@@ -3116,7 +3666,7 @@ func _build_belt(t: Dictionary, pay := true) -> void:
 		_say("Belt laid. Watch the catch ride into the Eye.")
 		_refresh()
 
-# ---------- build tool (7): cannery, sorter, depot, ice-breaker. Q cycles. ----------
+# ---------- the builder's kit: cannery, sorter, depot, ice-breaker (B cycles what it builds) ----------
 func _count_belts(flag: String) -> int:
 	var n := 0
 	for b in belts:
@@ -3217,20 +3767,18 @@ func _build_depot(pos: Vector3, pay := true) -> void:
 		_refresh()
 
 func _use_depot(d: Dictionary) -> void:
-	_hold_to_carry()
-	if carry.is_empty():
+	var fs := inv.take_cargo()
+	if fs.is_empty():
 		_say("Drop fish here and a sled runs them to the Eye.")
 		return
-	var n := carry.size()
+	var n := fs.size()
 	var from: Vector3 = d.pos + Vector3(0, 1.8, 0)
 	for i in n:
-		_fly_fish(carry[i], from, 0.4 + i * 0.1, "eye", EYE_MULT * DEPOT_MULT)
+		_fly_fish(fs[i], from, 0.4 + i * 0.1, "eye", EYE_MULT * DEPOT_MULT)
 	stats.deliveries += 1
-	carry.clear()
-	_refresh_view()
 	_float_text(d.pos + Vector3(0, 3.4, 0), "%d fish sent" % n, Color(0.8, 1.0, 0.9))
 	sfx.play("coin", 0.0, 0.85)
-	_refresh()
+	_hands_changed()
 
 func _build_rig(pos: Vector3, pay := true) -> void:
 	if rigs.size() >= rig_cap():
@@ -3307,7 +3855,7 @@ func _pick_up_rig(rg: Dictionary) -> void:
 	rg.node.queue_free()
 	rigs.erase(rg)
 	stats["rig_moves"] = int(stats.get("rig_moves", 0)) + 1
-	_say("Lifted the idle Ice-Breaker. Press 7, Q to Ice-Breaker, and set it down anywhere: it is free.")
+	_say("Lifted the idle Ice-Breaker. Take the kit, switch it to Ice-Breaker (B) and set it down anywhere: it is free.")
 	sfx.play("buy")
 	_refresh()
 
@@ -3403,7 +3951,8 @@ func _in_range(a: String) -> bool:
 	if a == "eye":
 		var pp: Vector3 = $Player.global_position
 		return Vector2(pp.x, pp.z).length() - EYE_R <= RANGE_EYE
-	if a.begins_with("buy:"): return aim_flat <= RANGE_SIGN
+	if a.begins_with("buy:") or a.begins_with("rack:"): return aim_flat <= RANGE_SIGN
+	if a.begins_with("item:"): return aim_flat <= RANGE_ITEM
 	if a == "ice" or a.begins_with("hole:"): return aim_flat <= RANGE_ICE
 	return true
 
@@ -3453,19 +4002,19 @@ func _tile_action_text(t: Dictionary) -> String:
 			if _emptied(t):
 				if tool == 3 and _tool_unlocked(3): return "Click: build Smoker (%d)" % smoker_cost()
 				if tool == 4 and _tool_unlocked(4): return "Click: build Gut Table (%d)" % table_cost()
-				return "Fished out (build a Smoker/Table here with 4/5)"
+				return "Fished out (build a Smoker or a Gut Table here with the kit)"
 			if tool == 1: return "Click: cast line" if not _other_line(t) else "Click: cast here (reels in your other line)"
 			if tool == 2: return "Click: build Auto-Rod (%d)" % auto_cost()
-			if tool == 5: return "Build an Auto-Rod here first (3)"
-			return "Hole (2: Rod)"
+			if tool == 5: return "Build an Auto-Rod here first (kit: Auto-Rod)"
+			return "Hole (hold the Rod to cast)"
 		"auto":
 			if tool == 6 and _tool_unlocked(6):
-				if t.belt == null: return "Lay a belt here first (tool 6)"
+				if t.belt == null: return "Lay a belt here first (kit: Belt)"
 				if build_item <= 1:
 					var kind0 := "cannery" if build_item == 0 else "sorter"
 					if t.belt.get(kind0, false): return "This belt already has a %s" % kind0
 					return "Click: build %s on this belt (%d)" % [BUILD_ITEMS[build_item], _build_cost(build_item)]
-				return "Depots and ice-breakers go on open ice (Q to switch)"
+				return "Depots and ice-breakers go on open ice (B to switch)"
 			if tool == 5 and _tool_unlocked(5) and t.belt == null: return "Click: lay a belt to the Eye (%d)" % belt_cost(t)
 			if not t.stash.is_empty():
 				return "Click: collect %d fish (what does not fit spills onto the ice)" % t.stash.size()
@@ -3475,13 +4024,13 @@ func _tile_action_text(t: Dictionary) -> String:
 			return "Auto-Rod (working)"
 		"smoker":
 			if t.slot.is_empty():
-				if carry.is_empty(): return "Smoker (carry fish here)"
-				return "Click: smoke %d fish" % mini(carry.size(), SMOKER_SLOTS)
+				if not carrying(): return "Smoker (carry fish here, or throw them in)"
+				return "Click: smoke %d fish" % mini(inv.cargo_count(), SMOKER_SLOTS)
 			if t.smoke_t > 0.0: return "Smoking..."
 			return "Click: collect smoked fish"
 		"table":
 			var raw := 0
-			for f in carry:
+			for f in inv.cargo():
 				if not f.gutted:
 					raw += 1
 			if raw > 0: return "Hold click: gut fish (%d to gut)" % raw
@@ -3495,24 +4044,29 @@ func _prompt_for(a: String) -> String:
 	if a == "olga":
 		return "Click: talk to Olga" if not _hands_have_fish() else "Olga doesn't buy fish: the Eye does"
 	if a == "eye":
-		if not held.is_empty():
-			return "Click: throw it in (or hold right mouse and aim a lob)"
-		if carry.is_empty():
+		var cn := inv.cargo_count()
+		if cn == 1 and not _held_fish().is_empty():
+			return "Click: put it in (or hold right mouse and aim a lob)"
+		if cn == 0:
 			if eye_stage() >= TITHE_MIN_STAGE:
 				if yard.near_eye(EYE_R + FishYard.PULL_RANGE + 4.0) > 0:
 					return "Push the fish into the Eye (walk into them, or kick)"
 				if tithe_armed_t > 0.0:
 					return "Click again to offer %d coins  (Lv %d, +%d%% value)" % [tithe_cost(), stats.tithe, int(TITHE_BONUS * 100.0 * stats.tithe)]
 				return "Click twice: tithe %d coins to the Eye  (Lv %d)" % [tithe_cost(), stats.tithe]
-			return "The Eye: push fish into it (or click with a full bucket)"
-		return "Click: feed %d fish to the Eye for %d coins" % [carry.size(), floor(carry_worth() * EYE_MULT)]
+			return "The Eye: push fish into it (or click while carrying fish)"
+		return "Click: feed the %d fish you carry to the Eye for %d coins" % [cn, floor(carry_worth() * EYE_MULT)]
 	if a.begins_with("depot:"):
-		return "Click: send %d fish to the Eye by sled" % carry.size() if not carry.is_empty() else "Depot (carry fish here: a sled runs them to the Eye)"
+		return "Click: send %d fish to the Eye by sled" % inv.cargo_count() if carrying() else "Depot (carry fish here, or throw them in: a sled runs them to the Eye)"
 	if a.begins_with("rig:"):
 		var rg := _rig_of(a)
 		if not rg.is_empty() and _rig_best(rg).x == 9999:
 			return "Idle Ice-Breaker: click to pick it up (placing it again is free)"
 		return "Ice-Breaker: feeding the Eye from the lake"
+	if a.begins_with("item:"):
+		return _ground_text(_ground_by_id(int(a.substr(5))))
+	if a.begins_with("rack:"):
+		return _rack_text(int(a.substr(5)))
 	if a.begins_with("buy:"):
 		var id := a.substr(4)
 		if not unlocked[id]:
@@ -3530,17 +4084,17 @@ func _prompt_for(a: String) -> String:
 			if yard.near($Player.global_position, PICKUP_RADIUS + 1.0) > 0:
 				return _yard_hint()   # fish to push beats a lecture about the locked ice under them
 			return "LOCKED - clear a neighbouring sector to open %s" % sec.name
-		var head := "Solid ice (1: Drill)"
+		var head := "Solid ice (hold the Drill to dig)"
 		if tool == 6 and _tool_unlocked(6):
 			if build_item <= 1:
-				head = "Click an Auto-Rod with a belt to add a %s (Q: switch)" % BUILD_ITEMS[build_item]
+				head = "Click an Auto-Rod with a belt to add a %s (B: switch)" % BUILD_ITEMS[build_item]
 			else:
 				var rad := 2.6 if build_item == 2 else 6.0
 				var ok := _can_place_at(Vector3(aim_pos.x, 0, aim_pos.z), rad)
 				if build_item == 3 and rigs.size() >= rig_cap():
 					head = "The lake bears %d ice-breakers: wake the Eye for more" % rig_cap()
 				elif ok:
-					head = "Click: build %s (%d)  [Q: switch]" % [BUILD_ITEMS[build_item], _build_cost(build_item)]
+					head = "Click: build %s (%d)  [B: switch]" % [BUILD_ITEMS[build_item], _build_cost(build_item)]
 				else:
 					head = "Can't build %s here (needs open ice, clear of things, away from the Eye)" % BUILD_ITEMS[build_item]
 		elif tool == 0:
@@ -3572,7 +4126,7 @@ func _update_hold(a: String, delta: float) -> void:
 	if holding and not t.is_empty() and t.state == "table":
 		working = true
 		var target: Dictionary = {}
-		for f in carry:
+		for f in inv.cargo():
 			if not f.gutted:
 				target = f
 				break
@@ -3748,6 +4302,41 @@ func _bank_and_reset() -> void:
 	GameState.save_game(false)
 
 # ---------- save / load ----------
+func _item_to(it: Dictionary) -> Dictionary:
+	match String(it.get("k", "")):
+		"tool": return {"k": "tool", "t": int(it.t)}
+		"fish": return {"k": "fish", "f": _fish_to(it.f)}
+		"bucket": return {"k": "bucket", "fish": it.fish.map(_fish_to)}
+	return {}
+
+func _item_from(d: Dictionary) -> Dictionary:
+	match String(d.get("k", "")):
+		"tool": return Inventory.tool_item(int(d.t))
+		"fish": return Inventory.fish_item(_fish_from(d.f))
+		"bucket":
+			var fl := []
+			for fd in d.get("fish", []):
+				fl.append(_fish_from(fd))
+			return Inventory.bucket_item(fl)
+	return {}
+
+## A fresh run: the drill and the rod in the first two slots (a perk can add buckets: one in the third slot, the rest on the ice).
+func _start_kit() -> void:
+	inv.clear()
+	inv.slots[0] = Inventory.tool_item(Inventory.TOOL_DRILL)
+	inv.slots[1] = Inventory.tool_item(Inventory.TOOL_ROD)
+	var nb := GameState.level("bucket")
+	var pl: Node3D = $Player
+	var right := pl.global_basis.x
+	for i in nb:
+		if i == 0:
+			inv.slots[2] = Inventory.bucket_item()
+		else:
+			_place_ground(Inventory.bucket_item(), _valid_spot(pl.global_position + right * 2.2 * float(i) + (-pl.global_basis.z) * 2.0), false)
+	inv.active = 0
+	bmode = 0
+	_sync_active()
+
 func _fish_to(f: Dictionary) -> Dictionary:
 	return {"n": f.name, "b": f.base, "m": f.mult, "g": f.gutted, "s": f.smoked, "l": f.get("len", 10.0)}
 
@@ -3783,9 +4372,6 @@ func _on_about_to_save() -> void:
 			var to_eye := (-Vector3(tp.x, 0, tp.z)).normalized()
 			for f in t.hooked:
 				loose.append({"f": _fish_to(f), "p": [tp.x + to_eye.x * 1.5, tp.z + to_eye.z * 1.5]})
-	if not held.is_empty():   # a fish in your hand is saved as one lying at your feet
-		var hf := -cam.global_basis.z
-		loose.append({"f": _fish_to(held), "p": [$Player.global_position.x + hf.x * 1.2, $Player.global_position.z + hf.z * 1.2]})
 	var pend: Array = []
 	for it in belt_fish:
 		pend.append({"f": _fish_to(it.f), "m": _belt_mult() * _belt_flag_mult(it.belt, it.f)})
@@ -3793,7 +4379,9 @@ func _on_about_to_save() -> void:
 		pend.append({"f": _fish_to(rec.f), "m": rec.m})
 	var p: Node3D = $Player
 	GameState.extra = {"holes": hl, "stats": stats, "goals": goal_done, "unlocked": unlocked, "journal": journal, "records": records, "tips": guide.to_dict(),
-		"carry": carry.map(_fish_to), "loose": loose, "pending": pend, "tool": tool, "pos": [p.position.x, p.position.z],
+		"slots": inv.slots.map(_item_to), "active": inv.active, "bmode": bmode,
+		"ground": ground.map(func(g): return {"item": _item_to(g.item), "p": [g.pos.x, g.pos.z], "yaw": g.yaw}),
+		"loose": loose, "pending": pend, "pos": [p.position.x, p.position.z],
 		"yaw": p.rotation.y, "pitch": cam.rotation.x,
 		"day": day_t, "time": play_time,
 		"depots": depots.map(func(d): return [d.pos.x, d.pos.z]), "rigs": rigs.map(func(rg): return [rg.pos.x, rg.pos.z]),
@@ -3824,8 +4412,27 @@ func _restore_inner(d: Dictionary) -> bool:
 		records[k] = float(d.records[k])
 	for k in d.get("journal", {}):
 		journal[k] = int(d.journal[k])
-	for fd in d.get("carry", []):
-		carry.append(_fish_from(fd))
+	if d.has("slots"):
+		inv.clear()
+		var sl: Array = d.slots
+		for i in mini(sl.size(), Inventory.SLOTS):
+			inv.slots[i] = _item_from(sl[i])
+		inv.active = clampi(int(d.get("active", 0)), 0, Inventory.SLOTS - 1)
+		bmode = clampi(int(d.get("bmode", 0)), 0, KIT.size() - 1)
+		if KIT[bmode][0] == 6:
+			build_item = int(KIT[bmode][1])
+		for gd in d.get("ground", []):
+			var it := _item_from(gd.item)
+			if not it.is_empty():
+				var gg := _place_ground(it, Vector3(gd.p[0], 0.0, gd.p[1]), false)
+				gg.yaw = float(gd.get("yaw", 0.0))
+				(gg.node as Node3D).rotation.y = gg.yaw
+	else:   # a save from before the three slots: the old bucket list becomes loose fish at your feet
+		GameState.upgrades["bucket"] = mini(GameState.level("bucket"), UPGRADES.bucket.max)
+		_start_kit()
+		for fd in d.get("carry", []):
+			var op: Array = d.get("pos", [0.0, 0.0])
+			yard.spawn(_fish_from(fd), Vector3(op[0] + randf_range(-1.5, 1.5), FishYard.GROUND, op[1] + randf_range(-1.5, 1.5)), Vector3.ZERO)
 	var od0: Dictionary = d.get("order", {})   # the open order is back before any restored fish is delivered
 	if not od0.is_empty():
 		order = od0
@@ -3862,7 +4469,7 @@ func _restore_inner(d: Dictionary) -> bool:
 		_build_depot(Vector3(dp[0], 0.0, dp[1]), false)
 	for rp in d.get("rigs", []):
 		_build_rig(Vector3(rp[0], 0.0, rp[1]), false)
-	tool = clampi(int(d.get("tool", 0)), 0, TOOLS.size() - 1)
+	_sync_active()
 	day_t = d.get("day", 0.0)
 	play_time = float(d.get("time", 0.0))
 	for pd in d.get("pending", []):   # paid now, quietly: they were already out of the lake when the game was saved (orders first, so they count)
@@ -4009,18 +4616,16 @@ func _unhandled_input(event: InputEvent) -> void:
 			_toggle_ride()
 			return
 		if event.keycode == KEY_E:
-			if not held.is_empty():
-				_stow_held()
-			else:
-				_pick_up_fish()
+			_pick_up()
 			return
 		if event.keycode == KEY_Z:
 			_take_from_bucket()
 			return
-		if event.keycode == KEY_Q and tool == 6:
-			build_item = (build_item + 1) % BUILD_ITEMS.size()
-			_say("Build: %s (%d coins)" % [BUILD_ITEMS[build_item], _build_cost(build_item)])
-			_refresh()
+		if event.keycode == KEY_Q:
+			_drop_active()
+			return
+		if event.keycode == KEY_B:
+			_cycle_build()
 			return
 		if event.keycode == KEY_M:
 			_say("Sound off" if sfx.toggle_mute() else "Sound on")
@@ -4033,12 +4638,10 @@ func _unhandled_input(event: InputEvent) -> void:
 				_say("Press N again to ERASE ALL progress (pearls and perks too) and start over.")
 			return
 		var k: int = event.keycode - KEY_1
-		if k >= 0 and k < TOOLS.size():
-			if _tool_unlocked(k):
-				tool = k
-				_refresh()
-			else:
-				_say("Locked - complete goals to unlock.")
+		if k >= 0 and k < Inventory.SLOTS:
+			_select_slot(k)
+	elif event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN] and _cap():
+		_cycle_slot(-1 if event.button_index == MOUSE_BUTTON_WHEEL_UP else 1)
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT and _cap():
 		if event.pressed:
 			_start_kick()
@@ -4049,13 +4652,14 @@ func _unhandled_input(event: InputEvent) -> void:
 			and not refreeze_panel.visible:
 		var a_click := _aim()
 		if a_click in ["", "ice"]:
-			if not held.is_empty():
-				_drop_held()
-				hold_block = true
-				return
 			if _aim_fish() != null:
 				_grab_fish()
 				hold_block = true   # the click that grabbed must not also start a drill
+				return
+			var hk := _held_kind()
+			if hk == "fish" or hk == "bucket":   # a fish slides off your hand; a bucket is set down where you aim
+				_drop_active(hk == "bucket")
+				hold_block = true
 				return
 		_click(a_click)
 
@@ -4071,6 +4675,12 @@ func _spend(cost: float) -> bool:
 	return true
 
 func _click(a: String) -> void:
+	if a.begins_with("item:"):
+		_click_ground(_ground_by_id(int(a.substr(5))))
+		return
+	if a.begins_with("rack:"):
+		_click_rack(int(a.substr(5)))
+		return
 	if a == "olga":
 		_talk_olga()
 		return
@@ -4150,7 +4760,7 @@ func _click(a: String) -> void:
 					_build_auto(t)
 					_refresh()
 			elif tool == 5:
-				_say("Build an Auto-Rod on this hole first (tool 3), then lay a belt.")
+				_say("Build an Auto-Rod on this hole first (the kit), then lay a belt.")
 		"auto":
 			if tool == 6 and _tool_unlocked(6):
 				if build_item <= 1:
@@ -4171,12 +4781,9 @@ func _click(a: String) -> void:
 			var to_eye := (-Vector3(hp.x, 0.0, hp.z)).normalized()
 			while not t.stash.is_empty():   # what fits goes in your hands; the rest spills onto the ice, toward the Eye
 				var sf: Dictionary = t.stash.pop_front()
-				if free_space() > 0:
-					_add_carry(sf)
-				else:
+				if not _add_fish_to_hands(sf, true):
 					yard.spawn(sf, hp + Vector3(0, 0.4, 0), to_eye.rotated(Vector3.UP, randf_range(-0.6, 0.6)) * randf_range(2.0, 3.2) + Vector3(0, 4.5, 0))
-			_refresh_view()
-			_refresh()
+			_hands_changed()
 		"smoker":
 			_use_smoker(t)
 
@@ -4202,17 +4809,16 @@ func _pickup_auto(t: Dictionary) -> void:
 	_refresh()
 
 func _use_smoker(t: Dictionary) -> void:
-	_hold_to_carry()
 	if t.slot.is_empty():
-		if carry.is_empty():
-			_say("Carry fish here to smoke them")
+		var have := inv.cargo_count()
+		if have == 0:
+			_say("Carry fish here to smoke them, or throw them in")
 			return
-		var n := mini(carry.size(), SMOKER_SLOTS)
+		var n := mini(have, SMOKER_SLOTS)
 		for i in n:
-			t.slot.append(carry.pop_back())
+			t.slot.append(inv.pop_fish())
 		t.smoke_t = SMOKE_TIME
-		_refresh_view()
-		_refresh()
+		_hands_changed()
 	elif t.smoke_t <= 0.0:
 		var n := mini(t.slot.size(), free_space())
 		if n == 0:
@@ -4223,11 +4829,10 @@ func _use_smoker(t: Dictionary) -> void:
 			if not f.smoked:
 				f.smoked = true
 				f.mult *= SMOKE_MULT
-			carry.append(f)
+			_add_fish_to_hands(f, true)
 		stats.smokes += 1
 		_float_text(t.node.global_position + Vector3(0, 1.2, 0), "smoked x%.1f" % SMOKE_MULT, Color(1, 0.8, 0.5))
-		_refresh_view()
-		_refresh()
+		_hands_changed()
 
 ## The fight is over: the fish leaps out of the hole in an arc and lands in your hands.
 func _catch(t: Dictionary) -> void:
@@ -4340,6 +4945,12 @@ func _buy(id: String) -> void:
 	sfx.play("buy")
 	_log("BUY %s -> Lv%d" % [id, GameState.level(id)])
 	if id == "bucket":
-		_refresh_view()
-		_say("Olga: Now you can carry %d at a time." % capacity())
+		_give_item(Inventory.bucket_item())
+		_hands_changed()
+		_say("Olga: A bucket! Click fish into it, E sweeps them up, Q sets it down. Buy more and set them around.")
+	elif id == "pail":
+		for g in ground:
+			_refresh_bucket_node(g)
+		_hands_changed()
+		_say("Olga: Every bucket holds %d now." % _bucket_cap())
 	_refresh()

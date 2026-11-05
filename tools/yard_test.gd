@@ -32,7 +32,7 @@ func _ready() -> void:
 	# --- one line at a time
 	var t1: Dictionary = g._make_hole(g.guide.drill_spot)
 	var t2: Dictionary = g._make_hole(g.guide.drill_spot + Vector3(0, 0, 4.0))
-	g.tool = 1
+	g.equip(1)
 	g._click("hole:%d" % t1.idx)
 	check("first cast lands", t1.cast == 1)
 	g._click("hole:%d" % t2.idx)
@@ -48,7 +48,7 @@ func _ready() -> void:
 	# --- the catch is a real object that falls
 	t2.fight = 0.0
 	g._tick_hole(t2, 0.1)
-	check("the catch is a loose fish, not in your hands", yard.count() == 1 and g.carry.is_empty())
+	check("the catch is a loose fish, not in your hands", yard.count() == 1 and not g.carrying())
 	var e: Dictionary = yard.fish[0]
 	check("it is above the ice and rising out of the hole", e.pos.y > 0.2 and e.vel.y > 3.0)
 	var hole_p: Vector3 = t2.node.global_position
@@ -244,16 +244,17 @@ func _ready() -> void:
 
 	# --- an Auto-Rod's stash does not wait for free hands
 	yard.obstacles = walls
-	g.carry.clear()
+	g.inv.take_cargo()
 	var ta: Dictionary = g._make_hole(g.guide.drill_spot + Vector3(0, 0, 14))
 	g._build_auto(ta, false)
 	for i in 3:
 		ta.stash.append(g._make_fish(g.SPECIES[0]))
-	g.tool = 2
 	g.unlocked["t_auto"] = true
+	g.inv.clear()
+	g.equip(2)   # the kit in slot 1: two free slots for fish
 	g._click("hole:%d" % ta.idx)
-	check("collecting a stash fills your hands and spills the rest onto the ice", g.carry.size() == 1 and yard.count() == 2 and ta.stash.is_empty())
-	g.carry.clear()
+	check("collecting a stash fills your free slots and spills the rest onto the ice", g.inv.cargo_count() == 2 and yard.count() == 1 and ta.stash.is_empty())
+	g.inv.take_cargo()
 	yard.clear_all()
 	yard.obstacles = []
 
@@ -270,19 +271,27 @@ func _ready() -> void:
 
 	# --- picking up with E
 	yard.clear_all()
-	g.carry.clear()
+	g.inv.clear()
+	g.inv.slots[0] = Inventory.tool_item(0)
+	g.inv.slots[1] = Inventory.tool_item(1)
+	g._hands_changed()
 	var pp: Vector3 = g.get_node("Player").global_position
 	for i in 3:
 		yard.spawn(g._make_fish(g.SPECIES[0]), Vector3(pp.x + 1.0 + i * 0.5, yard.GROUND, pp.z), Vector3.ZERO)
-	g._pick_up_fish()
-	check("E scoops up only what the bucket holds (starts at 1)", g.carry.size() == 1 and yard.count() == 2)
-	g._pick_up_fish()
-	check("a full bucket says so and takes nothing more", g.carry.size() == 1 and yard.count() == 2)
-	GameState.upgrades["bucket"] = 2
-	g._pick_up_fish()
-	check("with a bigger bucket E takes more", g.carry.size() == 3 and yard.count() == 0)
-	GameState.upgrades["bucket"] = 0
-	g.carry.clear()
+	g._sweep_fish()
+	check("with no bucket E scoops up one fish per free slot (one slot free)", g.inv.cargo_count() == 1 and yard.count() == 2)
+	g._sweep_fish()
+	check("full hands say so and take nothing more", g.inv.cargo_count() == 1 and yard.count() == 2)
+	g.inv.clear()
+	g.inv.slots[0] = Inventory.tool_item(0)
+	g.inv.slots[1] = Inventory.tool_item(1)
+	g.inv.slots[2] = Inventory.bucket_item()
+	g._hands_changed()
+	g._sweep_fish()
+	check("with a bucket E takes the rest into it", g.inv.slots[2].fish.size() == 2 and yard.count() == 0)
+	g.inv.take_cargo()
+	g.inv.clear()
+	g._hands_changed()
 
 	# --- guide and saving
 	yard.clear_all()

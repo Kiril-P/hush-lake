@@ -13,7 +13,7 @@ var T := 0.0
 var player: Node3D
 var fails := 0
 var rep := {"first_hole": -1.0, "first_cast": -1.0, "first_catch": -1.0, "first_feed": -1.0, "bucket": -1.0, "auto_rod": -1.0, "belt": -1.0,
-	"missed_bites": 0, "throws": 0, "throws_in": 0, "grabs": 0, "kick_tries": 0, "kick_hits": 0, "scan_time": 0.0, "stalls": 0, "stall_time": 0.0, "pushes": 0, "buys": []}
+	"missed_bites": 0, "throws": 0, "throws_in": 0, "grabs": 0, "sweeps": 0, "delivers": 0, "rack_trips": 0, "kick_tries": 0, "kick_hits": 0, "scan_time": 0.0, "stalls": 0, "stall_time": 0.0, "pushes": 0, "buys": []}
 var last_progress := 0.0
 var last_sig := ""
 var stall_open := false
@@ -113,6 +113,61 @@ func mouse(button: int, pressed: bool) -> void:
 func flat(v: Vector3) -> Vector3:
 	return Vector3(v.x, 0.0, v.z)
 
+func slot_key(i: int) -> int:
+	return KEY_1 + i
+
+func holding_tool(t: int) -> bool:
+	var it: Dictionary = g.inv.cur()
+	return it.get("k", "") == "tool" and int(it.t) == t
+
+## Holds tool t (0 drill, 1 rod, 2 the builder's kit): press the number of the slot it is in, or walk to the rack and click it there.
+func hold_tool(t: int) -> void:
+	if holding_tool(t):
+		return
+	var si: int = g.inv.find_tool(t)
+	if si >= 0:
+		tap(slot_key(si))
+		await tick()
+		return
+	await take_from_rack(t)
+
+func take_from_rack(t: int) -> void:
+	rep.rack_trips += 1
+	var pick := -1   # with full hands the thing in your hand goes back on the rack: hold the tool we need least (the drill or the kit, never the rod)
+	for i in 3:
+		var it: Dictionary = g.inv.slots[i]
+		if it.get("k", "") == "tool" and int(it.t) != 1 and int(it.t) != t:
+			pick = i
+	if g.inv.free_slot() < 0 and pick >= 0:
+		tap(slot_key(pick))
+		await tick()
+	var rp: Vector3 = flat(g.rack_pos)
+	var from := flat(player.global_position)
+	await walk_to(rp + (from - rp).normalized() * 3.4, 1.2, 90.0)
+	var mp: Vector3 = (g.rack_mounts[t] as Node3D).global_position
+	await aim_click(mp, "rack:%d" % t, 6.0)
+
+## The kit does one thing at a time: take it, then press B until it is set to `mode` (a tool id 2..6; for 6 the build item `bi`).
+func use_kit(mode: int, bi := 0) -> void:
+	await hold_tool(2)
+	for i in 10:
+		if g.tool == mode and (mode != 6 or g.build_item == bi):
+			return
+		tap(KEY_B)
+		await tick()
+
+## Carry what is in the bucket to the Eye and click it: it all goes in, one after another.
+func do_deliver() -> void:
+	var pp := flat(player.global_position)
+	var dir := pp.normalized() if pp.length() > 0.1 else Vector3(1, 0, 0)
+	await walk_to(dir * (g.EYE_R + 4.0), 1.5, 60.0)
+	var fed0: int = g.stats.eye_fed
+	if await aim_click(Vector3(dir.x * 6.0, 0.3, dir.z * 6.0), "eye", 4.0):
+		rep.delivers += 1
+		var t0 := T
+		while T - t0 < 3.0 and g.stats.eye_fed == fed0:
+			await tick()
+
 func cam_pos() -> Vector3:
 	return g.cam.global_position
 
@@ -194,8 +249,8 @@ func play() -> void:
 	while T < END:
 		var st: Dictionary = g.guide.current()
 		match st.id:
-			"tool0": tap(KEY_1)
-			"tool1": tap(KEY_2)
+			"tool0": await hold_tool(0)
+			"tool1": await hold_tool(1)
 			"drill": await do_drill(st)
 			"drill2": await do_drill_near()
 			"cast", "wait", "tool1b": await do_cast()
@@ -205,13 +260,16 @@ func play() -> void:
 			"bucket": await do_buy("bucket")
 			_:
 				await do_generic(st)
+		if g._held_kind() == "fish" and st.id not in ["bite"]:
+			await do_throw_to_eye()
+		elif g.carrying() and g._held_kind() != "fish" and g.carrying() and (g.inv.cargo_count() >= 3 or g.yard.count() == 0) and st.id not in ["bite", "fight"]:
+			await do_deliver()
 		if g.yard.count() > 0 and st.id not in ["bite"]:
 			await do_push()
 		await tick()
 
 func do_drill(st: Dictionary) -> void:
-	if g.tool != 0:
-		tap(KEY_1)
+	await hold_tool(0)
 	var spot: Vector3 = st.where if st.where != null else g.guide.drill_spot
 	await walk_to(spot, 3.5)
 	await look_at_point(Vector3(spot.x, 0.0, spot.z), 0.04)
@@ -228,9 +286,7 @@ func do_drill(st: Dictionary) -> void:
 
 func do_drill_near() -> void:
 	# look at a few bits of ice near us and read the prompt a player reads: "Hold click: drill here" means it is legal
-	if g.tool != 0:
-		tap(KEY_1)
-		await tick()
+	await hold_tool(0)
 	var p := flat(player.global_position)
 	for i in 10:
 		var a := randf() * TAU
@@ -245,9 +301,7 @@ func do_drill_near() -> void:
 	await walk_to(p + Vector3(randf_range(-6, 6), 0, randf_range(-6, 6)), 1.0, 8.0)
 
 func drill_at(spot: Vector3) -> void:
-	if g.tool != 0:
-		tap(KEY_1)
-		await tick()
+	await hold_tool(0)
 	await look_at_point(Vector3(spot.x, 0.0, spot.z), 0.05)
 	if g._aim() != "ice":
 		return
@@ -289,9 +343,7 @@ func do_cast() -> void:
 		hole_catches[t.idx] = 0
 		await do_far_hole()
 		return
-	if g.tool != 1:
-		tap(KEY_2)
-		await tick()
+	await hold_tool(1)
 	if t.cast == 0:
 		await walk_to(t.pos, 4.5)
 		var hp: Vector3 = t.node.global_position + Vector3(0, 0.2, 0)
@@ -353,14 +405,19 @@ func do_push() -> void:
 				look_step(e.pos, d2)
 			continue
 		# a fish close at hand and well away from the Eye: grab it (left click) and lob it (hold right mouse, let go)
-		if deye > 12.0 and flat(e.pos).distance_to(flat(player.global_position)) < 4.5 and g.held.is_empty():
+		if deye > 12.0 and flat(e.pos).distance_to(flat(player.global_position)) < 3.4 and g.inv.bucket_count() > 0 and g.free_space() > 0:
+			tap(KEY_E)   # a bucket in your slots: sweep the fish at your feet into it
+			rep.sweeps += 1
+			await tick()
+			continue
+		if deye > 12.0 and flat(e.pos).distance_to(flat(player.global_position)) < 4.5 and g._held_kind() != "fish" and g.free_space() > 0:
 			await look_at_point(e.pos + Vector3(0, 0.15, 0), 0.03, 3.0)
 			if g._aim_fish() != null:
 				mouse(MOUSE_BUTTON_LEFT, true)
 				mouse(MOUSE_BUTTON_LEFT, false)
 				await tick()
-				if not g.held.is_empty():
-					rep.grabs += 1
+				rep.grabs += 1
+				if g._held_kind() == "fish":
 					await do_throw_to_eye()
 					continue
 		var dir_eye := (-epos).normalized()
@@ -459,11 +516,9 @@ func do_generic(st: Dictionary) -> void:
 	if String(st.title).begins_with("Build a Cannery") and g.unlocked.get("t_build", false) and GameState.currency >= g._build_cost(0):
 		for t in g.holes:
 			if t.state == "auto" and t.belt != null and not t.belt.get("cannery", false):
-				tap(KEY_7)
-				await tick()
+				await use_kit(6, 0)
 				await walk_to(t.pos, 4.5)
 				await aim_click(t.node.global_position + Vector3(0, 0.3, 0), "hole:%d" % t.idx, 5.0)
-				tap(KEY_1)
 				return
 	# an Auto-Rod when the tool is open and affordable: put it on a hole we already fished
 	if g.unlocked.get("t_auto", false) and g.stats.autos == 0 and GameState.currency >= g.auto_cost():
@@ -473,14 +528,14 @@ func do_generic(st: Dictionary) -> void:
 				if t.state == "hole":
 					h = t
 		if not h.is_empty():
-			tap(KEY_3)
+			await use_kit(2)
 			await walk_to(h.pos, 4.5)
 			await aim_click(h.node.global_position + Vector3(0, 0.2, 0), "hole:%d" % h.idx, 5.0)
 			return
 	if g.unlocked.get("t_belt", false) and g.stats.autos > 0 and g.stats.belts == 0:
 		for t in g.holes:
 			if t.state == "auto" and t.belt == null and GameState.currency >= g.belt_cost(t):
-				tap(KEY_6)
+				await use_kit(5)
 				await walk_to(t.pos, 4.5)
 				await aim_click(t.node.global_position + Vector3(0, 0.3, 0), "hole:%d" % t.idx, 5.0)
 				return
@@ -501,7 +556,7 @@ func report() -> void:
 	print("REPORT first hole %s s, first cast %s s, first catch %s s, first feed %s s" % [rep.first_hole, rep.first_cast, rep.first_catch, rep.first_feed])
 	print("REPORT bucket %s s, auto-rod %s s, belt %s s, purchases %s" % [rep.bucket, rep.auto_rod, rep.belt, rep.buys])
 	print("REPORT fish fed %d, caught %d, coins %d, eye stage %d, holes %d" % [g.stats.eye_fed, g.stats.caught, int(GameState.currency), g.eye_stage(), g.holes.size()])
-	print("REPORT hands: %d grabs, %d throws, %d of them swallowed by the Eye" % [rep.grabs, rep.throws, rep.throws_in])
+	print("REPORT hands: %d grabs, %d throws, %d of them swallowed by the Eye; %d bucket sweeps, %d deliveries by hand, %d trips to the rack" % [rep.grabs, rep.throws, rep.throws_in, rep.sweeps, rep.delivers, rep.rack_trips])
 	print("REPORT pushes %d, kicks %d/%d hit, missed bites %d, scan time %.1f s, stalls %d (%.0f s)" % [rep.pushes, rep.kick_hits, rep.kick_tries, rep.missed_bites, rep.scan_time, rep.stalls, rep.stall_time])
 	print("REPORT process time per frame (whole game, headless, scene time not rendered): %.2f ms; fish physics with 60 loose fish: %.3f ms per step" % [fps_ms, yard_ms])
 	# the bound checks: the opening must be quick and nothing may stall for long

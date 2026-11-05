@@ -98,7 +98,7 @@ func _ready() -> void:
 		if n is Label:
 			txt += n.text + " "
 		stack.append_array(n.get_children())
-	check("the controls page mentions grab, throw, stow and Olga", "grab" in txt and "throw" in txt and "stow" in txt and "Olga" in txt)
+	check("the controls page mentions the slots, grab, throw, the rack and Olga", "three slots" in txt and "grab" in txt and "throw" in txt and "rack" in txt and "Olga" in txt)
 
 	# --- buttons do what they say
 	m.page = "main"
