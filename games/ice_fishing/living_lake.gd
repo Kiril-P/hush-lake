@@ -435,7 +435,7 @@ func _apply_weather(delta: float, w: Dictionary) -> void:
 	if layers.size() == 3:
 		layers[0].emitting = snow > 0.05
 		layers[1].emitting = snow > 0.55
-		layers[2].emitting = snow > 1.2
+		layers[2].emitting = snow > 1.5
 		var lean := Vector3(0.3 + 5.5 * float(w.wind), -1.2 - 0.5 * snow, 0.1 + 1.8 * float(w.wind))
 		for l in layers:
 			l.gravity = lean
