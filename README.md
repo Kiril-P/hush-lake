@@ -43,3 +43,6 @@ Notes for playtesters are in `PLAYTEST.md` (what to look for, what to write down
 ## Art, sound, story and progression pipeline (tools)
 - `tools/refshots.sh` renders 20 fixed clean frames; GPT agents turn each into reference images (`docs/ART_PIPELINE.md`, `docs/refs/`); Claude rebuilds the scene from the delta list (`docs/refs/DELTA.md`); `tools/contact_sheet.py` and `tools/refs_pack.py` build and shrink the before | reference | after sheets.
 - The score (`shared/score.gd`), the visitor fish and journal (`visitors.gd`), the story (`story.gd`, `docs/STORY.md`), the Ledger (`ledger.gd`). Suites: `tools/run_score.sh`, `run_fishing.sh`, `run_story.sh`, `run_progress.sh`.
+
+## Run everything
+`tools/run_all.sh` runs every headless suite with a one-line verdict each (`quick` skips the long smoke, econ and first10 runs; `bots` adds the windowed real-input bot, which needs the window in front). Logs land in `/tmp/run_all_*.log`.
