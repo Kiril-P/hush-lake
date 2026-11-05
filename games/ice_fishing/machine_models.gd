@@ -313,6 +313,88 @@ static func depot(node: Node3D) -> void:
 		box(node, Vector3(sx, 0.17, 2.0), Vector3(0.05, 0.05, 1.7), STEEL_LIGHT, 0.0, 0.4, 0.8)
 	box(node, Vector3(0, 0.45, 2.0), Vector3(1.4, 0.2, 0.7), WOOD)
 
+## Bait Grinder: an iron hopper on a stand with a hand crank and a bait barrel under the spout. Fish thrown into the hopper become bait
+## (every bite comes sooner for a while). Returns {wheel: the crank wheel, which turns while it works}.
+static func grinder(node: Node3D) -> Dictionary:
+	box(node, Vector3(0, 0.1, 0), Vector3(2.4, 0.2, 2.0), WOOD_DARK)   # base plank
+	for cx in [-0.8, 0.8]:
+		post(node, Vector3(cx, 0.85, -0.2), 0.09, 1.5, STEEL_DARK, 0.4)   # legs
+	var hop := post(node, Vector3(0, 2.0, -0.2), 1.2, 1.3, Color(0.62, 0.7, 0.8), 0.45, 0.0, 0.45)   # the hopper: wide mouth, narrow throat
+	hop.mesh.radial_segments = 12
+	var mouth := post(node, Vector3(0, 2.66, -0.2), 1.22, 0.1, AMBER.darkened(0.2), 0.3, 0.4)   # the amber lip: the mouth reads from far away
+	mouth.mesh.radial_segments = 12
+	var inner := post(node, Vector3(0, 2.62, -0.2), 1.05, 0.04, Color(0.05, 0.07, 0.12), 0.0, 0.0)
+	inner.mesh.radial_segments = 12
+	box(node, Vector3(0, 1.25, -0.2), Vector3(0.7, 0.5, 0.7), STEEL_DARK, 0.0, 0.5, 0.5)   # the grinder body
+	var spout := box(node, Vector3(0, 0.9, 0.35), Vector3(0.3, 0.3, 0.8), STEEL_DARK)
+	spout.rotation_degrees.x = 25.0
+	var barrel := post(node, Vector3(0, 0.45, 0.85), 0.42, 0.7, WOOD, 0.0, 0.0, 0.36)
+	barrel.mesh.radial_segments = 10
+	for by in [0.25, 0.6]:
+		post(node, Vector3(0, by, 0.85), 0.44 if by < 0.5 else 0.38, 0.05, STEEL_DARK, 0.5)
+	var wheel := Node3D.new()   # the crank wheel on the side
+	wheel.position = Vector3(0.6, 1.25, -0.2)
+	node.add_child(wheel)
+	var disc := post(wheel, Vector3.ZERO, 0.42, 0.08, STEEL_LIGHT, 0.6)
+	disc.rotation_degrees.z = 90.0
+	var knob := ToolModels.ball(wheel, Vector3(0.08, 0.3, 0), Vector3.ONE * 0.16, AMBER, 1.2)
+	knob.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	for k in 2:   # two crossing spokes
+		var spoke := box(wheel, Vector3(0.05, 0.0, 0.0), Vector3(0.05, 0.8, 0.05), STEEL_DARK)
+		spoke.rotation_degrees.x = k * 90.0
+	snow_cap(node, Vector3(-0.9, 2.0, -0.2), Vector3(0.5, 0.12, 0.5))
+	lamp(node, Vector3(-1.1, 1.8, 0.5), 0.09)
+	post(node, Vector3(-1.1, 0.9, 0.5), 0.04, 1.7, STEEL_DARK, 0.5)
+	return {"wheel": wheel}
+
+## Wind Fan: a ducted fan on a stand that blows a cone of wind along the ice toward the Eye (local +Z). Returns {rotor}.
+static func fan(node: Node3D) -> Dictionary:
+	box(node, Vector3(0, 0.1, 0), Vector3(2.0, 0.2, 2.0), WOOD_DARK)   # base plank
+	snow_cap(node, Vector3(0, 0.2, 0), Vector3(2.1, 0.12, 2.1))
+	post(node, Vector3(0, 0.9, 0), 0.14, 1.5, STEEL_DARK, 0.4)   # stand
+	box(node, Vector3(0, 0.6, -0.4), Vector3(0.12, 1.0, 0.12), STEEL_DARK)   # brace
+	var head := Node3D.new()
+	head.position = Vector3(0, 1.9, 0)
+	node.add_child(head)
+	var ring := TorusMesh.new()   # the duct ring: teal, with an amber inner edge
+	ring.inner_radius = 0.95
+	ring.outer_radius = 1.12
+	ring.rings = 20
+	ring.ring_segments = 6
+	var rm := MeshInstance3D.new()
+	rm.mesh = ring
+	rm.material_override = mat(TEAL, 0.0, 0.5, 0.3)
+	rm.rotation_degrees.x = 90.0
+	rm.position = Vector3(0, 0, 0.12)
+	head.add_child(rm)
+	var ring2 := TorusMesh.new()
+	ring2.inner_radius = 0.9
+	ring2.outer_radius = 0.96
+	ring2.rings = 20
+	ring2.ring_segments = 4
+	var rm2 := MeshInstance3D.new()
+	rm2.mesh = ring2
+	rm2.material_override = mat(AMBER, 1.1)
+	rm2.rotation_degrees.x = 90.0
+	rm2.position = Vector3(0, 0, 0.2)
+	head.add_child(rm2)
+	box(head, Vector3(0, 0, -0.2), Vector3(0.7, 0.7, 0.5), STEEL_DARK, 0.0, 0.5, 0.5)   # the motor housing
+	var rotor := Node3D.new()
+	rotor.position = Vector3(0, 0, 0.1)
+	head.add_child(rotor)
+	for i in 4:   # four broad blades, each turned a little like a real propeller
+		var holder := Node3D.new()
+		holder.rotation_degrees.z = i * 90.0
+		rotor.add_child(holder)
+		var blade := box(holder, Vector3(0, 0.5, 0), Vector3(0.34, 0.8, 0.05), STEEL_LIGHT, 0.0, 0.4, 0.5)
+		blade.rotation_degrees.y = 18.0
+	ToolModels.ball(rotor, Vector3(0, 0, 0.04), Vector3.ONE * 0.28, AMBER, 1.0)
+	for k in 6:   # a guard: spokes across the front
+		var sp := box(head, Vector3(0, 0, 0.3), Vector3(1.9, 0.03, 0.03), STEEL_DARK.lightened(0.1))
+		sp.rotation_degrees.z = k * 30.0
+	lamp(node, Vector3(0.9, 0.7, 0.8), 0.09)
+	return {"rotor": rotor}
+
 ## Ice-Breaker: a hull of dark steel with a teal waterline stripe, a crew cabin with a lit bridge, a smokestack, a mast, a
 ## crane and a spinning amber beacon. Local +Z faces the Eye. Returns {beacon}.
 static func rig(node: Node3D) -> Dictionary:

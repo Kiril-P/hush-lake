@@ -39,6 +39,8 @@ const HINTS := {
 	"Build a Cannery on a belt": ["With the kit press B until it says Cannery, then click a belt's Auto-Rod.", "kit:auto"],
 	"Build a Depot": ["With the kit press B until it says Depot, then click open ice. Drop or throw fish in for a sled to run them to the Eye.", "kit"],
 	"Build an Ice-Breaker": ["With the kit press B until it says Ice-Breaker, then click open ice. It is big and expensive and it never stops.", "kit"],
+	"Build a Bait Grinder": ["With the kit press B until it says Bait Grinder, then click open ice. Throw or click a fish in: bites come sooner for a while.", "kit"],
+	"Build a Wind Fan": ["With the kit press B until it says Wind Fan, then click open ice far from the Eye. It blows loose fish along the ice toward it.", "kit"],
 	"Drill 4 holes": ["Hold the Drill and hold click on fresh ice. Wide Drill opens several at once.", ""],
 	"Clear the Shallows": ["Fish every hole in the Shallows dry. Sonar shows where fish still hide.", ""],
 	"Earn 250 coins": ["Gut Tables and Smokers (B switches the kit) make each fish worth more. Build them on fished-out holes.", "kit"],

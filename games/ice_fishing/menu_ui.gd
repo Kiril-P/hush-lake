@@ -30,7 +30,7 @@ const HOWTO := [
 	["Fish", "Hold the drill (slot 1) on the ice to dig a hole, take the rod (slot 2), cast and click when the float splashes. Your catch drops onto the ice."],
 	["Your hands", "You carry three things: tools, fish and buckets, one in your hand at a time. A bucket holds many fish: click fish into it, press E to sweep them up, or throw them in. Buy more buckets and set them around. Q puts what you hold down."],
 	["Getting it to the Eye", "Click a fish to grab it, hold right mouse and let go to throw it at the Eye (look a little up for a lob). Or walk into it, or kick it. The Eye pulls close fish in."],
-	["Machines", "Auto-rods fish for you, belts carry the catch to the Eye, canneries and sorters make it worth more, depots and smokers take thrown fish."],
+	["Machines", "Auto-rods fish for you, belts carry the catch to the Eye, canneries and sorters make it worth more, depots and smokers take thrown fish. A Bait Grinder turns a thrown fish into bait (faster bites); a Wind Fan blows loose fish toward the Eye."],
 	["Sectors", "The lake is nineteen sectors. Frosted ones are locked: empty a neighbouring sector to open them."],
 	["Stuck?", "Press H and Olga points the way. The NEXT strip at the top always shows the one thing to do."],
 ]

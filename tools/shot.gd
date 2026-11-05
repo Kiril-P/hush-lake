@@ -326,6 +326,40 @@ func _ready() -> void:
 		await get_tree().create_timer(0.35).timeout
 		get_viewport().get_texture().get_image().save_png("res://renders/shot_hands_d.png")   # in flight
 		print("saved hands")
+	# the second-layer machines: a bait grinder and a wind fan with fish drifting in its wind
+	if only == "props":
+		var pq: Node3D = g.get_node("Player")
+		pq.position = Vector3(-8.2, 1.7, 14.3)
+		g.day_t = 0.0
+		g.scenery.set_time(0.0)
+		g.goal_done.fill(true)
+		g.test_capture = true
+		g.unlocked["t_build"] = true
+		for sid in g.model.sectors:
+			g.model.sectors[sid].unlocked = true
+		GameState.currency = 99999.0
+		g._build_prop(Vector3(-22, 0, 8), "grinder", false)
+		g._build_prop(Vector3(-22, 0, -6), "fan", false)
+		for i in 5:
+			g.yard.spawn(g._make_fish(g.SPECIES[i % 4]), Vector3(-17.5 + i * 0.3, g.yard.GROUND, -6.0 + i * 0.5), Vector3.ZERO)
+		g.bait_t = 95.0
+		pq.rotation.y = deg_to_rad(40.0)
+		g.cam.rotation.x = deg_to_rad(-6.0)
+		g._hands_changed()
+		for i in 40:
+			await get_tree().process_frame
+		g.refreeze_panel.visible = false
+		g.msg_label.text = ""
+		get_viewport().get_texture().get_image().save_png("res://renders/shot_props_a.png")
+		pq.position = Vector3(-14.0, 1.7, 0.0)
+		pq.rotation.y = deg_to_rad(90.0)
+		g.cam.rotation.x = deg_to_rad(-8.0)
+		for i in 30:
+			await get_tree().process_frame
+		g.refreeze_panel.visible = false
+		g.msg_label.text = ""
+		get_viewport().get_texture().get_image().save_png("res://renders/shot_props_b.png")
+		print("saved props")
 	# the three slots: a held bucket, buckets and a tool on the ice, the tool rack
 	if only == "items":
 		var pi: Node3D = g.get_node("Player")

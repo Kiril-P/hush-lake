@@ -535,7 +535,7 @@ func _ready() -> void:
 	var sids: Array = g2.model.sectors.keys()
 	for i in 4000:
 		g2.equip(randi() % 7)
-		g2.build_item = randi() % 4
+		g2.build_item = randi() % 6
 		var r := randi() % 14
 		var ri := randi() % 12   # hands: the slots, drops, pickups, the rack and the kit never break anything
 		match ri:
@@ -600,6 +600,7 @@ func _ready() -> void:
 	check("fuzz: coins not negative", GameState.currency >= 0.0)
 	check("fuzz: journal sane", g2.journal.size() <= g2.SPECIES.size())
 	check("fuzz: lake counts stay consistent", sectors_consistent(g2.model))
+	check("fuzz: grinders and fans stay within their limits", g2._prop_count("grinder") <= g2.MAX_GRINDERS and g2._prop_count("fan") <= g2.MAX_FANS and g2.bait_t <= g2.BAIT_MAX)
 	check("fuzz: no negative stock", g2.model.stock.values().all(func(st): return st.values().all(func(n): return n > 0)))
 	check("fuzz: belt fish stay within the cap", g2.belt_fish.size() <= g2.BELT_MAX_FISH)
 	check("fuzz: every belt fish rides a live belt or a rig line", g2.belt_fish.all(func(it): return g2.belts.has(it.belt) or g2.rigs.any(func(rg): return rg.belt == it.belt)))

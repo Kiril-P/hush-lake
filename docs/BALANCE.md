@@ -58,3 +58,5 @@ Still true: a few tens of thousands of unspent coins at the very end of a lake. 
 
 ## After the three slots (buckets are things you carry)
 Buckets are physical: you buy several (6 coins, x1.9 each, max 5) and each holds 4 fish (Bucket Size upgrade: 4, 6, 9, 13, 18, 25). With three slots you realistically haul two buckets plus a tool, so `capacity()` (used by the sim) is `min(buckets, 2) x bucket size` and 1 with no bucket. The sled bonus of the snowmobile (+10 carry) is gone: level 3 is just the fastest ride. Re-run: optimal play empties the first lake in ~50 min (active 100%) and ~68 min (active 50%), a little faster than before at 100% (cheaper bucket steps); not retuned (the 50% case sits inside 55-90). The first-10 bot: bucket at ~16 s, Auto-Rod at ~222 s (it makes two trips to the tool rack).
+
+The Bait Grinder and Wind Fan are not in `tools/econ_sim.gd` (the sim buys by pay-back and models neither): they are optional power for players who engage with them. Bait at its best is a x0.6 wait while it lasts; the grinder's cost is the fish itself.

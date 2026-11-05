@@ -35,7 +35,14 @@ const RIDE_SPEED := [1.0, 2.4, 3.0, 3.6]   # snowmobile levels 0..3
 const CANNERY_MULT := 1.5                   # a cannery on a belt: every fish riding it is worth x1.5
 const SORTER_MULT := 1.6                    # a sorter: fish worth 5+ get x1.6
 const DEPOT_MULT := 1.05                    # a depot's sled run pays a little less than hand-feeding the Eye
-const BUILD_ITEMS := ["Cannery", "Sorter", "Depot", "Ice-Breaker"]
+const BUILD_ITEMS := ["Cannery", "Sorter", "Depot", "Ice-Breaker", "Bait Grinder", "Wind Fan"]
+const BAIT_SECS := 12.0      # a fish ground into bait: 12 s of faster bites, plus 1.5 s per coin of base value (up to 30 s a fish)
+const BAIT_MAX := 180.0
+const BAIT_MULT := 0.6       # bites come in 60% of the time while there is bait
+const FAN_REACH := 11.0      # a fan blows this far along the ice
+const FAN_PUSH := 11.0
+const MAX_GRINDERS := 3
+const MAX_FANS := 4
 const FEED_NOTES := [0, 2, 4, 7, 9, 12, 14, 16, 19, 21]   # semitones: a hand-fed streak climbs a pentatonic scale
 const KICK_MIN := 7.0                                    # a tap kick sends a fish ~8 m over the ice
 const KICK_BASE_MAX := 16.0                               # a fully charged kick (more with Kick Power)
@@ -158,6 +165,10 @@ const GOALS := [
 		"line": "Olga: Drop fish at a depot and a sled runs them to the Eye. Less walking."},
 	{"text": "Build an Ice-Breaker", "stat": "rigs", "target": 1, "reward": 400,
 		"line": "Olga: ...That is a very large machine. It is eating the lake faster than I can count."},
+	{"opt": true, "text": "Build a Bait Grinder", "stat": "grinders", "target": 1, "reward": 100,
+		"line": "Olga: Throw it a fish and every bite comes sooner. Cheap fish, quick fish."},
+	{"opt": true, "text": "Build a Wind Fan", "stat": "fans", "target": 1, "reward": 120,
+		"line": "Olga: A fan out here blows them home for you. Put it where the walk is longest."},
 	{"text": "Drill 4 holes", "stat": "holes", "target": 4, "reward": 15,
 		"line": "Olga: Wide Drill opens up several holes at once.", "unlock": ["wide"]},
 	{"text": "Clear the Shallows", "stat": "sectors", "target": 1, "reward": 60,
@@ -273,7 +284,7 @@ var ground_serial := 0
 var rack_mounts: Array = []   # the rack's three mounted tools (shown while the tool is on the rack)
 var rack_pos := Vector3.ZERO
 var journal := {}          # species name -> count
-var stats := {"holes": 0, "caught": 0, "deliveries": 0, "earned": 0.0, "autos": 0, "smokes": 0, "gutted": 0, "tiles_cleared": 0, "sectors": 0, "ended": 0, "eye_fed": 0, "belts": 0, "cans": 0, "sorters": 0, "depots": 0, "rigs": 0, "rides": 0, "tithe": 0, "awakened": 0}
+var stats := {"holes": 0, "caught": 0, "deliveries": 0, "earned": 0.0, "autos": 0, "smokes": 0, "gutted": 0, "tiles_cleared": 0, "sectors": 0, "ended": 0, "eye_fed": 0, "belts": 0, "cans": 0, "sorters": 0, "depots": 0, "rigs": 0, "rides": 0, "tithe": 0, "awakened": 0, "grinders": 0, "fans": 0, "grinds": 0}
 var unlocked := {}
 var goal_done: Array = []
 var combo := 0
@@ -310,6 +321,9 @@ var sector_patches := {}
 var aim_pos := Vector3.ZERO
 var drill_pos := Vector3(9999, 0, 9999)
 var depots: Array = []     # drop-off points: {pos, node, idx}
+var props: Array = []      # bait grinders and wind fans: {kind, pos, node, idx, part}
+var bait_t := 0.0          # seconds of bait left: every bite (yours and the auto-rods') comes sooner
+var bait_label: Label
 var rigs: Array = []       # ice-breakers: {pos, node, idx, t, belt, tag}
 var build_item := 0
 var riding := false
@@ -1041,6 +1055,7 @@ void fragment() {
 	carry_bar = Style.bar(Style.AMBER, 7.0)
 	left.add_child(carry_bar)
 	combo_label = _plain(left, 16, Style.AMBER)
+	bait_label = _plain(left, 16, Style.AQUA)
 	var sep := HSeparator.new()
 	sep.modulate = Color(1, 1, 1, 0.25)
 	left.add_child(sep)
@@ -1398,7 +1413,7 @@ func sale_mult() -> float:
 func depth_value() -> float: return 1.0 + DEPTH_VALUE * _meta_int("lakes")
 func rig_cap() -> int: return RIG_BASE_CAP + maxi(eye_stage() - 1, 0)
 func tithe_cost() -> float: return ceil(TITHE_BASE * pow(TITHE_GROWTH, stats.tithe))
-func bite_mult() -> float: return pow(0.88, GameState.level("bait"))
+func bite_mult() -> float: return pow(0.88, GameState.level("bait")) * (BAIT_MULT if bait_t > 0.0 else 1.0)
 func ride_mult() -> float: return RIDE_SPEED[mini(GameState.level("snowmobile"), RIDE_SPEED.size() - 1)] if riding else 1.0
 func walk_speed() -> float: return (6.0 + 1.6 * GameState.level("boots")) * ride_mult()
 func work_speed() -> float: return 1.0 + 0.6 * GameState.level("drill")
@@ -1933,6 +1948,17 @@ func _process(delta: float) -> void:
 	_update_belt_fish(delta)
 	eye_burst_t -= delta
 	eye_pending_t -= delta
+	if bait_t > 0.0:
+		bait_t = maxf(bait_t - delta, 0.0)
+	var bt := int(ceil(bait_t))
+	bait_label.text = ("Bait %d:%02d   bites come sooner" % [bt / 60, bt % 60]) if bt > 0 else ""
+	for pr in props:   # the fan's rotor and the grinder's crank
+		var part: Node3D = pr.part
+		if pr.kind == "fan":
+			part.rotation.z -= delta * 11.0
+		else:
+			pr["work"] = maxf(float(pr.get("work", 0.0)) - delta, 0.0)
+			part.rotation.x += delta * (1.5 + 12.0 * minf(pr.work, 1.0))
 	if eye_pending > 0.0 and eye_pending_t <= 0.0:
 		_float_text(Vector3(0, 6.0, 0), "+%s" % _coins(eye_pending), Color(0.6, 1.0, 0.9), 0.034)
 		eye_pending = 0.0
@@ -2210,7 +2236,7 @@ func _update_crosshair(a: String, captured: bool) -> void:
 	if captured and not guide.intro_active:
 		if a == "eye":
 			kind = 2
-		elif a.begins_with("hole:") or a.begins_with("buy:") or a == "olga" or a.begins_with("depot:") or a.begins_with("rig:") or a.begins_with("item:") or a.begins_with("rack:"):
+		elif a.begins_with("hole:") or a.begins_with("buy:") or a == "olga" or a.begins_with("depot:") or a.begins_with("rig:") or a.begins_with("item:") or a.begins_with("rack:") or a.begins_with("prop:"):
 			kind = 1
 		elif a == "ice" and tool == 0 and _can_drill_at(Vector3(aim_pos.x, 0.0, aim_pos.z)):
 			kind = 1
@@ -2246,7 +2272,7 @@ func _hands_have_fish() -> bool:
 	return inv.cargo_count() > 0
 
 # the builder's kit does one thing at a time: [tool id, build item], cycled with B through whatever is unlocked
-const KIT := [[2, -1], [3, -1], [4, -1], [5, -1], [6, 0], [6, 1], [6, 2], [6, 3]]
+const KIT := [[2, -1], [3, -1], [4, -1], [5, -1], [6, 0], [6, 1], [6, 2], [6, 3], [6, 4], [6, 5]]
 
 func _kit_modes() -> Array:
 	var out := []
@@ -3071,6 +3097,10 @@ func _on_fish_sunk(f: Dictionary, holder: Node3D, pos: Vector3, id: String) -> v
 			stats.deliveries += 1
 			_float_text(d.pos + Vector3(0, 3.4, 0), "in!", Color(0.8, 1.0, 0.9))
 			sfx.play("coin", -4.0, 0.85)
+	elif id.begins_with("grinder:"):
+		var gi := int(id.substr(8))
+		if gi >= 0 and gi < props.size():
+			_grind(f, props[gi].pos)
 	elif id.begins_with("bucket:"):
 		var bg := _ground_by_id(int(id.substr(7)))
 		if not bg.is_empty() and bg.item.fish.size() < _bucket_cap():
@@ -3695,6 +3725,8 @@ func _build_cost(item: int) -> int:
 		0: return int(ceil(120.0 * pow(1.9, _count_belts("cannery"))))
 		1: return int(ceil(90.0 * pow(1.9, _count_belts("sorter"))))
 		2: return int(ceil(70.0 * pow(1.5, depots.size())))
+		4: return int(ceil(110.0 * pow(1.6, _prop_count("grinder"))))
+		5: return int(ceil(140.0 * pow(1.6, _prop_count("fan"))))
 		_: return 0 if int(stats.get("rig_moves", 0)) > 0 else int(ceil(RIG_BASE * pow(RIG_GROWTH, rigs.size())))
 
 ## Is p a legal spot for a free-standing building (depot / ice-breaker)?
@@ -3718,6 +3750,9 @@ func _can_place_at(p: Vector3, radius: float) -> bool:
 			return false
 	for rg in rigs:
 		if flat.distance_to(Vector2(rg.pos.x, rg.pos.z)) < radius + 5.0:
+			return false
+	for pr in props:
+		if flat.distance_to(Vector2(pr.pos.x, pr.pos.z)) < radius + 2.0:
 			return false
 	return true
 
@@ -3781,6 +3816,81 @@ func _build_depot(pos: Vector3, pay := true) -> void:
 		_say("Depot built. Drop fish here and a sled runs them to the Eye.")
 		sfx.play("buy")
 		_refresh()
+
+func _prop_count(kind: String) -> int:
+	var n := 0
+	for pr in props:
+		if pr.kind == kind:
+			n += 1
+	return n
+
+## A bait grinder or a wind fan on open ice (the kit's last two builds). The fan always faces the Eye.
+func _build_prop(pos: Vector3, kind: String, pay := true) -> void:
+	if pay and not _spend(float(_build_cost(4 if kind == "grinder" else 5))):
+		return
+	var node := Node3D.new()
+	node.position = Vector3(pos.x, 0.0, pos.z)
+	add_child(node)
+	node.look_at(Vector3(0, 0, 0), Vector3.UP, true)   # local +Z faces the Eye
+	var pr := {"kind": kind, "pos": node.position, "node": node, "idx": props.size(), "part": null}
+	var hit := _box(node, Vector3(0, 1.1, 0), Vector3(2.4, 2.2, 2.0), Color.WHITE, "prop:%d" % pr.idx)   # the click target
+	hit.visible = false
+	if kind == "grinder":
+		pr.part = MachineModels.grinder(node).wheel
+		yard.sinks.append({"pos": Vector3(pos.x, 0, pos.z), "r": 1.5, "h": 3.0, "id": "grinder:%d" % pr.idx, "accept": func(): return true})
+		if pay:
+			stats.grinders += 1
+	else:
+		pr.part = MachineModels.fan(node).rotor
+		var dir := Vector2(-pos.x, -pos.z).normalized()
+		yard.fans.append({"pos": Vector2(pos.x, pos.z), "dir": dir, "r": FAN_REACH, "k": FAN_PUSH, "idx": pr.idx})
+		if pay:
+			stats.fans += 1
+	_pop_in(node)
+	var lb := _label3d(node, Vector3(0, 3.7 if kind == "grinder" else 3.4, 0), "BAIT GRINDER" if kind == "grinder" else "WIND FAN", 0.013)
+	lb.visibility_range_end = 22.0
+	lb.modulate = Color(1.0, 0.9, 0.7)
+	props.append(pr)
+	scenery.obstacles.append(Vector3(pos.x, pos.z, 1.5))
+	if pay:
+		_say("Bait Grinder built. Throw fish in: each one is bait, and every bite comes sooner." if kind == "grinder" else "Wind Fan built. It blows loose fish along the ice toward the Eye.")
+		sfx.play("buy")
+		_refresh()
+
+## A fish into a grinder (thrown, kicked or clicked in): it becomes bait.
+func _grind(f: Dictionary, at: Vector3) -> void:
+	var secs := minf(BAIT_SECS + 1.5 * f.base * f.mult, 30.0)
+	bait_t = minf(bait_t + secs, BAIT_MAX)
+	stats.grinds += 1
+	_float_text(at + Vector3(0, 3.0, 0), "+%d s bait" % int(secs), Color(0.6, 0.95, 1.0), 0.016)
+	sfx.play("drill", -6.0, 0.6)
+	for pr in props:
+		if pr.kind == "grinder" and (pr.pos as Vector3).distance_to(at) < 3.0:
+			pr["work"] = 1.2
+	_refresh()
+
+func _click_prop(pr: Dictionary) -> void:
+	if pr.is_empty():
+		return
+	if pr.kind == "grinder":
+		var hf := _held_fish()
+		if not hf.is_empty():
+			inv.slots[inv.active] = {}
+			_hands_changed()
+			_grind(hf, pr.pos)
+		else:
+			_say("Bait Grinder: click or throw a single fish in. Buckets stay safe: take a fish out first.")
+	else:
+		_say("Wind Fan: it blows loose fish along the ice toward the Eye.")
+
+func _prop_text(pr: Dictionary) -> String:
+	if pr.is_empty():
+		return ""
+	if pr.kind == "grinder":
+		if not _held_fish().is_empty():
+			return "Click: grind this fish into bait"
+		return "Bait Grinder: throw a fish in (bait %d s)" % int(bait_t)
+	return "Wind Fan: blows fish toward the Eye"
 
 func _use_depot(d: Dictionary) -> void:
 	var fs := inv.take_cargo()
@@ -3963,7 +4073,7 @@ func _aim_raw() -> String:
 
 func _in_range(a: String) -> bool:
 	if a == "olga": return aim_flat <= RANGE_HATCH
-	if a.begins_with("depot:") or a.begins_with("rig:"): return aim_flat <= RANGE_BUILD
+	if a.begins_with("depot:") or a.begins_with("rig:") or a.begins_with("prop:"): return aim_flat <= RANGE_BUILD
 	if a == "eye":
 		var pp: Vector3 = $Player.global_position
 		return Vector2(pp.x, pp.z).length() - EYE_R <= RANGE_EYE
@@ -4079,6 +4189,9 @@ func _prompt_for(a: String) -> String:
 		if not rg.is_empty() and _rig_best(rg).x == 9999:
 			return "Idle Ice-Breaker: click to pick it up (placing it again is free)"
 		return "Ice-Breaker: feeding the Eye from the lake"
+	if a.begins_with("prop:"):
+		var ppi := int(a.substr(5))
+		return _prop_text(props[ppi]) if ppi >= 0 and ppi < props.size() else ""
 	if a.begins_with("item:"):
 		return _ground_text(_ground_by_id(int(a.substr(5))))
 	if a.begins_with("rack:"):
@@ -4105,10 +4218,12 @@ func _prompt_for(a: String) -> String:
 			if build_item <= 1:
 				head = "Click an Auto-Rod with a belt to add a %s (B: switch)" % BUILD_ITEMS[build_item]
 			else:
-				var rad := 2.6 if build_item == 2 else 6.0
+				var rad := 2.6 if build_item == 2 else (2.2 if build_item >= 4 else 6.0)
 				var ok := _can_place_at(Vector3(aim_pos.x, 0, aim_pos.z), rad)
 				if build_item == 3 and rigs.size() >= rig_cap():
 					head = "The lake bears %d ice-breakers: wake the Eye for more" % rig_cap()
+				elif build_item >= 4 and _prop_count("grinder" if build_item == 4 else "fan") >= (MAX_GRINDERS if build_item == 4 else MAX_FANS):
+					head = "You have enough of those out on the ice"
 				elif ok:
 					head = "Click: build %s (%d)  [B: switch]" % [BUILD_ITEMS[build_item], _build_cost(build_item)]
 				else:
@@ -4400,7 +4515,7 @@ func _on_about_to_save() -> void:
 		"loose": loose, "pending": pend, "pos": [p.position.x, p.position.z],
 		"yaw": p.rotation.y, "pitch": cam.rotation.x,
 		"day": day_t, "time": play_time,
-		"depots": depots.map(func(d): return [d.pos.x, d.pos.z]), "rigs": rigs.map(func(rg): return [rg.pos.x, rg.pos.z]),
+		"depots": depots.map(func(d): return [d.pos.x, d.pos.z]), "props": props.map(func(pr): return [pr.kind, pr.pos.x, pr.pos.z]), "bait": bait_t, "rigs": rigs.map(func(rg): return [rg.pos.x, rg.pos.z]),
 		"order": order, "orders_done": orders_done, "lake": model.to_dict()}
 
 func _restore(d: Dictionary) -> bool:
@@ -4483,6 +4598,9 @@ func _restore_inner(d: Dictionary) -> bool:
 		t.smoke_t = hd.get("sm", 0.0)
 	for dp in d.get("depots", []):
 		_build_depot(Vector3(dp[0], 0.0, dp[1]), false)
+	for pd in d.get("props", []):
+		_build_prop(Vector3(pd[1], 0.0, pd[2]), String(pd[0]), false)
+	bait_t = float(d.get("bait", 0.0))
 	for rp in d.get("rigs", []):
 		_build_rig(Vector3(rp[0], 0.0, rp[1]), false)
 	_sync_active()
@@ -4694,6 +4812,11 @@ func _click(a: String) -> void:
 	if a.begins_with("rack:"):
 		_click_rack(int(a.substr(5)))
 		return
+	if a.begins_with("prop:"):
+		var pi := int(a.substr(5))
+		if pi >= 0 and pi < props.size():
+			_click_prop(props[pi])
+		return
 	if a == "olga":
 		_talk_olga()
 		return
@@ -4729,6 +4852,16 @@ func _click(a: String) -> void:
 					_build_depot(bp)
 				else:
 					_say("Can't build a depot there.")
+					sfx.play("deny")
+			elif build_item >= 4:
+				var kind := "grinder" if build_item == 4 else "fan"
+				if _prop_count(kind) >= (MAX_GRINDERS if kind == "grinder" else MAX_FANS):
+					_say("You have enough of those out on the ice.")
+					sfx.play("deny")
+				elif _can_place_at(bp, 2.2):
+					_build_prop(bp, kind)
+				else:
+					_say("Can't build that there.")
 					sfx.play("deny")
 			else:
 				if _can_place_at(bp, 6.0):

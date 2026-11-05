@@ -19,7 +19,8 @@ A first-person cozy ice-fishing incremental in Godot 4.7. Feed the Eye under the
 | E | pick up what you look at (a tool or bucket on the ice), else sweep the fish at your feet into your buckets, then your hands |
 | Z | take one fish out of the bucket in your hand (needs a free slot) |
 | click a bucket on the ice | put the fish in your hand into it, or take one out |
-| B | the Builder's Kit does one build at a time: switch it (Auto-Rod, Smoker, Gut Table, Belt, Cannery, Sorter, Depot, Ice-Breaker) |
+| B | the Builder's Kit does one build at a time: switch it (Auto-Rod, Smoker, Gut Table, Belt, Cannery, Sorter, Depot, Ice-Breaker, Bait Grinder, Wind Fan) |
+| throw or click a fish into a Bait Grinder | it becomes bait: every bite comes sooner for a while |
 | H | ask Olga what to do next |
 | V | snowmobile once bought |
 | Tab | field journal |
@@ -29,7 +30,7 @@ A first-person cozy ice-fishing incremental in Godot 4.7. Feed the Eye under the
 Notes for playtesters are in `PLAYTEST.md` (what to look for, what to write down).
 
 ## Checks (no human needed)
-`tools/run_yard.sh` (fish physics) · `run_hands.sh` (the three slots, grab, throw, buckets, tools on the ice, the rack) · `run_sectors.sh` (sector borders and states) · `run_ui.sh` (menu, settings, HUD feel) · `run_safety.sh` (saves, offline, pause) · `run_guide.sh` (onboarding) · `run_audio.sh` (sound levels) · `run_smoke.sh` (everything, several minutes) · `first10.sh` (a bot plays the first 10 minutes) · `play_bot.sh` (windowed, real input) · `perf_render.sh` (rendered frame times) · `shot.sh` / `showroom.sh` (screenshots).
+`tools/run_yard.sh` (fish physics) · `run_machines.sh` (bait grinder, wind fan) · `run_hands.sh` (the three slots, grab, throw, buckets, tools on the ice, the rack) · `run_sectors.sh` (sector borders and states) · `run_ui.sh` (menu, settings, HUD feel) · `run_safety.sh` (saves, offline, pause) · `run_guide.sh` (onboarding) · `run_audio.sh` (sound levels) · `run_smoke.sh` (everything, several minutes) · `first10.sh` (a bot plays the first 10 minutes) · `play_bot.sh` (windowed, real input) · `perf_render.sh` (rendered frame times) · `shot.sh` / `showroom.sh` (screenshots).
 
 ## Docs
 `docs/STYLE.md` (the look), `docs/DECISIONS.md` (why things are the way they are), `docs/BALANCE.md`, `docs/ROADMAP.md`.

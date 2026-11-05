@@ -32,6 +32,7 @@ var player_vel := Vector3.ZERO       # flat velocity of the player: a walk-push 
 var edge_fn := Callable()            # (x, z) -> the shoreline radius in that direction
 var swallow_enabled := true
 var sinks: Array = []             # machines that take a fish thrown at them: {pos, r, h, id, accept: Callable}
+var fans: Array = []              # wind fans: {pos: Vector2, dir: Vector2 (unit), r: reach, k: push (m/s^2)}; they blow fish along the ice
 var last_collected: Array = []      # where the fish of the last collect() lay (for the pickup flight)
 
 func count() -> int:
@@ -104,6 +105,16 @@ func _step(delta: float, player: Vector3) -> void:
 			var k := 1.0 - clampf((d - pupil_r) / (eye_r + PULL_RANGE - pupil_r), 0.0, 1.0) * 0.45
 			v.x -= p.x / d * pull * k * dt
 			v.z -= p.z / d * pull * k * dt
+		if p.y < 1.4 and not fans.is_empty():   # a fan blows a cone of wind: fish lying (or skidding) in it drift downwind
+			for fn in fans:
+				var fo := Vector2(p.x - fn.pos.x, p.z - fn.pos.y)
+				var along: float = fo.dot(fn.dir)
+				if along > 0.0 and along < fn.r:
+					var lat := absf(fo.x * fn.dir.y - fo.y * fn.dir.x)
+					if lat < 2.4 + 0.3 * along:
+						var gust: float = fn.k * (1.0 - along / fn.r) * (1.0 - lat / (2.4 + 0.3 * along) * 0.5)
+						v.x += fn.dir.x * gust * dt
+						v.z += fn.dir.y * gust * dt
 		if d < pupil_r * 0.92 and swallow_enabled and p.y < 1.6:
 			swallow_now.append(e)
 		# the lake's edge and the camp's walls
