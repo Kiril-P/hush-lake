@@ -98,6 +98,9 @@ const PERKS := {
 	"seed":    {"name": "Seed Money",   "desc": "start each lake with +40 coins",      "cost": 1, "max": 5},
 	"favour":  {"name": "Olga's Favour", "desc": "+10% sale value, always",            "cost": 3, "max": 5},
 	"hands":   {"name": "Quick Hands",  "desc": "start with +1 drill speed level",     "cost": 2, "max": 3},
+	"lantern": {"name": "Lantern Lore", "desc": "visitor fish come 25% more often",    "cost": 3, "max": 3},
+	"ears":    {"name": "Keen Ears",    "desc": "keepsakes surface 20% more often",    "cost": 2, "max": 3},
+	"coils":   {"name": "Spare Coils",  "desc": "start each lake with +1 Overdrive",   "cost": 4, "max": 3},
 }
 const SECTOR_PERK := 0.02   # +2% sale value per cleared sector
 const COMBO_WINDOW := 14.0   # long enough to push a catch to the Eye between casts
@@ -141,6 +144,7 @@ const UPGRADES := {
 	"wide":     {"name": "Wide Drill",  "base": 60.0,  "growth": 2.2,  "max": 3, "desc": "drilling opens neighbours"},
 	"snowmobile": {"name": "Snowmobile", "base": 90.0, "growth": 2.6, "max": 3, "desc": "V to ride: faster and faster"},
 	"kick":     {"name": "Kick Power", "base": 20.0,  "growth": 1.8,  "max": 5, "start": true, "desc": "kicks send fish farther"},
+	"overdrive": {"name": "Overdrive Coils", "base": 900.0, "growth": 2.4, "max": 5, "desc": "auto-rods and Ice-Breakers work 20% faster"},
 	"conveyor": {"name": "Belt Motor",  "base": 140.0, "growth": 2.3,  "max": 4, "desc": "belts run faster, +15% value"},
 }
 
@@ -205,7 +209,7 @@ const GOALS := [
 	{"text": "Tithe the Eye", "stat": "tithe", "target": 1, "reward": 100,
 		"line": "Olga: It likes being given things. Every offering makes the fish worth more."},
 	{"text": "Reach Eye stage 3", "stat": "eye_stage", "target": 3, "reward": 400,
-		"line": "Olga: Its eyelid is all the way up now. Build more rigs. It wants more."},
+		"line": "Olga: Its eyelid is all the way up now. Build more rigs. It wants more. And a man at the stalls sells coils: they make the machines work harder.", "unlock": ["overdrive"]},
 	{"text": "Own 2 Ice-Breakers", "stat": "rigs", "target": 2, "reward": 1200,
 		"line": "Olga: Two of those monsters... the lake is shaking."},
 	{"text": "Tithe the Eye 5 times", "stat": "tithe", "target": 5, "reward": 800,
@@ -1323,6 +1327,12 @@ void fragment() {
 	lcc.add_child(letters_panel)
 	ui.add_child(lcc)
 	letters_panel.read_letter.connect(_on_letter_read)
+	ledger_panel = LedgerPanel.new()
+	var lgc := CenterContainer.new()
+	lgc.set_anchors_preset(Control.PRESET_FULL_RECT)
+	lgc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	lgc.add_child(ledger_panel)
+	ui.add_child(lgc)
 	dream = DreamOverlay.new()
 	add_child(dream)
 	map_ctrl = Control.new()
@@ -1557,7 +1567,8 @@ func walk_speed() -> float: return (6.0 + 1.6 * GameState.level("boots")) * ride
 func work_speed() -> float: return 1.0 + 0.6 * GameState.level("drill")
 func drill_time() -> float: return DRILL_BASE_TIME / work_speed()
 func wait_time(t: Dictionary) -> float: return randf_range(2.0, 5.0) * bite_mult() * model.wait_factor(t.c)
-func _auto_wait(t: Dictionary) -> float: return randf_range(AUTO_WAIT[0], AUTO_WAIT[1]) * bite_mult() * model.wait_factor(t.c)
+func overdrive_mult() -> float: return 1.0 + 0.2 * GameState.level("overdrive")
+func _auto_wait(t: Dictionary) -> float: return randf_range(AUTO_WAIT[0], AUTO_WAIT[1]) * bite_mult() * model.wait_factor(t.c) / overdrive_mult()
 func auto_cost() -> float: return ceil(AUTO_BASE * pow(AUTO_GROWTH, _count("auto")))
 func smoker_cost() -> float: return ceil(90.0 * pow(1.5, _count("smoker")))
 func table_cost() -> float: return ceil(60.0 * pow(1.5, _count("table")))
@@ -1601,6 +1612,10 @@ func _make_fish(s: Dictionary) -> Dictionary:
 		"len": l, "lenk": l / ((r[0] + r[1]) * 0.5)}
 
 func _note_found(f: Dictionary) -> void:
+	var ls: Array = GameState.meta.get("life_species", [])
+	if not ls.has(f.name):
+		ls.append(f.name)
+		GameState.meta["life_species"] = ls
 	if not journal.has(f.name):
 		_log("FOUND %s" % f.name)
 		_banner("NEW DISCOVERY: %s  (%d coins)" % [f.name, _species_value(f.name)], Style.AMBER)
@@ -1624,7 +1639,7 @@ func _draw_fish(t: Dictionary) -> Dictionary:
 		if vn != "":
 			n = vn
 	var f := _make_fish(_species(n))
-	if n in ["Old Boot", "Old Coin", "Glass Pearl"] and keep_rng.randf() < KEEP_CHANCE:
+	if n in ["Old Boot", "Old Coin", "Glass Pearl"] and keep_rng.randf() < KEEP_CHANCE * (1.0 + 0.2 * perk_level("ears")):
 		var kp := Story.roll_keep(n, story, keep_rng)
 		if not kp.is_empty():
 			f["keep"] = kp.id
@@ -1636,6 +1651,7 @@ var visitor_rng := RandomNumberGenerator.new()
 
 # ---------- the story (story.gd): letters, keepsakes, dreams, the ending ----------
 var story: Dictionary = Story.blank()
+var ledger_panel: LedgerPanel
 var letters_panel: LettersPanel
 var dream: DreamOverlay
 var keep_rng := RandomNumberGenerator.new()
@@ -1736,7 +1752,8 @@ func _found_keep(k: Dictionary) -> void:
 
 func visitor_ctx() -> Dictionary:
 	return {"night": scenery._night, "weather": weather.cur if weather else "clear", "aurora": weather.aurora_on() if weather else false,
-		"dawn": Visitors.is_dawn(day_t), "eye_stage": eye_stage(), "stages": EYE_STAGES.size()}
+		"dawn": Visitors.is_dawn(day_t), "eye_stage": eye_stage(), "stages": EYE_STAGES.size(),
+		"mult": (1.0 + 0.25 * perk_level("lantern")) * float(model.mod_info().get("visitors", 1.0))}
 func _after_draw(t: Dictionary) -> void:
 	var cell: Dictionary = tiles[t.c]
 	_update_shadows(cell)
@@ -1878,6 +1895,7 @@ func _refresh() -> void:
 	_sync_active()
 	_check_goals()
 	_check_story()
+	_check_ledger()
 	coins_target = floor(GameState.currency)
 	if coins_shown < 0.0:
 		coins_shown = coins_target
@@ -2283,7 +2301,7 @@ func _process(delta: float) -> void:
 	var a := raw if _in_range(raw) else ""
 	if not captured:
 		prompt_label.text = ""
-	elif journal_panel.visible or refreeze_panel.visible or letters_panel.visible:
+	elif journal_panel.visible or refreeze_panel.visible or letters_panel.visible or ledger_panel.visible:
 		prompt_label.text = ""   # (the tithe prompt used to print across the journal)
 	elif raw != "" and a == "":
 		prompt_label.text = "" if raw == "ice" else "Too far - walk closer"
@@ -4346,7 +4364,7 @@ func _tick_rigs(delta: float) -> void:
 		if not f.is_empty():
 			_belt_push(rg.belt, f)
 			_after_draw(pseudo)
-		rg.t = RIG_INTERVAL * model.wait_factor(best) * 0.6 + 0.6
+		rg.t = (RIG_INTERVAL * model.wait_factor(best) * 0.6 + 0.6) / overdrive_mult()
 
 func _remove_belt(t: Dictionary) -> void:
 	var belt: Dictionary = t.belt
@@ -4674,6 +4692,73 @@ func _wide_drill(t: Dictionary) -> void:
 func _meta_int(k: String) -> int:
 	return int(GameState.meta.get(k, 0))
 
+## Adds this lake's totals to the lifetime record (called as the lake is banked).
+func _bank_life() -> void:
+	var life: Dictionary = GameState.meta.get("life", {})
+	life["fed"] = int(life.get("fed", 0)) + int(stats.eye_fed)
+	life["caught"] = int(life.get("caught", 0)) + int(stats.caught)
+	life["sectors"] = int(life.get("sectors", 0)) + model.cleared_count()
+	life["tithe"] = int(life.get("tithe", 0)) + int(stats.tithe)
+	life["rigs"] = int(life.get("rigs", 0)) + int(stats.rigs)
+	GameState.meta["life"] = life
+
+## Lifetime value of a ledger entry: what earlier lakes banked plus the lake in progress.
+func ledger_value(key: String) -> float:
+	var life: Dictionary = GameState.meta.get("life", {})
+	match key:
+		"fed": return float(life.get("fed", 0)) + float(stats.eye_fed)
+		"caught": return float(life.get("caught", 0)) + float(stats.caught)
+		"lakes": return float(_meta_int("lakes"))
+		"sectors": return float(life.get("sectors", 0)) + float(model.cleared_count())
+		"tithe": return float(life.get("tithe", 0)) + float(stats.tithe)
+		"rigs": return float(life.get("rigs", 0)) + float(stats.rigs)
+		"species":
+			var sp: Array = GameState.meta.get("life_species", [])
+			var n := sp.size()
+			for k in journal:
+				if not sp.has(k):
+					n += 1
+			return float(n)
+		"visitors":
+			var sv: Array = GameState.meta.get("life_species", [])
+			var seen := {}
+			for k in sv:
+				if Visitors.is_visitor(k):
+					seen[k] = true
+			for k in journal:
+				if Visitors.is_visitor(k):
+					seen[k] = true
+			return float(seen.size())
+		"keeps": return float(story.keeps.size())
+		"letters": return float(story.read.size())
+		"ending": return 1.0 if story.ending else 0.0
+	return 0.0
+
+## Pays out any ledger tiers passed (pearls, once each). Cheap: eleven comparisons.
+func _check_ledger() -> void:
+	if restoring or title_active:
+		return
+	var claimed: Dictionary = GameState.meta.get("ledger", {})
+	var pay := Ledger.claimable(ledger_value, claimed)
+	if pay.is_empty():
+		return
+	var total := 0
+	for p in pay:
+		claimed[p.id] = maxi(int(claimed.get(p.id, 0)), int(p.tier))
+		total += int(p.pearls)
+	GameState.meta["ledger"] = claimed
+	GameState.meta["pearls"] = _meta_int("pearls") + total
+	GameState.meta["ledger_pearls"] = _meta_int("ledger_pearls") + total
+	var first: Dictionary = pay[0]
+	_banner("LEDGER: %s  +%d pearls" % [first.name, total], Style.AMBER)
+	_log("LEDGER +%d pearls (%s)" % [total, ",".join(pay.map(func(p): return "%s%d" % [p.id, p.tier]))])
+	sfx.play("goal", -6.0)
+	if ledger_panel.visible:
+		_update_ledger()
+
+func _update_ledger() -> void:
+	ledger_panel.show_rows(Ledger.rows(ledger_value), _meta_int("pearls"), _meta_int("ledger_pearls"), Ledger.total_pearls())
+
 func perk_level(id: String) -> int:
 	return int(GameState.meta.get("perks", {}).get(id, 0))
 
@@ -4702,7 +4787,13 @@ func _update_refreeze() -> void:
 	out.append("Pearls: %d     This lake is worth +%d more" % [_meta_int("pearls"), pearls_pending()])
 	var best := float(GameState.meta.get("best_time", 0.0))
 	out.append("Lakes finished: %d     Fastest clear: %s" % [_meta_int("lakes_cleared"), _clock(best) if best > 0.0 else "-"])
-	out.append("Next lake: %d%% more fish, fish worth %d%% more\n" % [int(30.0 * (_meta_int("lakes") + 1)), int(DEPTH_VALUE * 100.0 * (_meta_int("lakes") + 1))])
+	out.append("Next lake: %d%% more fish, fish worth %d%% more" % [int(30.0 * (_meta_int("lakes") + 1)), int(DEPTH_VALUE * 100.0 * (_meta_int("lakes") + 1))])
+	out.append("Choose its character (Z X C):")
+	var offs := lake_offers()
+	for oi in offs.size():
+		var mi: Dictionary = LakeModelScript.MODS[offs[oi]]
+		out.append("   %s %s   %s" % ["[%s]" % "ZXC"[oi], ("> " if oi == lake_pick() else "  ") + String(mi.name), mi.desc])
+	out.append("")
 	var i := 1
 	for id in PERKS:
 		var p: Dictionary = PERKS[id]
@@ -4719,7 +4810,31 @@ func _update_refreeze() -> void:
 	refreeze_label.text = "\n".join(out)
 
 ## Returns true if the key was used by the panel.
+## Three lake characters to choose from for the next winter (rolled once per lake, kept in the meta so closing the panel does not reroll).
+func lake_offers() -> Array:
+	var m := GameState.meta
+	var offs: Array = m.get("offers", [])
+	if offs.size() != 3 or int(m.get("offers_for", -1)) != _meta_int("lakes") or offs.any(func(o): return not LakeModelScript.MODS.has(o)):
+		var pool: Array = LakeModelScript.MODS.keys().filter(func(k): return k != "")
+		pool.shuffle()
+		offs = pool.slice(0, 3)
+		m["offers"] = offs
+		m["offers_for"] = _meta_int("lakes")
+		m["pick"] = 0
+	return offs
+
+func lake_pick() -> int:
+	lake_offers()
+	return clampi(int(GameState.meta.get("pick", 0)), 0, 2)
+
 func _refreeze_key(key: int) -> bool:
+	if key in [KEY_Z, KEY_X, KEY_C]:
+		lake_offers()
+		GameState.meta["pick"] = [KEY_Z, KEY_X, KEY_C].find(key)
+		sfx.play("tick", -4.0, 1.2)
+		refreeze_armed = false
+		_update_refreeze()
+		return true
 	var k := key - KEY_1
 	if k >= 0 and k < PERKS.size():
 		var id: String = PERKS.keys()[k]
@@ -4763,6 +4878,7 @@ func _refreeze() -> void:
 ## Banks pearls, rolls the next lake's modifier and writes a fresh run to disk (split out so tests can call it).
 func _bank_and_reset() -> void:
 	var gain := pearls_pending()
+	var chosen: String = lake_offers()[lake_pick()]   # (read before the lake count moves on: the offers belong to this lake)
 	var m := GameState.meta
 	m.pearls = _meta_int("pearls") + gain
 	m.lakes = _meta_int("lakes") + 1
@@ -4772,13 +4888,15 @@ func _bank_and_reset() -> void:
 		var t := float(stats.get("ended_time", play_time))
 		if best <= 0.0 or t < best:
 			m.best_time = t
-	var mods: Array = LakeModelScript.MODS.keys().filter(func(k): return k != "")
-	m.next_mod = mods.pick_random()
+	m.next_mod = chosen   # the lake you picked (the first offer if you did not pick)
+	m.erase("offers")
+	_bank_life()
 	_log("REFREEZE: +%d pearls, lake %d done in %s" % [gain, _meta_int("lakes"), _clock(play_time)])
 	GameState.autosave = false
 	GameState.reset(true)
 	GameState.upgrades["bucket"] = mini(perk_level("pockets"), UPGRADES.bucket.max)
 	GameState.upgrades["drill"] = mini(perk_level("hands"), UPGRADES.drill.max)
+	GameState.upgrades["overdrive"] = mini(perk_level("coils"), UPGRADES.overdrive.max)
 	GameState.currency = 40.0 * perk_level("seed")
 	GameState.save_game(false)
 
@@ -5015,13 +5133,13 @@ func _offline(away: float) -> void:
 				break
 			earned += _settle_fish(rf, _belt_mult() * _belt_flag_mult(rg.belt, rf), true, false)
 			_after_draw(pseudo)
-			rb -= (RIG_INTERVAL * model.wait_factor(best) * 0.6 + 0.6) * 2.5
+			rb -= (RIG_INTERVAL * model.wait_factor(best) * 0.6 + 0.6) / overdrive_mult() * 2.5
 	for t in holes:
 		if t.state != "auto":
 			continue
 		var budget := away
 		while budget > 0.0 and model.tile_left(t.c) > 0:
-			budget -= (AUTO_WAIT[0] + AUTO_WAIT[1]) * 0.5 * bite_mult_base() * model.wait_factor(t.c)
+			budget -= (AUTO_WAIT[0] + AUTO_WAIT[1]) * 0.5 * bite_mult_base() * model.wait_factor(t.c) / overdrive_mult()
 			if t.belt != null:
 				var f := _draw_fish(t)
 				if f.is_empty():
@@ -5097,7 +5215,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.keycode == KEY_P and _cap() and not journal_panel.visible and not refreeze_panel.visible:
 			_toggle_photo()
 			return
+		if event.keycode == KEY_L and _cap() and not refreeze_panel.visible and not journal_panel.visible:
+			ledger_panel.visible = not ledger_panel.visible
+			if ledger_panel.visible:
+				_update_ledger()
+			return
 		if event.keycode == KEY_TAB:
+			ledger_panel.visible = false
 			refreeze_panel.visible = false
 			journal_panel.visible = not journal_panel.visible
 			if journal_panel.visible:

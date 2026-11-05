@@ -18,6 +18,7 @@ func fresh(slot: String):
 	add_child(g)
 	await get_tree().process_frame
 	await get_tree().process_frame
+	GameState.meta["ledger"] = Ledger.all_claimed()   # (the ledger pays pearls: these tests count pearls exactly)
 	return g
 
 func reload(g, slot: String):

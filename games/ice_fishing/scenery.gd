@@ -28,6 +28,7 @@ const SHOP_SPOTS := {
 	"conveyor": [-140.0, 50.0],
 	"snowmobile": [-14.0, 36.0],
 	"kick":     [21.0, 24.0],
+	"overdrive": [-114.0, 38.0],
 }
 
 var noise := FastNoiseLite.new()

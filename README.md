@@ -27,6 +27,10 @@ A first-person cozy ice-fishing incremental in Godot 4.7. Feed the Eye under the
 | F5 | (debug) cycle the weather |
 | R | refreeze (after clearing sectors) |
 | M | mute |
+| P | photo mode: hides the interface, scroll zooms, click or Enter saves a picture to `user://photos/` |
+| L | the Ledger: lifetime goals that pay pearls |
+| click the mailbox | read Olga's letters (A/D turn the page, E closes) |
+| Z X C (at the refreeze card) | choose the next lake's character |
 
 Notes for playtesters are in `PLAYTEST.md` (what to look for, what to write down).
 
@@ -35,3 +39,7 @@ Notes for playtesters are in `PLAYTEST.md` (what to look for, what to write down
 
 ## Docs
 `docs/STYLE.md` (the look), `docs/DECISIONS.md` (why things are the way they are), `docs/BALANCE.md`, `docs/ROADMAP.md`.
+
+## Art, sound, story and progression pipeline (tools)
+- `tools/refshots.sh` renders 20 fixed clean frames; GPT agents turn each into reference images (`docs/ART_PIPELINE.md`, `docs/refs/`); Claude rebuilds the scene from the delta list (`docs/refs/DELTA.md`); `tools/contact_sheet.py` and `tools/refs_pack.py` build and shrink the before | reference | after sheets.
+- The score (`shared/score.gd`), the visitor fish and journal (`visitors.gd`), the story (`story.gd`, `docs/STORY.md`), the Ledger (`ledger.gd`). Suites: `tools/run_score.sh`, `run_fishing.sh`, `run_story.sh`, `run_progress.sh`.

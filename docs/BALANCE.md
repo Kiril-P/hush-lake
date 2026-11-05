@@ -60,3 +60,14 @@ Still true: a few tens of thousands of unspent coins at the very end of a lake. 
 Buckets are physical: you buy several (6 coins, x1.9 each, max 5) and each holds 4 fish (Bucket Size upgrade: 4, 6, 9, 13, 18, 25). With three slots you realistically haul two buckets plus a tool, so `capacity()` (used by the sim) is `min(buckets, 2) x bucket size` and 1 with no bucket. The sled bonus of the snowmobile (+10 carry) is gone: level 3 is just the fastest ride. Re-run: optimal play empties the first lake in ~50 min (active 100%) and ~68 min (active 50%), a little faster than before at 100% (cheaper bucket steps); not retuned (the 50% case sits inside 55-90). The first-10 bot: bucket at ~16 s, Auto-Rod at ~222 s (it makes two trips to the tool rack).
 
 The Bait Grinder and Wind Fan are not in `tools/econ_sim.gd` (the sim buys by pay-back and models neither): they are optional power for players who engage with them. Bait at its best is a x0.6 wait while it lasts; the grinder's cost is the fish itself.
+
+## Progression pass (ledger, lake choice, Overdrive)
+Targets the "late-game coin glut" and "dead stretch" gaps above without touching the lake's stock or the Eye stages:
+- **Overdrive Coils** (new shop upgrade, unlocked by the Eye-stage-3 goal): base 900 coins, x2.4 per level, 5 levels, each +20% work speed for auto-rods and
+  Ice-Breakers (level 5 halves an auto-rod's wait). It is the coin sink for the 35-min-plus glut: 900 / 2.2k / 5.2k / 12.4k / 30k = ~50k coins in all.
+  The econ sim does not model it (it buys what pays back fastest and has no Overdrive), so the first-lake times above are unchanged; with Overdrive
+  bought, expect the late half of a lake to run 15-30% faster. Needs a human run to confirm the feel.
+- **Choose the next lake**: three of the seven characters are offered at refreeze (Z X C); two new ones (Long Night: visitors x2, Deep: +60% fish).
+- **Ledger** (L): 11 lifetime goals, 110 pearls over every tier (the first ~25 pearls arrive in the first few lakes). Pearls buy perks: seven now
+  (Lantern Lore, Keen Ears and Spare Coils are new: they change *what you find* and *how fast the machines start*, not the sale price).
+- Not retuned: Eye stage costs, sector rewards, tithe value. Re-run `tools/run_econ.sh` after any change to those.

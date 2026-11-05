@@ -292,3 +292,11 @@ Built in layers with a headless suite (`tools/run_opening.sh`, 60+ checks), a re
   per refreeze, and an ending that lights the village. State lives in `GameState.meta["story"]` (survives refreezing).
 - `keep` is set at draw time (when the fish leaves the lake's stock), not at catch time, so a keepsake found by an auto-rod is not lost.
 - The ending never locks anything; it pays 10 pearls once.
+
+## Progression: ledger, lake choice, Overdrive, perks
+- **Ledger** (`ledger.gd`, L): lifetime goals that survive refreezing and pay pearls once per tier. Lifetime = banked totals (`meta.life`) + the lake in
+  progress, so nothing needs per-event hooks. Species/visitor counts come from `meta.life_species`. Tests that count pearls exactly pre-claim the ledger.
+- **Choosing the lake** replaces the random pick: three offers rolled once per lake (kept in the meta so closing the panel does not reroll), `Z X C`.
+  Read before the lake counter moves on (a bug the test caught: the offers belong to the lake you are leaving).
+- **Overdrive Coils**: a plain shop upgrade (stall at bearing -114, 38 m) so it needs no new machine state; multiplies auto-rod and rig speed, online and offline.
+- **Open question:** whether 900 x2.4 is the right price curve; it is tuned against the coin glut, not against play.

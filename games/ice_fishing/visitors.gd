@@ -48,7 +48,7 @@ static func roll(ctx: Dictionary, rng: RandomNumberGenerator) -> String:
 			"aurora": ok = bool(ctx.get("aurora", false)) and float(ctx.get("night", 0.0)) > 0.5
 			"dawn": ok = bool(ctx.get("dawn", false))
 			"eye5": ok = int(ctx.get("eye_stage", 0)) >= int(ctx.get("stages", 5))
-		if ok and rng.randf() < float(v.chance):
+		if ok and rng.randf() < float(v.chance) * float(ctx.get("mult", 1.0)):
 			return n
 	return ""
 

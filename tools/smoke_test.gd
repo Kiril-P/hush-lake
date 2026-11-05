@@ -448,7 +448,7 @@ func _ready() -> void:
 
 	# --- refreeze: pearls, perks, fresh run
 	check("refreeze needs 3 cleared sectors", g.model.cleared_count() >= 1 and not g._can_refreeze())
-	GameState.meta = {"pearls": 10}
+	GameState.meta = {"pearls": 10, "ledger": Ledger.all_claimed()}
 	check("perk costs scale with level", g.perk_cost("favour") == 3)
 	var sale0: float = g.sale_mult()
 	g._refreeze_key(KEY_3)
