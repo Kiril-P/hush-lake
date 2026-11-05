@@ -516,7 +516,9 @@ func _ready() -> void:
 	_update_sector_hud(1.0)
 	sfx.start_ambient()
 	_log("--- session start (resumed=%s) ---" % resumed)
-	var with_title := not GameState.save_slot.begins_with("test") or has_meta("force_title")
+	var with_title := (not GameState.save_slot.begins_with("test") and (resumed or _meta_int("lakes") == 0)) or has_meta("force_title")
+	if not resumed and _meta_int("lakes") > 0:
+		stats["ajar"] = 1   # (a refrozen lake: you have seen the Eye open; no title, no sled)
 	if resumed:
 		_say_notice("Welcome back!")
 		_offline(away)
@@ -537,6 +539,10 @@ func _open_title(resumed: bool) -> void:
 	title_active = true
 	title_t = 0.0
 	title_resumed = resumed
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE   # the cursor is free for the title buttons (the Player rig captures the mouse on its own at launch)
+	$Player.set_process_unhandled_input(false)
+	if not resumed:
+		GameState.autosave = false   # a new game is not a save until the opening has finished: quitting early must not leave a half-started run
 	guide.cam_home = cam.position   # (taken now: the title camera is about to take over)
 	guide.cam_pitch = cam.rotation.x
 	guide.cam_preset = true
@@ -549,7 +555,8 @@ func _open_title(resumed: bool) -> void:
 	title.settings_pressed.connect(func(): menu.open_page("settings"))
 	title.controls_pressed.connect(func(): menu.open_page("controls"))
 	title.quit_pressed.connect(func():
-		GameState.save_game()
+		if GameState.autosave:
+			GameState.save_game()
 		get_tree().quit())
 	title.left.connect(_title_go)
 	title_hidden.clear()
@@ -2063,7 +2070,7 @@ func _process(delta: float) -> void:
 	if cap_now and not title_active:
 		ever_captured = true
 	# Esc frees the mouse and really pauses: no bites expire, no machines run, no timers tick (cutscenes play on)
-	var want_pause := ever_captured and not cap_now and not guide.intro_active
+	var want_pause := ever_captured and not cap_now and not guide.intro_active and title == null
 	if title_active:
 		cap_now = false
 		want_pause = false
@@ -2151,7 +2158,8 @@ func _process(delta: float) -> void:
 
 func _animate(delta: float) -> void:
 	var tm := Time.get_ticks_msec() * 0.001
-	play_time += delta
+	if not title_active:
+		play_time += delta
 	if not title_active and not (guide.intro_active and guide.scene == "intro"):   # the clock waits through the title and the opening
 		day_t = fmod(day_t + delta / DAY_LENGTH, 1.0)
 	sky_t -= delta
@@ -2159,7 +2167,8 @@ func _animate(delta: float) -> void:
 		sky_t = 0.2
 		scenery.set_time(day_t)
 	weather.enabled = GameSettings.on("weather")
-	weather.tick(delta, scenery._night, not guide.intro_active)
+	if not title_active:   # (the weather's calm start and the run timer are for play, not for the title)
+		weather.tick(delta, scenery._night, not guide.intro_active)
 	living.update(delta, scenery._night, $Player.global_position, guide.intro_active)
 	sfx.set_weather(weather.vals.wind, weather.vals.snow, scenery._night)
 	session_t += delta
@@ -4875,6 +4884,8 @@ func _new_game() -> void:
 	get_tree().reload_current_scene()
 
 func _unhandled_input(event: InputEvent) -> void:
+	if title_active or (title != null and not guide.intro_active):   # the title owns the keyboard (its own Enter handler); nothing leaks into the world behind it
+		return
 	if guide.intro_active:
 		if guide.intro_t > guide.skip_after and ((event is InputEventMouseButton and event.pressed) or (event is InputEventKey and event.pressed and event.keycode in [KEY_SPACE, KEY_ENTER, KEY_E])):
 			guide.skip_intro()

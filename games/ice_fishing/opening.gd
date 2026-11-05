@@ -444,6 +444,7 @@ func _intro_pose(t: float, pos: Vector3, h: Vector3) -> Dictionary:
 ## Restores everything the scene touched. `skipped`: the player skipped (jump straight to the end state).
 func finish(kind: String, skipped: bool) -> void:
 	game.flash_rect.color = Color(0.01, 0.02, 0.05, 0.0)
+	GameState.autosave = not GameState.save_slot.begins_with("test")   # the run is real now: it may be saved
 	game.sfx.set_hum(0.1)
 	if kind == "intro":
 		game.scenery.eye_prelude(false)

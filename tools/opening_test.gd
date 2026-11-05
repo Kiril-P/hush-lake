@@ -70,6 +70,18 @@ func _ready() -> void:
 	check("the hum is up", g.sfx.hum_target > 0.4)
 	check("the world is not paused behind the title", not g.sim_paused and not g.ever_captured)
 	check("the buttons are not clickable until they have faded in", g.title.ready_t > 0.0)
+	check("the cursor is free and the player rig is not listening while the title is up", Input.mouse_mode == Input.MOUSE_MODE_VISIBLE and not g.get_node("Player").is_processing_unhandled_input())
+	var coins_t: float = GameState.currency
+	for kc in [KEY_R, KEY_TAB, KEY_V, KEY_F2, KEY_F5, KEY_N, KEY_E, KEY_Q]:
+		var kev := InputEventKey.new()
+		kev.keycode = kc
+		kev.pressed = true
+		g._unhandled_input(kev)
+	check("no key leaks into the world behind the title (no panels, no debug coins, no weather change)", not g.refreeze_panel.visible and not g.journal_panel.visible and GameState.currency == coins_t and g.weather.cur == "clear" and not g.riding)
+	var pt0: float = g.play_time
+	var we0: float = g.weather.elapsed
+	await get_tree().create_timer(1.0).timeout
+	check("the run timer and the weather's calm start wait through the title", absf(g.play_time - pt0) < 0.01 and absf(g.weather.elapsed - we0) < 0.01)
 	# Settings opens the card over the title; Esc comes back to the title (it does not start play)
 	g.title.ready_t = 0.0
 	g.title.settings_pressed.emit()
@@ -151,6 +163,45 @@ func _ready() -> void:
 	Engine.time_scale = 1.0
 	check("the team reaches the hut, disappears, and Olga is at her window again", g.opening.rig == null and g.scenery.olga.root.visible)
 	g.queue_free()
+	await get_tree().process_frame
+
+	# ---------- a new game is not a save until its opening has finished ----------
+	GameState.save_slot = "opening_autosave_test"
+	GameState.delete_save()
+	GameState.reset()
+	var ga = load("res://games/ice_fishing/ice_fishing.tscn").instantiate()
+	ga.set_meta("force_title", true)
+	add_child(ga)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	ga.test_capture = true
+	check("autosave is off while a new game sits on its title", not GameState.autosave)
+	ga.title._on_play()
+	Engine.time_scale = 8.0
+	var guard_a := 0
+	while not ga.guide.intro_active and guard_a < 600:
+		await get_tree().process_frame
+		guard_a += 1
+	check("...and through the sled run (quitting early leaves no half-started save)", not GameState.autosave and not GameState.has_save())
+	ga.guide.skip_intro()
+	Engine.time_scale = 1.0
+	check("once the opening is over the run may be saved", GameState.autosave)
+	GameState.autosave = false
+	GameState.delete_save()
+	ga.queue_free()
+	await get_tree().process_frame
+	# a refrozen lake goes straight to play: no title, no sled, the Eye already ajar
+	GameState.save_slot = "opening_lake2_test"
+	GameState.delete_save()
+	GameState.reset()
+	GameState.meta["lakes"] = 1
+	var gl = load("res://games/ice_fishing/ice_fishing.tscn").instantiate()
+	add_child(gl)
+	await get_tree().process_frame
+	check("a second lake has no title and no opening, and the Eye stays ajar", gl.title == null and not gl.title_active and not gl.guide.want_intro and int(gl.stats.ajar) == 1)
+	GameState.autosave = false
+	GameState.delete_save()
+	gl.queue_free()
 	await get_tree().process_frame
 
 	# ---------- skipping ----------

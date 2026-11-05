@@ -39,7 +39,7 @@ void fragment(){
 	float edge = min(ex * 0.8, ey);
 	float n = fbm(p * 3.0 + 7.0);
 	float reach = grow * 0.2;
-	float cover = 1.0 - smoothstep(reach * 0.15, reach, edge + (n - 0.5) * 0.22 * grow);
+	float cover = 1.0 - smoothstep(reach * 0.15, max(reach, 0.0001), edge + (n - 0.5) * 0.22 * grow);
 	// fine crystal veins, strongest right at the glass edge and thinning toward the clear middle
 	vec3 v = voro(p * 22.0 + n * 2.0);
 	float vein = (1.0 - smoothstep(0.0, 0.03, v.x)) * cover;
