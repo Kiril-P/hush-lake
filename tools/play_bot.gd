@@ -207,6 +207,106 @@ func _ready() -> void:
 		dep_wait += 0.1
 	check("the depot sled fed the Eye", g.stats.eye_fed == fed_dep + 1)
 
+	# 7. the hands with real input: a bucket, Q to set it down, a click to put a fish in and one to take it out, E to pick it up
+	GameState.currency = 2000.0
+	g._buy("bucket")
+	await frames(3)
+	check("buying a bucket puts it in a slot (here: the fish-free third slot or the ground)", g.inv.bucket_count() + g.ground.size() >= 1)
+	for i in 3:
+		if g.inv.slots[i].get("k", "") == "bucket":
+			key(KEY_1 + i)
+	await frames(3)
+	check("a number key holds the bucket", g._held_kind() == "bucket")
+	player.global_position = Vector3(-8.2, g.EYE_H, 14.3)
+	player.rotation.y = deg_to_rad(-30.0)
+	g.cam.rotation.x = deg_to_rad(-12.0)
+	key(KEY_Q)
+	await frames(4)
+	check("Q sets the bucket down on the ice", g.ground.size() >= 1 and g._held_kind() == "")
+	var bk: Dictionary = {}
+	for gi in g.ground:
+		if gi.item.k == "bucket":
+			bk = gi
+	aim_at(bk.pos + Vector3(0, 0.4, 0))
+	await frames(3)
+	check("aiming at it finds the bucket", g._aim().begins_with("item:"))
+	g.inv.slots[g.inv.active] = Inventory.fish_item(g.roll_fish())
+	g._hands_changed()
+	mouse(true)
+	mouse(false)
+	await frames(3)
+	check("clicking it with a fish in hand puts the fish in", bk.item.fish.size() == 1 and g._held_fish().is_empty())
+	mouse(true)
+	mouse(false)
+	await frames(3)
+	check("clicking it again takes the fish out into your hand", bk.item.fish.is_empty() and g._held_kind() == "fish")
+	key(KEY_Q)
+	await frames(3)
+	aim_at(bk.pos + Vector3(0, 0.4, 0))
+	await frames(3)
+	key(KEY_E)
+	await frames(3)
+	check("E picks the bucket up again", g.inv.buckets().size() == 1 and g.ground.filter(func(x): return x.item.k == "bucket").is_empty())
+
+	# 8. the second-layer machines through the real click path
+	for sid in g.model.sectors:
+		g.model.sectors[sid].unlocked = true
+	for i in 3:
+		g.inv.slots[i] = {}
+	g.inv.slots[0] = Inventory.tool_item(2)
+	g.inv.active = 0
+	g._hands_changed()
+	for k in 12:
+		if g.tool == 6 and g.build_item == 4:
+			break
+		key(KEY_B)
+		await frames(2)
+	check("B switches the kit to the Bait Grinder", g.tool == 6 and g.build_item == 4)
+	var gspot := Vector3(-13.0, 0.0, 15.0)   # open Shallows ice a few steps from the start spot
+	player.global_position = Vector3(-8.2, g.EYE_H, 14.3)
+	aim_at(gspot)
+	await frames(3)
+	check("the prompt offers to build the grinder", g.prompt_label.text.contains("Bait Grinder"))
+	mouse(true)
+	mouse(false)
+	await frames(3)
+	var gr: Dictionary = {}
+	for pr in g.props:
+		if pr.kind == "grinder":
+			gr = pr
+	check("a click builds a grinder", not gr.is_empty())
+	if gr.is_empty():
+		mouse(false)
+		print("BOT FAIL (no grinder, stopping)")
+		get_tree().quit(1)
+		return
+	await get_tree().create_timer(0.6).timeout
+	g.inv.slots[1] = Inventory.fish_item(g.roll_fish())
+	g.inv.active = 1
+	g._hands_changed()
+	aim_at(gr.pos + Vector3(0, 1.0, 0))
+	await frames(3)
+	check("aiming at the grinder finds it", g._aim().begins_with("prop:"))
+	mouse(true)
+	mouse(false)
+	await frames(3)
+	check("clicking it with a fish makes bait, and the bites come sooner", g.bait_t > 10.0 and g.bite_mult() < 1.0)
+	g.inv.active = 0
+	g._hands_changed()
+	for k in 12:
+		if g.tool == 6 and g.build_item == 5:
+			break
+		key(KEY_B)
+		await frames(2)
+	var fspot := Vector3(-6.0, 0.0, 20.0)
+	player.global_position = Vector3(-8.2, g.EYE_H, 14.3)
+	aim_at(fspot)
+	await frames(3)
+	mouse(true)
+	mouse(false)
+	await frames(3)
+	check("B to the Wind Fan and a click builds it (it faces the Eye)", g.yard.fans.size() == 1)
+
 	mouse(false)
 	GameState.delete_save()
 	print("BOT %s (%d failures)" % ["PASS" if fails == 0 else "FAIL", fails])
