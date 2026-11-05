@@ -279,6 +279,7 @@ var hut_node: Node3D
 var weather: Weather
 var living: LivingLake
 var world_label: Label
+var sky_clock: HudWidgets.SkyClock
 var world_t := 0.0
 var session_t := 0.0
 var inv := Inventory.new()   # your three slots and the one in your hand (see inventory.gd)
@@ -1070,6 +1071,8 @@ void fragment() {
 	left.add_child(carry_bar)
 	combo_label = _plain(left, 16, Style.AMBER)
 	bait_label = _plain(left, 16, Style.AQUA)
+	sky_clock = HudWidgets.SkyClock.new()
+	left.add_child(sky_clock)
 	world_label = _plain(left, 15, Style.MUTED)
 	var sep := HSeparator.new()
 	sep.modulate = Color(1, 1, 1, 0.25)
@@ -2076,6 +2079,7 @@ func _animate(delta: float) -> void:
 	if world_t <= 0.0:
 		world_t = 0.5
 		world_label.text = world_text()
+	sky_clock.set_time(day_t, scenery._night)
 	shake = move_toward(shake, 0.0, delta * 0.25)
 	cam.h_offset = randf_range(-1.0, 1.0) * shake * fx_shake
 	cam.v_offset = randf_range(-1.0, 1.0) * shake * fx_shake

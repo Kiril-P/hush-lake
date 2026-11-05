@@ -139,3 +139,39 @@ class ItemIcon extends Control:
 					draw_polyline(PackedVector2Array([Vector2(6, 22), Vector2(14, 14), Vector2(28, 14), Vector2(36, 22), Vector2(28, 30), Vector2(14, 30), Vector2(6, 22)]), Color(1.0, 0.78, 0.35), 1.8, true)
 			_:
 				draw_arc(Vector2(23, 22), 11.0, 0.0, TAU, 24, Color(1, 1, 1, 0.14), 2.0, true)
+
+## The day as a thin bar: golden hour, dusk, night and dawn in the sky's own colours, with a marker (a sun by day, a moon by night)
+## where the day is now, and a small tick where the next phase starts.
+class SkyClock extends Control:
+	var t := 0.0          # the day clock, 0..1
+	var night := 0.0
+	const COLS := [Color(1.0, 0.72, 0.5), Color(0.62, 0.38, 0.55), Color(0.1, 0.16, 0.38), Color(0.55, 0.6, 0.85), Color(1.0, 0.72, 0.5)]
+
+	func _init() -> void:
+		custom_minimum_size = Vector2(170, 16)
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func set_time(day_t: float, night_v: float) -> void:
+		t = day_t
+		night = night_v
+		queue_redraw()
+
+	func _draw() -> void:
+		var w := size.x
+		var y := size.y * 0.5
+		var seg := 24
+		for i in seg:
+			var k := float(i) / seg * 4.0
+			var a: Color = COLS[int(k)]
+			var b: Color = COLS[int(k) + 1]
+			var col := a.lerp(b, k - floorf(k))
+			draw_rect(Rect2(w * i / seg, y - 3.0, w / seg + 1.0, 6.0), Color(col.r, col.g, col.b, 0.9))
+		draw_rect(Rect2(0, y - 3.0, w, 6.0), Color(0, 0, 0, 0.0), false)
+		var x := w * clampf(t, 0.0, 1.0)
+		var c := Vector2(x, y)
+		draw_circle(c, 6.5, Color(0.02, 0.03, 0.1, 0.55))
+		if night > 0.5:
+			draw_circle(c, 4.6, Color(0.85, 0.9, 1.0))   # the moon, with a bite out of it
+			draw_circle(c + Vector2(2.0, -1.2), 3.8, Color(0.1, 0.16, 0.38))
+		else:
+			draw_circle(c, 4.6, Color(1.0, 0.85, 0.45))

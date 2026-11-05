@@ -230,6 +230,12 @@ func _ready() -> void:
 	g._refresh()
 	g.weather.always_aurora = false
 
+	g.day_t = 0.5
+	g.scenery.set_time(0.5)
+	g._animate(0.05)
+	check("the sky clock marks the middle of the night in the middle of its bar", absf(g.sky_clock.t - 0.5) < 0.01 and g.sky_clock.night > 0.9)
+	g.day_t = 0.0
+	g.scenery.set_time(0.0)
 	# the review's findings: nothing overlaps, nothing flies in from the Eye, an aurora is decided once per night
 	var rack_o := Vector2(g.rack_pos.x, g.rack_pos.z)
 	var yard_p: Vector3 = lv.camp.yard.position
