@@ -2313,9 +2313,14 @@ func equip(t: int, build := 0) -> void:
 		si = inv.free_slot()
 		if si < 0:
 			si = inv.active
-			for i in Inventory.SLOTS:   # full: a tool makes room, never a bucket or a fish
-				if inv.slots[i].get("k", "") == "tool":
-					si = i
+			for want_kind in ["tool", "fish", "bucket"]:   # full: a tool makes room (a loose fish before a bucket)
+				var found := -1
+				for i in Inventory.SLOTS:
+					if inv.slots[i].get("k", "") == want_kind:
+						found = i
+						break
+				if found >= 0:
+					si = found
 					break
 		inv.slots[si] = Inventory.tool_item(slot_t)
 	inv.active = si
@@ -2336,7 +2341,8 @@ func _add_fish_to_hands(f: Dictionary, bucket_first := false) -> bool:
 	if si < 0:
 		return false
 	if inv.slots[si].get("k", "") == "fish" and si != inv.active:
-		return_slot = before if not inv.slots[before].is_empty() else -1
+		if return_slot < 0:   # (only the first grab remembers what was in your hand: a second grab must not forget it)
+			return_slot = before if not inv.slots[before].is_empty() and inv.slots[before].get("k", "") != "fish" else -1
 		inv.active = si
 	return true
 
@@ -2434,6 +2440,14 @@ func _drop_spot(at_aim: bool) -> Vector3:
 ## Things never end up inside the Eye, on the shore, inside a stall or on top of each other.
 func _valid_spot(p: Vector3) -> Vector3:
 	var q := Vector2(p.x, p.z)
+	for pass_i in 4:   # each rule can undo another, so settle them together
+		var q0 := q
+		q = _valid_pass(q)
+		if q.distance_to(q0) < 0.01:
+			break
+	return Vector3(q.x, 0.0, q.y)
+
+func _valid_pass(q: Vector2) -> Vector2:
 	var lim: float = scenery.edge_at(q.x, q.y) - 2.5
 	if q.length() > lim:
 		q = q.normalized() * lim
@@ -2451,7 +2465,7 @@ func _valid_spot(p: Vector3) -> Vector3:
 		var off2 := q - Vector2(g.pos.x, g.pos.z)
 		if off2.length() < 1.3:
 			q = Vector2(g.pos.x, g.pos.z) + (off2.normalized() if off2.length() > 0.01 else Vector2.RIGHT) * 1.3
-	return Vector3(q.x, 0.0, q.y)
+	return q
 
 ## Q: puts what is in your hand down in front of you. A fish slides off; a tool or bucket lands and stays where it lands.
 func _drop_active(at_aim := false) -> bool:
@@ -2721,7 +2735,9 @@ func _kick_buckets(pos: Vector3, fwd: Vector3, power: float) -> int:
 		var spilled: Array = g.item.fish
 		g.item.fish = []
 		for f in spilled:
-			var e := yard.spawn(f, g.pos + Vector3(0, 0.9, 0), fwd.rotated(Vector3.UP, randf_range(-0.55, 0.55)) * (power * 0.45 + randf_range(0.0, 3.0)) + Vector3(0, randf_range(3.5, 6.0), 0))
+			var dirf := fwd.rotated(Vector3.UP, randf_range(-0.55, 0.55))
+			# (they leave from just outside the bucket's own mouth, or the bucket would swallow them straight back)
+			var e := yard.spawn(f, g.pos + dirf * 0.95 + Vector3(0, 0.9, 0), dirf * (power * 0.45 + randf_range(0.5, 3.0)) + Vector3(0, randf_range(3.5, 6.0), 0))
 			e.spin = randf_range(-10.0, 10.0)
 		_refresh_bucket_node(g)
 		_snow_fx(g.pos + Vector3(0, 0.3, 0), 8, 1.2)
@@ -4615,17 +4631,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.keycode == KEY_V:
 			_toggle_ride()
 			return
-		if event.keycode == KEY_E:
-			_pick_up()
-			return
-		if event.keycode == KEY_Z:
-			_take_from_bucket()
-			return
-		if event.keycode == KEY_Q:
-			_drop_active()
-			return
-		if event.keycode == KEY_B:
-			_cycle_build()
+		if event.keycode in [KEY_E, KEY_Z, KEY_Q, KEY_B]:   # the hand keys do nothing while the menu is up (the world is paused behind it)
+			if not _cap():
+				return
+			match event.keycode:
+				KEY_E: _pick_up()
+				KEY_Z: _take_from_bucket()
+				KEY_Q: _drop_active()
+				KEY_B: _cycle_build()
 			return
 		if event.keycode == KEY_M:
 			_say("Sound off" if sfx.toggle_mute() else "Sound on")
@@ -4638,7 +4651,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				_say("Press N again to ERASE ALL progress (pearls and perks too) and start over.")
 			return
 		var k: int = event.keycode - KEY_1
-		if k >= 0 and k < Inventory.SLOTS:
+		if k >= 0 and k < Inventory.SLOTS and _cap():
 			_select_slot(k)
 	elif event is InputEventMouseButton and event.pressed and event.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN] and _cap():
 		_cycle_slot(-1 if event.button_index == MOUSE_BUTTON_WHEEL_UP else 1)

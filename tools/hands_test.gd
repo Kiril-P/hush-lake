@@ -139,6 +139,48 @@ func _ready() -> void:
 	await get_tree().create_timer(0.3).timeout
 	check("the fish you threw is swallowed by the Eye and paid", g.stats.eye_fed == 1 and GameState.currency > coins0)
 
+	# --- two grabs in a row still return you to what you held
+	yard.clear_all()
+	g.inv.clear()
+	g.inv.slots[0] = Inventory.tool_item(0)
+	g._hands_changed()
+	face(g, Vector3(-30, 1.7, 70), 0.0, -18.0)
+	var q1: Dictionary = yard.spawn(g._make_fish(g.SPECIES[0]), Vector3(-30, yard.GROUND, 66.5), Vector3.ZERO)
+	g._grab_fish(q1)
+	var q2: Dictionary = yard.spawn(g._make_fish(g.SPECIES[0]), Vector3(-30, yard.GROUND, 66.5), Vector3.ZERO)
+	g._grab_fish(q2)
+	check("two fish grabbed: both are in slots, the second in your hand", g.inv.cargo_count() == 2 and g._held_kind() == "fish")
+	g._throw_held(0.2)
+	g._throw_held(0.2) if g._held_kind() == "fish" else null
+	check("throwing them away puts the drill back in your hand", g._held_kind() == "tool" and g.tool == 0 and g.inv.active == 0)
+	yard.clear_all()
+
+	# --- the hand keys do nothing while the menu is up
+	g.inv.clear()
+	g.inv.slots[0] = Inventory.tool_item(0)
+	g.inv.slots[1] = Inventory.bucket_item()
+	g._hands_changed()
+	g._select_slot(1)
+	g.test_capture = false
+	var kq := InputEventKey.new()
+	kq.keycode = KEY_Q
+	kq.pressed = true
+	g._unhandled_input(kq)
+	var k1 := InputEventKey.new()
+	k1.keycode = KEY_1
+	k1.pressed = true
+	g._unhandled_input(k1)
+	check("Q and 1 are ignored when the mouse is free (the menu is up)", g.ground.is_empty() and g.inv.slots[1].get("k", "") == "bucket" and g.inv.active == 1)
+	g.test_capture = true
+	g._unhandled_input(k1)
+	check("...and work as soon as you are playing again", g.inv.active == 0)
+	g.inv.clear()
+	g.inv.slots[0] = Inventory.tool_item(0)
+	g.inv.slots[1] = Inventory.tool_item(1)
+	g._hands_changed()
+	g.inv.active = 2   # (the next block starts from an empty third slot in hand, like after a throw)
+	g._hands_changed()
+
 	# --- slots: select, cycle
 	empty_hand(g)
 	g._select_slot(0)
@@ -254,6 +296,8 @@ func _ready() -> void:
 	g.kick_charge = 0.8
 	g._release_kick()
 	check("kicking a placed bucket tips its fish out onto the ice", kb.item.fish.is_empty() and yard.count() == had)
+	sim(g, 1.5)
+	check("...and they stay out: the bucket does not swallow them straight back", kb.item.fish.is_empty() and yard.count() == had)
 	yard.clear_all()
 	g._remove_ground(kb)
 
