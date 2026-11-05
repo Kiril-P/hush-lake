@@ -43,6 +43,8 @@ func _ready() -> void:
 	streams["slide"] = _wav(_noise(0.3, 0.2, 6.0, 0.3))
 	streams["creak"] = _wav(_creak(1.3))
 	streams["gust"] = _wav(_swell_noise(4.5))
+	streams["owl"] = _wav(_owl())
+	streams["caw"] = _wav(_caw())
 	streams["wind"] = _wav(_wind(6.0), true)
 	streams["pad"] = _wav(_pad(8.0), true)
 	_mix_pass()
@@ -61,7 +63,7 @@ func _ready() -> void:
 ## quiet UI ticks < everyday action sounds < impacts < stingers. The ambient loops are set far below all of them.
 const PEAK := {"tick": 0.28, "reel": 0.3, "drill": 0.32, "step": 0.18, "slide": 0.2, "coin": 0.38, "deny": 0.4, "buy": 0.45, "bite": 0.5,
 	"cast": 0.42, "plop": 0.5, "thud": 0.55, "kick": 0.65, "hook": 0.55, "splash": 0.6, "catch": 0.55, "rare": 0.62, "goal": 0.62,
-	"rumble": 0.7, "swell": 0.6, "awaken": 0.8, "creak": 0.3, "gust": 0.35, "wind": 0.5, "pad": 0.3}
+	"rumble": 0.7, "swell": 0.6, "awaken": 0.8, "creak": 0.3, "gust": 0.35, "wind": 0.5, "pad": 0.3, "owl": 0.3, "caw": 0.3}
 
 func _mix_pass() -> void:
 	for n in PEAK:
@@ -85,21 +87,33 @@ func _renormalise(w: AudioStreamWAV, peak: float) -> AudioStreamWAV:
 var _creak_t := 12.0
 var _gust_t := 6.0
 var _wind_player: AudioStreamPlayer
+var wx_wind := 0.25     # the weather's wind (0..1): the howl swells and gusts come sooner in a storm
+var wx_snow := 0.3
+var wx_night := 0.0
+
+## The weather's numbers (the game passes them each frame): the wind loop follows them.
+func set_weather(wind: float, snow: float, night: float) -> void:
+	wx_wind = wind
+	wx_snow = snow
+	wx_night = night
 
 func _process(delta: float) -> void:
 	if _wind_player == null or muted:
 		return
 	# the wind breathes slowly, and now and then the ice creaks or a gust rolls across the lake
 	var tm := Time.get_ticks_msec() * 0.001
-	_wind_player.volume_db = -17.0 + amb_db + sin(tm * 0.21) * 2.5 + sin(tm * 0.067) * 1.5
+	# the howl follows the weather (a hush in still fog, a roar in a blizzard) and a little more at night
+	var storm_db := (wx_wind - 0.25) * 16.0 + wx_night * 1.5 - maxf(wx_snow - 1.0, 0.0) * 0.0
+	_wind_player.volume_db = -17.0 + amb_db + storm_db + sin(tm * 0.21) * 2.5 + sin(tm * 0.067) * 1.5
+	_wind_player.pitch_scale = 0.9 + 0.25 * wx_wind
 	_creak_t -= delta
 	if _creak_t <= 0.0:
 		_creak_t = randf_range(14.0, 34.0)
 		play("creak", -10.0, randf_range(0.7, 1.3))
 	_gust_t -= delta
 	if _gust_t <= 0.0:
-		_gust_t = randf_range(20.0, 50.0)
-		play("gust", -12.0, randf_range(0.85, 1.1))
+		_gust_t = randf_range(20.0, 50.0) * lerpf(1.4, 0.25, wx_wind)
+		play("gust", -12.0 + wx_wind * 5.0, randf_range(0.85, 1.1))
 
 func start_ambient() -> void:
 	_wind_player = _play_loop("wind", -17.0)
@@ -250,6 +264,51 @@ func _creak(dur: float) -> PackedFloat32Array:
 		var env := sin(PI * k)
 		out[i] = (sin(phase) * 0.6 + sin(phase * 2.01) * 0.25 + randf_range(-0.08, 0.08)) * env * env * 0.5
 	return out
+
+## A night owl: two soft falling hoots, then a longer one.
+func _owl() -> PackedFloat32Array:
+	var parts: Array = []
+	var starts := [0.0, 0.42, 0.95]
+	var lens := [0.28, 0.28, 0.5]
+	for i in 3:
+		var n := int(lens[i] * RATE)
+		var tone := PackedFloat32Array()
+		tone.resize(n)
+		var phase := 0.0
+		for j in n:
+			var t := float(j) / RATE
+			var k: float = t / float(lens[i])
+			var fr := lerpf(430.0, 360.0, k) * (1.0 + 0.012 * sin(TAU * 7.0 * t))
+			phase += TAU * fr / RATE
+			var env := sin(PI * k)
+			tone[j] = (sin(phase) * 0.8 + sin(phase * 2.0) * 0.12) * env * env * 0.6
+		var pad := PackedFloat32Array()
+		pad.resize(int(starts[i] * RATE))
+		pad.append_array(tone)
+		parts.append(pad)
+	return _mix(parts)
+
+## A crow: two rough, falling caws (a buzzy tone with grit).
+func _caw() -> PackedFloat32Array:
+	var parts: Array = []
+	for i in 2:
+		var dur := 0.2
+		var n := int(dur * RATE)
+		var tone := PackedFloat32Array()
+		tone.resize(n)
+		var phase := 0.0
+		for j in n:
+			var t := float(j) / RATE
+			var k := t / dur
+			var fr := lerpf(780.0, 520.0, k)
+			phase += TAU * fr / RATE
+			var saw := fmod(phase / TAU, 1.0) * 2.0 - 1.0
+			tone[j] = (saw * 0.4 + sin(phase) * 0.3 + randf_range(-0.1, 0.1)) * sin(PI * k) * 0.8
+		var pad := PackedFloat32Array()
+		pad.resize(int(i * 0.28 * RATE))
+		pad.append_array(tone)
+		parts.append(pad)
+	return _mix(parts)
 
 ## A gust: filtered noise that swells and fades (not a loop).
 func _swell_noise(dur: float) -> PackedFloat32Array:

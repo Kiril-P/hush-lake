@@ -83,6 +83,24 @@ func _ready() -> void:
 		p.rotation.y = deg_to_rad(v[2])
 		g.cam.rotation.x = deg_to_rad(v[3])
 		await measure(v[0], g)
+	# the worst weather with the full camp (a blizzard at night, with an aurora): the most particles and lights the lake ever has
+	g.weather.elapsed = 999.0
+	g.weather.force("blizzard")
+	g.weather.vals = g.weather.STATES.blizzard.duplicate()
+	g.weather.blend = 1.0
+	g.day_t = 0.5
+	g.scenery.set_time(0.5)
+	p.position = Vector3(-8.2, 1.7, 14.3)
+	p.rotation.y = deg_to_rad(-30.0)
+	g.cam.rotation.x = deg_to_rad(-5.0)
+	await measure("blizzard night", g)
+	g.weather.force("clear")
+	g.weather.vals = g.weather.STATES.clear.duplicate()
+	g.weather.aurora = true
+	await measure("aurora night", g)
+	g.day_t = 0.0
+	g.scenery.set_time(0.0)
+	g.weather.aurora = false
 	await action_phase(g, p)
 	print("PERF %s (%d failures)" % ["PASS" if fails == 0 else "FAIL", fails])
 	get_tree().quit(1 if fails > 0 else 0)

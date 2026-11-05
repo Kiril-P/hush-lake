@@ -24,6 +24,7 @@ const DEFS := {
 	"shadows": {"label": "Shadows", "kind": "toggle", "def": 1.0, "tab": 3, "hint": "Turn off for a lighter load on slower machines."},
 	"snow":   {"label": "Falling snow", "kind": "toggle", "def": 1.0, "tab": 3, "hint": ""},
 	"vignette": {"label": "Screen vignette", "kind": "toggle", "def": 1.0, "tab": 3, "hint": "The soft dark edge."},
+	"weather": {"label": "Weather", "kind": "toggle", "def": 1.0, "tab": 3, "hint": "Flurries, snowfall, fog and blizzards come and go. Off = always clear."},
 }
 
 const TABS := ["Look & feel", "Interface", "Audio", "Video"]

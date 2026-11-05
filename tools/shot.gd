@@ -326,6 +326,58 @@ func _ready() -> void:
 		await get_tree().create_timer(0.35).timeout
 		get_viewport().get_texture().get_image().save_png("res://renders/shot_hands_d.png")   # in flight
 		print("saved hands")
+	# the living lake: weather states, the sky at night and the grown camp
+	if only == "weather":
+		var pw: Node3D = g.get_node("Player")
+		pw.position = Vector3(-8.2, 1.7, 14.3)
+		pw.rotation.y = deg_to_rad(-30.0)
+		g.cam.rotation.x = deg_to_rad(2.0)
+		g.goal_done.fill(true)
+		g.test_capture = true
+		g.weather.elapsed = 999.0
+		var settle := func(state: String, t: float, secs: int):
+			g.day_t = t
+			g.scenery.set_time(t)
+			g.weather.force(state)
+			for i in secs:
+				g.weather.tick(0.5, g.scenery._night)
+				g.living.update(0.5, g.scenery._night, pw.global_position)
+				g.scenery.set_time(t)
+			g.day_t = t
+			g.msg_label.text = ""
+			g.refreeze_panel.visible = false
+			g.world_label.text = g.world_text()
+			for i in 25:
+				await get_tree().process_frame
+		await settle.call("clear", 0.0, 40)
+		get_viewport().get_texture().get_image().save_png("res://renders/shot_weather_a.png")   # clear, golden hour, gulls and clouds
+		await settle.call("snowfall", 0.2, 60)
+		get_viewport().get_texture().get_image().save_png("res://renders/shot_weather_b.png")   # snowfall at dusk
+		await settle.call("blizzard", 0.0, 80)
+		get_viewport().get_texture().get_image().save_png("res://renders/shot_weather_c.png")   # blizzard
+		await settle.call("fog", 0.0, 80)
+		get_viewport().get_texture().get_image().save_png("res://renders/shot_weather_d.png")   # fog
+		g.stats.eye_fed = g.EYE_STAGES[3]
+		g.session_t = 10.0
+		g._refresh()
+		g.weather.aurora = true
+		g.weather.aurora_decided = true
+		await settle.call("clear", 0.5, 40)
+		g.weather.aurora = true
+		g.cam.rotation.x = deg_to_rad(22.0)
+		for i in 30:
+			g.living.update(0.5, g.scenery._night, pw.global_position)
+			await get_tree().process_frame
+		get_viewport().get_texture().get_image().save_png("res://renders/shot_weather_e.png")   # an aurora night: stars and curtains
+		var fire: Vector3 = g.living.camp.fire.position
+		pw.position = Vector3(fire.x + 7.0, 1.7, fire.z + 5.0)
+		var lk: Vector3 = fire - pw.position
+		pw.rotation.y = atan2(-lk.x, -lk.z)
+		g.cam.rotation.x = deg_to_rad(-9.0)
+		for i in 30:
+			await get_tree().process_frame
+		get_viewport().get_texture().get_image().save_png("res://renders/shot_weather_f.png")   # the camp at night
+		print("saved weather")
 	# the second-layer machines: a bait grinder and a wind fan with fish drifting in its wind
 	if only == "props":
 		var pq: Node3D = g.get_node("Player")

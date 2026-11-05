@@ -275,6 +275,12 @@ var drill_snd_t := 0.0
 var rail_mat: StandardMaterial3D
 var scenery: Node3D
 var hut_pos := Vector3.ZERO
+var hut_node: Node3D
+var weather: Weather
+var living: LivingLake
+var world_label: Label
+var world_t := 0.0
+var session_t := 0.0
 var inv := Inventory.new()   # your three slots and the one in your hand (see inventory.gd)
 var tool := -1             # what the item in your hand lets you do: 0 drill, 1 rod, 2..6 a build mode (the builder's kit), -1 nothing
 var bmode := 2             # which build the builder's kit is set to (an index into TOOLS, 2..6)
@@ -456,6 +462,13 @@ func _ready() -> void:
 	var fresh_lake := GameState.extra.is_empty()
 	model.generate(randi(), String(GameState.meta.get("next_mod", "")) if fresh_lake else "", _meta_int("lakes") if fresh_lake else 0)
 	_build_world()
+	weather = Weather.new()
+	living = LivingLake.new()
+	add_child(living)
+	living.setup(scenery, weather, hut_node)
+	living.cracked.connect(_on_crack)
+	living.owl_called.connect(func(): sfx.play("owl", -12.0, randf_range(0.9, 1.1)))
+	living.crow_called.connect(func(): sfx.play("caw", -14.0, randf_range(0.85, 1.15)))
 	yard = YardScript.new()
 	add_child(yard)
 	yard.obstacles = scenery.obstacles
@@ -591,6 +604,7 @@ func _build_world() -> void:
 	add_child(hut)
 	hut.look_at(Vector3(0, 0, 0), Vector3.UP, true)
 	hut_pos = hut.global_position + hut.global_basis.z * 2.3 + Vector3(0, 1.1, 0)
+	hut_node = hut
 	_box(hut, Vector3(0, 1.5, 0), Vector3(5, 3, 4), Color(0.5, 0.31, 0.23))   # warm wood: the lit windows and door are the amber
 	_box(hut, Vector3(0, 1.0, 2.05), Vector3(1.3, 2.0, 0.15), Color(1.0, 0.75, 0.35), "olga", 1.2)
 	_box(hut, Vector3(0, 1.05, 2.45), Vector3(1.8, 0.12, 0.8), Color(0.3, 0.19, 0.13))  # her window counter
@@ -1056,6 +1070,7 @@ void fragment() {
 	left.add_child(carry_bar)
 	combo_label = _plain(left, 16, Style.AMBER)
 	bait_label = _plain(left, 16, Style.AQUA)
+	world_label = _plain(left, 15, Style.MUTED)
 	var sep := HSeparator.new()
 	sep.modulate = Color(1, 1, 1, 0.25)
 	left.add_child(sep)
@@ -1413,7 +1428,7 @@ func sale_mult() -> float:
 func depth_value() -> float: return 1.0 + DEPTH_VALUE * _meta_int("lakes")
 func rig_cap() -> int: return RIG_BASE_CAP + maxi(eye_stage() - 1, 0)
 func tithe_cost() -> float: return ceil(TITHE_BASE * pow(TITHE_GROWTH, stats.tithe))
-func bite_mult() -> float: return pow(0.88, GameState.level("bait")) * (BAIT_MULT if bait_t > 0.0 else 1.0)
+func bite_mult() -> float: return pow(0.88, GameState.level("bait")) * (BAIT_MULT if bait_t > 0.0 else 1.0) * world_bite()
 func ride_mult() -> float: return RIDE_SPEED[mini(GameState.level("snowmobile"), RIDE_SPEED.size() - 1)] if riding else 1.0
 func walk_speed() -> float: return (6.0 + 1.6 * GameState.level("boots")) * ride_mult()
 func work_speed() -> float: return 1.0 + 0.6 * GameState.level("drill")
@@ -1440,7 +1455,7 @@ func carry_worth() -> float:
 	return w * sale_mult()
 
 func roll_fish() -> Dictionary:
-	var luck := 1.0 + 0.25 * GameState.level("luck")
+	var luck := (1.0 + 0.25 * GameState.level("luck")) * (weather.rare_mult() if weather else 1.0)
 	var total := 0.0
 	for s in SPECIES:
 		total += s.w * (luck if s.value >= 5.0 else 1.0)
@@ -1659,6 +1674,8 @@ func _refresh() -> void:
 	if journal_panel.visible:
 		_update_journal()
 	map_ctrl.queue_redraw()
+	if living:
+		living.set_camp_level(eye_stage(), session_t > 3.0)
 	_sync_tool_view()
 	_refresh_dock()
 	_refresh_rack()
@@ -1887,6 +1904,47 @@ func _order_progress(f: Dictionary) -> void:
 	_refresh()
 
 ## The coin counter rolls up (or down) to the real value and pops a little when you earn; "Saved" fades after an autosave.
+# ---------- the lake's moods ----------
+## The sky's phase by name, from the day clock (0 golden hour, .25 dusk, .5 night, .75 dawn).
+func day_phase(t := -1.0) -> String:
+	var x := day_t if t < 0.0 else t
+	if x < 0.07 or x >= 0.93:
+		return "Golden hour"
+	if x < 0.38:
+		return "Dusk"
+	if x < 0.62:
+		return "Night"
+	if x < 0.88:
+		return "Dawn"
+	return "Golden hour"
+
+## Fish bite sooner at the edges of the day (golden hour, dawn) and in snowfall: the weather's own number times the hour's.
+func hour_bite() -> float:
+	var x := day_t
+	return 0.92 if (x < 0.07 or x >= 0.93 or (x >= 0.72 and x < 0.82)) else 1.0
+
+func world_bite() -> float:
+	return (weather.vals.bite if weather else 1.0) * hour_bite()
+
+## -6 C by day, colder at night, the weather adds its own chill.
+func temperature() -> int:
+	return int(round(-6.0 - 11.0 * (scenery._night if scenery else 0.0) + (weather.temp_offset() if weather else 0.0)))
+
+func world_text() -> String:
+	var s := "%s   %d C   %s" % [day_phase(), temperature(), weather.label()]
+	if weather.aurora_on() and scenery._night > 0.5:
+		s += "\nAurora night: rare fish stir"
+	elif world_bite() < 0.95:
+		s += "\nBites come sooner"
+	if float(weather.vals.fog) > 3.0:
+		s += ("\n" if not s.contains("\n") else "   ") + "You cannot see far"
+	return s
+
+func _on_crack(pos: Vector3, near: float) -> void:
+	sfx.play("creak", -17.0 + 9.0 * near, randf_range(0.7, 1.2))
+	if near > 0.55:
+		shake = maxf(shake, 0.006 * near)
+
 func _tick_hud_feel(delta: float) -> void:
 	eye_pulse_t -= delta
 	if coins_shown >= 0.0 and absf(coins_shown - coins_target) > 0.4:
@@ -2006,6 +2064,15 @@ func _animate(delta: float) -> void:
 	if sky_t <= 0.0:  # re-lighting the sky every frame is wasteful; 5x a second is plenty
 		sky_t = 0.2
 		scenery.set_time(day_t)
+	weather.enabled = GameSettings.on("weather")
+	weather.tick(delta, scenery._night, not guide.intro_active)
+	living.update(delta, scenery._night, $Player.global_position, guide.intro_active)
+	sfx.set_weather(weather.vals.wind, weather.vals.snow, scenery._night)
+	session_t += delta
+	world_t -= delta
+	if world_t <= 0.0:
+		world_t = 0.5
+		world_label.text = world_text()
 	shake = move_toward(shake, 0.0, delta * 0.25)
 	cam.h_offset = randf_range(-1.0, 1.0) * shake * fx_shake
 	cam.v_offset = randf_range(-1.0, 1.0) * shake * fx_shake
@@ -4514,7 +4581,7 @@ func _on_about_to_save() -> void:
 		"ground": ground.map(func(g): return {"item": _item_to(g.item), "p": [g.pos.x, g.pos.z], "yaw": g.yaw}),
 		"loose": loose, "pending": pend, "pos": [p.position.x, p.position.z],
 		"yaw": p.rotation.y, "pitch": cam.rotation.x,
-		"day": day_t, "time": play_time,
+		"day": day_t, "time": play_time, "weather": weather.to_dict(),
 		"depots": depots.map(func(d): return [d.pos.x, d.pos.z]), "props": props.map(func(pr): return [pr.kind, pr.pos.x, pr.pos.z]), "bait": bait_t, "rigs": rigs.map(func(rg): return [rg.pos.x, rg.pos.z]),
 		"order": order, "orders_done": orders_done, "lake": model.to_dict()}
 
@@ -4606,6 +4673,7 @@ func _restore_inner(d: Dictionary) -> bool:
 	_sync_active()
 	day_t = d.get("day", 0.0)
 	play_time = float(d.get("time", 0.0))
+	weather.from_dict(d.get("weather", {}))
 	for pd in d.get("pending", []):   # paid now, quietly: they were already out of the lake when the game was saved (orders first, so they count)
 		_settle_fish(_fish_from(pd.f), float(pd.m))
 	_reward_stages_quietly(st_saved, eye_stage())
@@ -4738,6 +4806,12 @@ func _unhandled_input(event: InputEvent) -> void:
 				unlocked[u] = true
 			_refresh()
 			_say("[debug] everything unlocked")
+			return
+		if event.keycode == KEY_F5:
+			var order_w := ["clear", "flurry", "snowfall", "blizzard", "fog"]
+			weather.elapsed = Weather.CALM_START + 1.0
+			weather.force(order_w[(order_w.find(weather.cur) + 1) % order_w.size()])
+			_say("[debug] weather: %s" % weather.label())
 			return
 		if event.keycode == KEY_F4:
 			day_t = fmod(day_t + 0.125, 1.0)

@@ -24,13 +24,14 @@ A first-person cozy ice-fishing incremental in Godot 4.7. Feed the Eye under the
 | H | ask Olga what to do next |
 | V | snowmobile once bought |
 | Tab | field journal |
+| F5 | (debug) cycle the weather |
 | R | refreeze (after clearing sectors) |
 | M | mute |
 
 Notes for playtesters are in `PLAYTEST.md` (what to look for, what to write down).
 
 ## Checks (no human needed)
-`tools/run_yard.sh` (fish physics) · `run_machines.sh` (bait grinder, wind fan) · `run_hands.sh` (the three slots, grab, throw, buckets, tools on the ice, the rack) · `run_sectors.sh` (sector borders and states) · `run_ui.sh` (menu, settings, HUD feel) · `run_safety.sh` (saves, offline, pause) · `run_guide.sh` (onboarding) · `run_audio.sh` (sound levels) · `run_smoke.sh` (everything, several minutes) · `first10.sh` (a bot plays the first 10 minutes) · `play_bot.sh` (windowed, real input) · `perf_render.sh` (rendered frame times) · `shot.sh` / `showroom.sh` (screenshots).
+`tools/run_yard.sh` (fish physics) · `run_weather.sh` (weather, sky, life, camp) · `run_machines.sh` (bait grinder, wind fan) · `run_hands.sh` (the three slots, grab, throw, buckets, tools on the ice, the rack) · `run_sectors.sh` (sector borders and states) · `run_ui.sh` (menu, settings, HUD feel) · `run_safety.sh` (saves, offline, pause) · `run_guide.sh` (onboarding) · `run_audio.sh` (sound levels) · `run_smoke.sh` (everything, several minutes) · `first10.sh` (a bot plays the first 10 minutes) · `play_bot.sh` (windowed, real input) · `perf_render.sh` (rendered frame times) · `shot.sh` / `showroom.sh` (screenshots).
 
 ## Docs
 `docs/STYLE.md` (the look), `docs/DECISIONS.md` (why things are the way they are), `docs/BALANCE.md`, `docs/ROADMAP.md`.

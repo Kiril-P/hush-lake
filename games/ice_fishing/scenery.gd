@@ -35,7 +35,10 @@ var detail := FastNoiseLite.new()
 var shore_noise := FastNoiseLite.new()
 var obstacles: Array[Vector3] = []   # (x, z, radius): things the player cannot walk through
 var olga := {}                      # {root, body, head, arm}: see npc_models.gd
-var snow_node: CPUParticles3D
+var snow_node: Node3D                # the falling snow: a container with three layers (light, medium, storm) the weather switches on and off
+var snow_layers: Array = []
+var gloom := 0.0                     # 0..1: weather greys and darkens the sky (set by the living lake, applied in set_time)
+var aurora_level := 0.35             # how strong the aurora is at night: a faint curtain on a plain night, full on an aurora night
 var lanterns: Array = []             # {mat, light, on}
 var glow_mats: Array = []            # [material, day energy, night energy]
 var blinkers: Array = []
@@ -503,27 +506,33 @@ func _decorate_hut(hut: Node3D) -> void:
 	hut.add_child(smoke)
 
 func _snow() -> void:
-	var p := CPUParticles3D.new()
-	p.position = Vector3(0, 14, 0)
-	p.amount = 500
-	p.lifetime = 9.0
-	p.preprocess = 9.0
-	p.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
-	p.emission_box_extents = Vector3(34, 0.5, 34)
-	p.direction = Vector3(0, -1, 0)
-	p.spread = 5.0
-	p.gravity = Vector3(0.3, -1.2, 0.1)
-	p.initial_velocity_min = 0.2
-	p.initial_velocity_max = 0.6
-	var sp := SphereMesh.new()
-	sp.radius = 0.03
-	sp.height = 0.06
-	sp.radial_segments = 4
-	sp.rings = 2
-	p.mesh = sp
-	p.material_override = _mat(Color(1, 1, 1, 0.8), 0.0, true)
-	add_child(p)
-	snow_node = p
+	snow_node = Node3D.new()
+	snow_node.position = Vector3(0, 14, 0)
+	add_child(snow_node)
+	# three layers: a light flurry that is always there, a medium one for snowfall and a dense, fast one for a blizzard.
+	# The weather only switches their `emitting` on and off, so flakes already in the air finish falling: nothing pops.
+	for spec in [[260, 34.0, 0.3, 0.6, 9.0, 0.03], [380, 34.0, 0.5, 1.0, 9.0, 0.04], [1800, 22.0, 2.5, 4.5, 5.0, 0.07]]:
+		var p := CPUParticles3D.new()
+		p.amount = spec[0]
+		p.lifetime = spec[4]
+		p.preprocess = spec[4]
+		p.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+		p.emission_box_extents = Vector3(spec[1], 0.5, spec[1])
+		p.direction = Vector3(0, -1, 0)
+		p.spread = 5.0
+		p.gravity = Vector3(0.3, -1.2, 0.1)
+		p.initial_velocity_min = spec[2]
+		p.initial_velocity_max = spec[3]
+		var sp := SphereMesh.new()
+		sp.radius = spec[5]
+		sp.height = spec[5] * 2.0
+		sp.radial_segments = 4
+		sp.rings = 2
+		p.mesh = sp
+		p.material_override = _mat(Color(1, 1, 1, 0.8), 0.0, true)
+		p.emitting = snow_layers.is_empty()
+		snow_node.add_child(p)
+		snow_layers.append(p)
 
 # crane beside the hut, shown once the conveyor network is big enough
 func _build_crane(hut: Node3D) -> void:
@@ -551,7 +560,7 @@ func set_crane(on: bool) -> void:
 func _process(delta: float) -> void:
 	_time += delta
 	for i in aurora_mats.size():
-		aurora_mats[i].set_shader_parameter("strength", _night * (0.55 + 0.35 * sin(_time * 0.5 + i * 2.1)))
+		aurora_mats[i].set_shader_parameter("strength", _night * aurora_level * (0.55 + 0.35 * sin(_time * 0.5 + i * 2.1)) * (1.0 - gloom))
 	if crane and crane.visible:
 		crane_arm.rotation.y = sin(_time * 0.35) * 0.9
 	if beam:
@@ -612,11 +621,24 @@ func set_time(t: float) -> void:
 	env_ref.ambient_light_energy = 1.0 + _night * 0.8
 	if eye:
 		eye.set_night(_night)
-	sun_disc.visible = _night < 0.85
-	sun_path.visible = _night < 0.6
-	moon.visible = _night > 0.15
+	_apply_gloom()
+	sun_disc.visible = _night < 0.85 and gloom < 0.55
+	sun_path.visible = _night < 0.6 and gloom < 0.4
+	moon.visible = _night > 0.15 and gloom < 0.6
 	for g in glow_mats:
 		g[0].emission_energy_multiplier = lerpf(g[1], g[2], _night)
+
+## Weather greys the sky and the light: the sky colours move toward a flat slate, the sun loses strength, the fog takes the same slate.
+func _apply_gloom() -> void:
+	if gloom <= 0.001:
+		return
+	var slate := Color(0.46, 0.52, 0.63).lerp(Color(0.07, 0.09, 0.17), _night)
+	var k := gloom * 0.75
+	sky_mat.sky_top_color = sky_mat.sky_top_color.lerp(slate.darkened(0.12), k)
+	sky_mat.sky_horizon_color = sky_mat.sky_horizon_color.lerp(slate.lightened(0.08), k)
+	sky_mat.ground_horizon_color = sky_mat.sky_horizon_color
+	env_ref.fog_light_color = env_ref.fog_light_color.lerp(slate.lightened(0.05), k)
+	sun_light.light_energy *= 1.0 - 0.4 * gloom
 
 # ---------- terrain, forest, shore ----------
 func _ground_color(p: Vector3) -> Color:
