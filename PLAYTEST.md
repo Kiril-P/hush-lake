@@ -86,3 +86,17 @@ the ending feel like a door left open? Is a dream before every refreeze welcome 
 
 **Progression.** Is Overdrive Coils (900, x2.4) worth it? Do you want the Ledger pearls sooner or later? Is choosing the next lake (Z X C) clear?
 Are the seven perks the right mix?
+
+## Round 6 checklist (Juniper and wildlife, machine spectacle, peering, cinematic lighting)
+All of this was built and tested **headless, with no window ever opened**, so none of it has been looked at. Please check by eye:
+
+**Juniper and the shore** (camp level 4+: reach Eye stage 2). Does she wake and follow naturally? Too clingy, too far, ever in your way? Does she sit when you stop? Do foxes (dusk/night/dawn),
+deer (by day and at dawn, on the far bank), hares (clear days) and the owl on its pole (night) look right and show up often enough to notice, or too rarely? Is anything the wrong size?
+
+**Machines.** With Overdrive Coils bought, do the coil rings and sparks on auto-rods and Ice-Breakers read as "upgraded", or as clutter? Do working Ice-Breakers look and sound like they are chewing the lake?
+Is the shake near them pleasant or annoying?
+
+**Peering (hold C near a hole).** Is the round window the right size and position? Is the water readable (fish, kelp, light)? Does it help you choose where to fish? Should it need the Sonar upgrade?
+
+**Cinematic lighting (Settings > Video, OFF by default).** Turn it on and look: is it prettier or noisier (reflections shimmer, fog too thick at night, corners too dark)? Run `tools/perf_render.sh`
+with it on and off: if it costs more than ~3 ms a frame, tune `Scenery.apply_cinematic`.
