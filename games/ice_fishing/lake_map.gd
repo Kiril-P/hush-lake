@@ -47,8 +47,10 @@ func _draw() -> void:
 	draw_circle(c, game.EYE_R * PX, Color(0.1, 0.6, 0.75, 0.9))
 	draw_circle(c, game.PUPIL_R * PX, Color(0.02, 0.05, 0.1))
 	draw_arc(c, game.EYE_R * PX, 0.0, TAU, 32, Color(1.0, 0.8, 0.4, 0.7), 1.2, true)
-	for b in game.belts:
-		draw_line(c + Vector2(b.a.x, b.a.z) * PX, c + Vector2(b.b.x, b.b.z) * PX, Color(1.0, 0.85, 0.4, 0.8), 1.5)
+	for b in game.belts:   # lanes are coloured by load: grey idle, green ok, amber busy, red backed up (thicker with load)
+		var st := BeltNet.status(b)
+		var col := BeltNet.status_color(st) if st != "idle" else Color(1.0, 0.85, 0.4, 0.8)
+		draw_line(c + Vector2(b.a.x, b.a.z) * PX, c + Vector2(b.b.x, b.b.z) * PX, col, 1.5 + 1.5 * minf(float(b.get("load", 0.0)), 1.0))
 	for h in game.holes:
 		var hq := Vector2(h.pos.x, h.pos.z) * PX
 		if hq.length() < r - 2.0:

@@ -352,8 +352,7 @@ Built in layers with a headless suite (`tools/run_opening.sh`, 60+ checks), a re
   waits for a gap instead of stacking fish. Belts are compared by a unique `id` (never by content: the dictionaries are cyclic).
 - **Spur:** with the Belt tool on an Auto-Rod that is 1.6-11 m from a trunk belt (and cheaper than its own belt to the Eye), the click lays a **spur** that ends on the trunk's side. Its fish merge in
   when there is a gap, else wait at the end. Only plain trunks take spurs (no spur on a spur). A trunk with spurs cannot be picked up until its spurs are.
-- **Splitter** (kit item, on a belt, 150 x1.8 per): a second lane to the Eye starts at the splitter's mark. Every other fish takes it, and every fish does while the main lane is backed up
-  (without this a jammed spur never reached its own mark). On a trunk it sits after the last spur's join; on a spur it is a bypass of the merge. Cannery/Sorter multipliers are applied when a fish leaves a belt.
+- **Splitter** (kit item, trunk belts only, 150 x1.8 per): see "Network" below (it was first built as a diverter at a mark; that could never beat the lane feeding it, so it is now a true second lane).
 - **Chute** (kit item, on an Auto-Rod with no belt): a sloped channel (1.1 m drop). No motor: fish speed up from 1.1 to 3.4 m/s as they slide, it ignores Belt Motor and pays no motor bonus, no cannery/sorter/splitter.
   Costs 8 + 45% of a belt. A cheap early lane, outgrown by belts.
 - **Broom** (kit item, free-standing, 95 x1.5 per, max 3): every 1.1 s it sweeps the nearest settled loose fish within 6.5 m onto the nearest belt with room within 9 m (else it flies to the Eye at the hand-feed rate).
@@ -362,3 +361,21 @@ Built in layers with a headless suite (`tools/run_opening.sh`, 60+ checks), a re
   one lane the load is 2 fish/s of a 10/s lane (0.07 fish/s per rod), so **saturation never happens from rods alone**. It bites only with brooms (up to ~2.7/s) or bursts. Splitters are therefore a
   logistics toy for broom-fed trunks, not a required step; if they should matter, raise `BeltNet.GAP` or give rods burst output (not changed: it would move the economy).
 - **Unverified by eye:** the spur/twin/chute geometry (a chute is tilted 1.1 m; the twin lane runs 1.9 m aside), the splitter and broom models, and fish popping across at the merge point.
+
+## The belt network (round 8, headless): lanes that fill, a splitter that is a real second lane, a load view
+- **Lane size:** `BeltNet.GAP` is now 2.0 m, so a lane carries speed/2 fish a second: 2.25/s at base speed, 4.5/s at Belt Motor 4. Econ sim numbers: a plain rod makes 0.08 fish/s, a rod with Overdrive and a tier 0.30/s,
+  so ~7 boosted rods fill a base lane and ~15 fill a fully upgraded one. Rods alone on their own belts never meet it (each has a lane): it bites when you run spurs onto a trunk, or feed brooms into one.
+  The sim's first-lake timeline is unchanged (49 min); late lakes with boosts are where lanes matter.
+- **Splitter = a second lane beside the trunk** (same length, 1.35 m aside, on the side with room). A rod or spur puts its fish on whichever lane has room, so the trunk carries twice as much; both lanes run through the
+  trunk's cannery and sorter. Trunks only (a spur or chute refuses). Tested: a flooded trunk delivers 1.25x+ a single lane's capacity once split, and a spur merging into a full trunk uses the free lane.
+- **Seeing it:** every lane has a rate, a load (rate / capacity) and a status: idle, ok, busy (60%+), full (backed up). The map colours belts by status and thickens them with load; a belt that stays backed up shows a red
+  BACKED UP sign; an Auto-Rod's prompt reads "lane 62% (1.4 / 2.3 fish/s)" or "lane backed up ...: add a Splitter"; Olga says it once, the first time. The numbers are pure (`BeltNet.sample/status`) and tested.
+- **Not done:** an animated flow overlay and per-belt priority. **Unverified by eye:** the sign size/position and map colours.
+
+## The first five minutes (round 8, headless)
+- The bot report already shows a fast start (first catch 6 s, first feed 9 s, Bucket 15 s, Auto-Rod about 4 min), so this adds **celebration and orientation**, not pacing changes.
+- **Beats** (`first_five.gd`, pure): FIRST HOLE, FIRST CATCH, THE EYE BLINKS, A BUCKET, THE LAKE FISHES FOR YOU, FIRST BELT: each a banner, one Olga line and a chime, once, one at a time (4 s apart, none lost).
+  Saved (`stats.firsts`, times in hands-on seconds); a save from before this does not replay them.
+- **Five-minute recap** at 5:00 of hands-on play (the clock waits through the title and opening): counts, the times of your firsts, and the single next step for your state (feed the Eye / buy a Bucket / save N coins for
+  an Auto-Rod / lay a belt / build spurs). Shown once.
+- first10 now also asserts the beats fired and the recap showed. **Unverified by eye:** banner timing against the hero moment and catch card, which can overlap.

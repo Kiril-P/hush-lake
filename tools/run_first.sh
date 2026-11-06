@@ -1,0 +1,8 @@
+#!/bin/bash
+# Headless test of the first five minutes. Exit code 0 = pass.
+cd "$(dirname "$0")/.."
+GODOT="${GODOT:-/Applications/Godot.app/Contents/MacOS/Godot}"
+out=$("$GODOT" --headless --path . res://tools/first_test.tscn --quit-after 3000 2>&1)
+echo "$out" | grep -E "^(PASS|FAIL|FIRST|goals without)|SCRIPT ERROR|^ERROR|Parse Error"
+if echo "$out" | grep -qE "SCRIPT ERROR|^ERROR:|FIRST FAIL|Parse Error"; then exit 1; fi
+echo "$out" | grep -q "FIRST PASS"

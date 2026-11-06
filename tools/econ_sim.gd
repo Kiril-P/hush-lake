@@ -273,9 +273,10 @@ func run() -> void:
 		print("%-8s %s" % [k, "%02d:%02d" % [int(milestones[k] / 60.0), int(milestones[k]) % 60]])
 	print("longest wait between purchases: %ds at %s" % [int(max_gap), gap_at])
 	print("tithe level %d | rigs %d | autos %d | awakened %d | coins left %d" % [g.stats.tithe, rigs, autos, g.stats.awakened, int(GameState.currency)])
-	# belt physics (BeltNet): each machine's fish ride its own lane, so only a hand-built trunk with spurs can saturate. Worst case: everything on one lane.
-	var load_all := auto_fish_rate() + rig_fish_rate()
+	# belt physics (BeltNet): each machine's fish ride its own lane unless the player merges them onto a trunk with spurs. Report how many rods fill a lane.
+	var per_rod := auto_fish_rate() / maxf(autos, 1)
+	var boosted := per_rod * 2.4 * 1.6   # one Overdrive Coils purchase and a tier-2 rod
 	var lane_cap := BeltNet.capacity({"kind": "belt"}, g._belt_speed())
-	print("belt load if ALL %d autos and %d rigs shared one lane: %.2f fish/s of %.2f/s (a lane saturates beyond that; a splitter adds a second lane)" % [autos, rigs, load_all, lane_cap])
-	print("one auto-rod: %.2f fish/s, a lane carries %d of them; a chute carries %.2f fish/s" % [auto_fish_rate() / maxf(autos, 1), int(lane_cap / maxf(auto_fish_rate() / maxf(autos, 1), 0.01)), BeltNet.capacity({"kind": "chute"}, g._belt_speed())])
+	print("belt lane: %.2f fish/s (x2 with a splitter). One rod makes %.2f/s plain, %.2f/s with Overdrive and a tier; %d plain / %d boosted rods fill a lane" % [lane_cap, per_rod, boosted, int(lane_cap / maxf(per_rod, 0.001)), int(lane_cap / maxf(boosted, 0.001))])
+	print("if ALL %d autos shared one lane it would carry %.2f fish/s of %.2f/s (%d%%)" % [autos, auto_fish_rate(), lane_cap, int(100.0 * auto_fish_rate() / lane_cap)])
 	print("lake emptied: %s" % ("yes at " + stamp() if milestones.has("empty") else "NO within 8h (left %d)" % g.model.total_left()))

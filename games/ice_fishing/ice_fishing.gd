@@ -352,6 +352,8 @@ var belts: Array = []
 var belt_fish: Array = []  # fish riding belts: {belt, d, f, m} (BeltNet moves them)
 var belt_serial := 0
 var restore_late: Array = []
+var net_t := 0.0
+var firsts_gap := 99.0
 var belt_held := 0         # fish held back by a queue or a blocked merge, last step
 var belt_mm: MultiMesh
 var sector_patches := {}
@@ -2359,6 +2361,7 @@ func _process(delta: float) -> void:
 		_tick_hole(t, delta)
 	_tick_rigs(delta)
 	_update_belt_fish(delta)
+	_update_network(delta)
 	eye_burst_t -= delta
 	eye_pending_t -= delta
 	if bait_t > 0.0:
@@ -2424,10 +2427,50 @@ func _process(delta: float) -> void:
 	view.position.y = -0.4 + sin(Time.get_ticks_msec() * 0.002) * 0.005
 	_animate(delta)
 
+## The first five minutes (first_five.gd): a banner and one of Olga's lines the first time you drill, catch, feed the Eye, buy a bucket, build an
+## Auto-Rod and lay a belt, and a recap card at five minutes of hands-on play (the clock waits through the title and the opening).
+func _first_facts() -> Dictionary:
+	return {"holes": int(stats.holes), "caught": int(stats.caught), "eye_fed": int(stats.eye_fed), "bucket": GameState.level("bucket") >= 1,
+		"autos": int(stats.autos), "belts": int(stats.belts)}
+
+func _update_firsts(delta: float) -> void:
+	if title_active or guide.intro_active:
+		return
+	var clk := float(stats.get("fa_clock", 0.0)) + delta
+	stats["fa_clock"] = clk
+	var shown: Dictionary = stats.get("firsts", {})
+	var facts := _first_facts()
+	if not stats.has("firsts"):
+		stats["firsts"] = shown
+		if int(stats.caught) > 0 and clk > 20.0 or int(stats.eye_fed) > 5:   # a save from before this existed: nothing to celebrate twice
+			for id in FirstFive.reached(facts):
+				shown[id] = -1.0
+			stats["recap_done"] = true
+	firsts_gap += delta
+	var id := FirstFive.next_beat(facts, shown, firsts_gap)
+	if id != "":
+		shown[id] = clk
+		firsts_gap = 0.0
+		var b := FirstFive.beat(id)
+		_banner(String(b[1]), Color(0.7, 1.0, 0.9))
+		_say(String(b[2]))
+		sfx.play(String(b[3]), -2.0, 1.0)
+		return
+	if clk >= FirstFive.RECAP_AT and not stats.get("recap_done", false) and firsts_gap >= FirstFive.GAP:
+		stats["recap_done"] = true
+		var times := {}
+		for k in shown:
+			if float(shown[k]) >= 0.0:
+				times[k] = shown[k]
+		_banner("FIVE MINUTES ON THE ICE", Color(1.0, 0.9, 0.5))
+		_say_notice(FirstFive.recap(facts, times, GameState.currency, auto_cost(), GameState.cost("bucket", UPGRADES.bucket.base, UPGRADES.bucket.growth)))
+		msg_time = 9.0
+
 func _animate(delta: float) -> void:
 	var tm := Time.get_ticks_msec() * 0.001
 	if not title_active:
 		play_time += delta
+	_update_firsts(delta)
 	if not title_active and not (guide.intro_active and guide.scene == "intro"):   # the clock waits through the title and the opening
 		day_t = fmod(day_t + delta / DAY_LENGTH, 1.0)
 	sky_t -= delta
@@ -3657,6 +3700,7 @@ func _tick_hole(t: Dictionary, delta: float) -> void:
 					if t.belt != null:
 						if not _belt_room(t.belt):
 							t.auto_t = 0.25   # the lane is full: the rod waits for a gap rather than dropping a fish on top of another
+							BeltNet.note_wait(t.belt, 0.25)
 						else:
 							var f := _draw_fish(t)
 							if not f.is_empty():
@@ -4364,67 +4408,90 @@ func _install_machine(t: Dictionary, kind: String, pay := true) -> void:
 		_say("%s built. Everything on this belt is worth more." % kind.capitalize())
 		_refresh()
 
-## A splitter on a belt: from its mark every other fish takes a second lane to the Eye, and every fish does while the main lane is backed up.
+## A splitter on a trunk belt gives it a second lane alongside: rods and spurs put their fish on whichever lane has room, so the trunk carries twice as much.
 func _install_splitter(t: Dictionary, pay := true) -> void:
 	var belt = t.belt
 	if t.state != "auto" or belt == null:
 		_say("Click an Auto-Rod that has a belt.")
 		return
 	if belt.get("kind", "belt") != "belt":
-		_say("A chute has no room for a splitter: it is only a slide.")
+		_say("A chute has no room for a second lane: it is only a slide.")
+		sfx.play("deny")
+		return
+	if belt.get("parent", null) != null:
+		_say("Splitters go on a trunk belt, the one that runs to the Eye.")
 		sfx.play("deny")
 		return
 	if belt.get("twin", null) != null:
-		_say("That belt already has a splitter.")
-		return
-	if float(belt.len) < 9.0:
-		_say("Too short a belt for a splitter.")
-		sfx.play("deny")
+		_say("That belt already has a second lane.")
 		return
 	var cost := _build_cost(6)
 	if pay and not _spend(float(cost)):
 		return
-	var sd := float(belt.len) * (0.35 if belt.get("parent", null) != null else 0.45)
-	for c in belts:   # (a trunk's splitter sits just after the last spur joins it)
-		var cp = c.get("parent", null)
-		if cp != null and int(cp.id) == int(belt.id):
-			sd = maxf(sd, float(c.join_d) + 1.5)
-	sd = minf(sd, float(belt.len) - 3.0)
-	var pt: Vector3 = (belt.a as Vector3) + (belt.dir as Vector3) * sd
-	var side: Vector3 = (belt.dir as Vector3).rotated(Vector3.UP, PI * 0.5) * 1.9
-	for sgn in [1.0, -1.0]:   # the lane goes out the side with more room (not into a neighbouring belt's line)
-		var cand: Vector3 = pt + side * sgn
+	var side: Vector3 = (belt.dir as Vector3).rotated(Vector3.UP, PI * 0.5) * 1.35
+	for sgn in [1.0, -1.0]:   # the lane goes on the side with more room (not into a neighbouring belt)
 		var clear := true
 		for ob in belts:
-			if int(ob.id) != int(belt.id) and BeltNet.project(ob.a, ob.b, cand).perp < 1.3:
+			if int(ob.id) != int(belt.id) and BeltNet.project(ob.a, ob.b, (belt.a as Vector3) + (belt.dir as Vector3) * float(belt.len) * 0.5 + side * sgn).perp < 1.2:
 				clear = false
 		if clear:
 			side = side * sgn
 			break
-	var a2: Vector3 = pt + side
-	var twin := _new_belt(a2, (-a2).normalized() * (PUPIL_R + 0.4), "belt", 0)
+	var twin := _new_belt((belt.a as Vector3) + side, (belt.b as Vector3) + side, "belt", 0)
 	twin["owner_id"] = belt.id
 	_make_belt_node(twin)
 	_pop_in(twin.node)
 	belts.append(twin)
 	belt["twin"] = twin
-	belt["split_d"] = sd
 	belt["splitter_cost"] = cost
-	var sv := Node3D.new()
-	(belt.node as Node3D).add_child(sv)
-	sv.position = Vector3(0, 0, float(belt.len) * 0.5 - sd)
-	MachineModels.splitter(sv)
-	_pop_in(sv)
-	belt["split_node"] = sv
-	var l := _label3d(sv, Vector3(0, 2.2, 0), "SPLITTER", 0.012)
+	var l := _label3d(twin.node, Vector3(0, 2.0, 0), "SPLITTER: 2 LANES", 0.012)
 	l.visibility_range_end = 18.0
 	l.no_depth_test = false
 	l.modulate = Color(0.7, 1.0, 0.85)
 	stats.splitters += 1
 	if pay:
-		_say("Splitter built. A second lane carries every other fish, and takes the lot when this lane backs up.")
+		_say("Splitter built: a second lane runs beside this belt. Rods and spurs use whichever lane has room.")
 		sfx.play("buy")
 		_refresh()
+
+## Every lane that carries fish: the belts and the Ice-Breakers' own lines.
+func all_lanes() -> Array:
+	var out: Array = belts.duplicate()
+	for rg in rigs:
+		out.append(rg.belt)
+	return out
+
+## "lane 62% (2.0 / 3.2 fish/s)" or "lane backed up (...)" for a belt's prompt.
+func lane_text(b: Dictionary) -> String:
+	var st := BeltNet.status(b)
+	var cap := BeltNet.capacity(b, _belt_speed()) * (2.0 if b.get("twin", null) != null else 1.0)
+	var rate_all := float(b.get("rate", 0.0)) + (float(b.twin.get("rate", 0.0)) if b.get("twin", null) != null else 0.0)
+	var head := "lane backed up" if st == "full" else "lane %d%%" % int(round(float(b.get("load", 0.0)) * 100.0))
+	var tail := ""
+	if st == "full" and b.get("twin", null) == null and b.get("kind", "belt") == "belt":
+		tail = ": add a Splitter"
+	return "%s (%.1f / %.1f fish/s)%s" % [head, rate_all, cap, tail]
+
+## Once a second: lane rates and loads, the BACKED UP sign on a jammed belt, and Olga's one-time tip.
+func _update_network(delta: float) -> void:
+	net_t += delta
+	if net_t < 1.0:
+		return
+	BeltNet.sample(all_lanes(), net_t, _belt_speed())
+	net_t = 0.0
+	for b in belts:
+		var full := BeltNet.status(b) == "full"
+		var warn: Label3D = b.get("warn", null)
+		if full and warn == null and b.has("node"):
+			warn = _label3d(b.node, Vector3(0, 1.6, 0), "BACKED UP", 0.014)
+			warn.modulate = BeltNet.status_color("full")
+			warn.visibility_range_end = 30.0
+			b["warn"] = warn
+		if warn != null and is_instance_valid(warn):
+			warn.visible = full
+		if full and not stats.get("net_tip", false):
+			stats["net_tip"] = true
+			_say_notice("A belt is backed up: its lane is full. Put a Splitter on it (kit), or give a rod its own belt.")
 
 func _belt_has_children(belt: Dictionary) -> bool:
 	for c in belts:
@@ -4669,6 +4736,7 @@ func _tick_rigs(delta: float) -> void:
 		rg.tag.text = "ICE-BREAKER"
 		if not _belt_room(rg.belt):
 			rg.t = 0.3
+			BeltNet.note_wait(rg.belt, 0.3)
 			continue
 		var pseudo := {"c": best, "node": rg.node}
 		var f := _draw_fish(pseudo)
@@ -4702,14 +4770,20 @@ func _belt_push(belt: Dictionary, f: Dictionary, d := 0.0) -> void:
 	if belt_fish.size() >= BELT_MAX_FISH:
 		_feed_eye(f, _lane_mult(belt) * _belt_flag_mult(belt, f))
 		return
-	belt_fish.append({"belt": belt, "d": d, "f": f, "m": 1.0})
+	var lane := BeltNet.pick_lane(belt_fish, belt, d)
+	belt_fish.append({"belt": belt if lane.is_empty() else lane, "d": d, "f": f, "m": 1.0})
 
 ## What the Eye pays per fish that arrives down this lane: a chute has no motor, so no Belt Motor bonus.
 func _lane_mult(belt: Dictionary) -> float:
 	return EYE_MULT if belt.get("kind", "belt") == "chute" else _belt_mult()
 
 ## Machines on a belt change what its fish are worth when they reach the Eye.
-func _belt_flag_mult(belt: Dictionary, f: Dictionary) -> float:
+func _belt_flag_mult(belt_in: Dictionary, f: Dictionary) -> float:
+	var belt := belt_in
+	if belt_in.has("owner_id"):   # a second lane runs through the same cannery and sorter as its trunk
+		for ob in belts:
+			if int(ob.id) == int(belt_in.owner_id):
+				belt = ob
 	var m := 1.0
 	if belt.get("cannery", false):
 		m *= CANNERY_MULT
@@ -4745,7 +4819,7 @@ func _update_belt_fish(delta: float) -> void:
 
 ## Is there room on this belt for the next fish its rod or rig would put on?
 func _belt_room(belt: Dictionary) -> bool:
-	return BeltNet.has_room(belt_fish, belt)
+	return not BeltNet.pick_lane(belt_fish, belt).is_empty()
 
 ## One sweep of a broom: the nearest loose fish that has settled goes onto the nearest belt with room (else flies to the Eye). True if it moved one.
 func _broom_sweep(pr: Dictionary) -> bool:
@@ -4859,8 +4933,9 @@ func _tile_action_text(t: Dictionary) -> String:
 					return "Click: build %s on this belt (%d)" % [BUILD_ITEMS[build_item], _build_cost(build_item)]
 				if build_item == 6:
 					if t.belt.get("kind", "belt") != "belt": return "A chute cannot take a splitter"
-					if t.belt.get("twin", null) != null: return "This belt already has a splitter"
-					return "Click: build a Splitter on this belt (%d)" % _build_cost(6)
+					if t.belt.get("parent", null) != null: return "Splitters go on a trunk belt, not a spur"
+					if t.belt.get("twin", null) != null: return "This belt already has a second lane"
+					return "Click: build a Splitter (a second lane) on this belt (%d)" % _build_cost(6)
 				return "Depots, ice-breakers and brooms go on open ice (B to switch)"
 			if tool == 5 and _tool_unlocked(5) and t.belt == null:
 				var so := spur_option(t)
@@ -4870,7 +4945,7 @@ func _tile_action_text(t: Dictionary) -> String:
 				return "Click: collect %d fish (what does not fit spills onto the ice)" % t.stash.size()
 			if model.tile_left(t.c) == 0:
 				return "Click: pick up Auto-Rod (refund %d)" % _refund()
-			if t.belt != null: return "Auto-Rod + belt (working)"
+			if t.belt != null: return "Auto-Rod + %s (working)  %s" % ["chute" if t.belt.get("kind", "belt") == "chute" else "belt", lane_text(t.belt)]
 			return "Auto-Rod (working)"
 		"smoker":
 			if t.slot.is_empty():

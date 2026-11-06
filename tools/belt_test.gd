@@ -11,7 +11,7 @@ func check(name: String, ok: bool) -> void:
 		fails += 1
 
 func mk(id: int, len: float, kind := "belt") -> Dictionary:
-	return {"id": id, "len": len, "kind": kind, "parent": null, "join_d": 0.0, "twin": null, "split_d": 0.0}
+	return {"id": id, "len": len, "kind": kind, "parent": null, "join_d": 0.0, "twin": null}
 
 func fish_on(b: Dictionary, d: float) -> Dictionary:
 	return {"belt": b, "d": d, "f": {}, "m": 1.0}
@@ -31,8 +31,9 @@ func merge_rate(trunk: Dictionary, spur: Dictionary) -> float:
 	arrived = 0
 	var warm := 0
 	for i in 800:   # 40 s: the trunk's own rod and the spur's both fish as fast as there is room
-		if BeltNet.has_room(fish, trunk):
-			fish.append(fish_on(trunk, 0.0))
+		var tl := BeltNet.pick_lane(fish, trunk)
+		if not tl.is_empty():
+			fish.append(fish_on(tl, 0.0))
 		if BeltNet.has_room(fish, spur):
 			fish.append(fish_on(spur, 0.0))
 		BeltNet.step(fish, 4.5, 0.05, arr, lv)
@@ -59,7 +60,7 @@ func _ready() -> void:
 	check("a lone fish is still riding at 3.9 s on an 18 m belt (4.5 m/s)", fish.size() == 1)
 	run(fish, 0.3)
 	check("and arrives at 4.2 s", fish.is_empty() and arrived == 1)
-	check("lane capacity is speed / gap", absf(BeltNet.capacity(b, 4.5) - 5.0) < 0.01)
+	check("lane capacity is speed / gap", absf(BeltNet.capacity(b, 4.5) - 4.5 / BeltNet.GAP) < 0.01)
 	# the spacing holds: a crowd put on too close spreads out and never overlaps
 	arrived = 0
 	fish = []
@@ -117,23 +118,49 @@ func _ready() -> void:
 		if i == 200:
 			warm = arrived
 	var rate := float(arrived - warm) / 20.0
-	check("a lane saturates at its capacity (%.1f fish/s measured, 5.0 expected)" % rate, rate > 4.3 and rate < 5.2 and refused > 100)
-	# merge saturation: a spur and the trunk's own rod share one lane after the join; a splitter on the spur gives the spur a bypass
+	check("a lane saturates at its capacity (%.1f fish/s measured, %.1f expected)" % [rate, 4.5 / BeltNet.GAP], rate > 0.85 * 4.5 / BeltNet.GAP and rate < 1.05 * 4.5 / BeltNet.GAP and refused > 100)
+	# merge saturation: a spur and the trunk's own rod share one lane after the join; a splitter (second lane on the trunk) gives the spur somewhere to go
 	var tr2 := mk(30, 30.0)
 	var sp2 := mk(31, 10.0)
 	sp2.parent = tr2
 	sp2.join_d = 8.0
 	var rate_plain := merge_rate(tr2, sp2)
-	var by := mk(32, 22.0)
+	var by := mk(32, 30.0)
 	var tr3 := mk(33, 30.0)
+	tr3.twin = by
 	var sp3 := mk(34, 10.0)
 	sp3.parent = tr3
 	sp3.join_d = 8.0
-	sp3.twin = by
-	sp3.split_d = 8.5
 	var rate_split := merge_rate(tr3, sp3)
-	check("without a splitter the merged lane caps at 5/s (%.1f)" % rate_plain, rate_plain < 5.3)
-	check("a splitter on the spur lifts the total (%.1f/s vs %.1f/s)" % [rate_split, rate_plain], rate_split > rate_plain + 1.0)
+	check("without a splitter the merged lane caps at its capacity (%.1f)" % rate_plain, rate_plain < 1.05 * 4.5 / BeltNet.GAP)
+	check("a second lane on the trunk lifts the total (%.1f/s vs %.1f/s)" % [rate_split, rate_plain], rate_split > rate_plain * 1.5)
+	# the network report: load, backed-up status, colours
+	var lane := mk(40, 20.0)
+	arrived = 0
+	fish = []
+	for i in 600:   # 30 s of a lane run flat out
+		if BeltNet.has_room(fish, lane):
+			fish.append(fish_on(lane, 0.0))
+		else:
+			BeltNet.note_wait(lane, 0.05)
+		BeltNet.step(fish, 4.5, 0.05, arr, lv)
+		if i % 20 == 19:
+			BeltNet.sample([lane], 1.0, 4.5)
+	check("a lane run flat out reads as full (load %.2f, backed %.2f)" % [lane.load, lane.backed], BeltNet.status(lane) == "full" and lane.load > 0.8)
+	var calm := mk(41, 20.0)
+	fish = []
+	for i in 600:   # a fish every 2 s on a lane that takes 3: busy-ish but never backed up
+		if i % 40 == 0:
+			fish.append(fish_on(calm, 0.0))
+		BeltNet.step(fish, 4.5, 0.05, arr, lv)
+		if i % 20 == 19:
+			BeltNet.sample([calm], 1.0, 4.5)
+	check("a light lane reads as ok (rate %.2f, load %.2f)" % [calm.rate, calm.load], BeltNet.status(calm) == "ok" and calm.load < 0.3)
+	var still := mk(42, 20.0)
+	BeltNet.sample([still], 1.0, 4.5)
+	check("an unused lane reads as idle", BeltNet.status(still) == "idle")
+	check("status colours differ", BeltNet.status_color("full") != BeltNet.status_color("ok") and BeltNet.status_color("busy") != BeltNet.status_color("idle"))
+	check("about 8 boosted rods fill a lane at 0.3 fish/s each (base belt)", BeltNet.rods_to_fill(lane, 4.5, 0.3) >= 6 and BeltNet.rods_to_fill(lane, 4.5, 0.3) <= 10)
 	# chutes accelerate
 	var ch := mk(20, 20.0, "chute")
 	check("a chute is slow at the top and faster at the bottom", BeltNet.speed_at(ch, 0.0, 4.5) < BeltNet.speed_at(ch, 10.0, 4.5) and BeltNet.speed_at(ch, 100.0, 4.5) == BeltNet.CHUTE_VMAX)
@@ -227,8 +254,10 @@ func _game_tests() -> void:
 	var cs := GameState.currency
 	g._install_splitter(h1)
 	check("a splitter makes a second lane to the Eye, charged", h1.belt.twin != null and g.belts.size() == s0 + 1 and cs - GameState.currency == 150 and g.stats.splitters == 1)
-	check("the twin lane ends at the Eye and is not a trunk for spurs", (h1.belt.twin.b as Vector3).length() < g.PUPIL_R + 1.0 and g.spur_option(rod(g, Vector3(-27.0, 0.0, -9.0))).get("belt", {}).get("id", -1) != h1.belt.twin.id)
-	check("the splitter sits after the spur's join point", float(h1.belt.split_d) >= float(h2.belt.join_d) + 1.4)
+	check("the twin lane runs beside the trunk to the Eye and is not a trunk for spurs", (h1.belt.twin.b as Vector3).length() < g.PUPIL_R + 2.5 and (h1.belt.twin.a as Vector3).distance_to(h1.belt.a) < 1.5 and g.spur_option(rod(g, Vector3(-27.0, 0.0, -9.0))).get("belt", {}).get("id", -1) != h1.belt.twin.id)
+	var before_sp: int = g.stats.splitters
+	g._install_splitter(h2, false)
+	check("a spur refuses a splitter", h2.belt.twin == null and g.stats.splitters == before_sp)
 	check("a second splitter on the same belt is refused", (func(): g._install_splitter(h1); return g.stats.splitters == 1).call())
 	# many fish through the splitter: all arrive, some via the twin
 	var e1: int = g.stats.eye_fed
@@ -296,6 +325,7 @@ func _game_tests() -> void:
 	g._pickup_auto(h4)
 	var a1 := rod(g, Vector3(-30.0, 0.0, 0.0))
 	check("(the spot is free again)", not a1.is_empty() or true)
+	await _network_test(g)
 	await _save_load_test(g)
 
 func _save_load_test(g) -> void:
@@ -343,3 +373,58 @@ func _save_load_test(g) -> void:
 	check("the splitter and the sorter are back", split_ok and sorter_ok)
 	var lanes: int = g2.belts.size()
 	check("the twin lane is in the list of belts too (%d belts)" % lanes, lanes == 4)
+
+## Drives fish onto a lane at a rod-like rate (as a rod loop would: wait for room, note the wait) for `secs` game seconds.
+func drive(g, h: Dictionary, per_sec: float, secs: float) -> int:
+	var fed := 0
+	var acc := 0.0
+	var dt := 1.0 / 30.0
+	for i in int(secs / dt):
+		acc += per_sec * dt
+		while acc >= 1.0:
+			acc -= 1.0
+			if g._belt_room(h.belt):
+				g._belt_spawn(h, fish_t.duplicate())
+				fed += 1
+			else:
+				BeltNet.note_wait(h.belt, 0.25)
+		g._update_belt_fish(dt)
+		g._update_network(dt)
+	return fed
+
+func _network_test(g) -> void:
+	for t in g.holes.duplicate():
+		if t.state == "auto":
+			g._pickup_auto(t)
+	g.belt_fish.clear()
+	g.stats.erase("net_tip")
+	var h := rod(g, Vector3(-30.0, 0.0, 0.0))
+	g._build_belt(h, false)
+	check("lanes include the belt", g.all_lanes().size() >= 1)
+	# a gentle load: green, no sign, no tip
+	var e0: int = g.stats.eye_fed
+	var fed := drive(g, h, 1.0, 12.0)
+	check("a light load reads ok and shows no warning (%s)" % g.lane_text(h.belt), BeltNet.status(h.belt) == "ok" and h.belt.get("warn", null) == null and not g.stats.get("net_tip", false))
+	# a saturating load: a big boosted fleet on one trunk (3x the lane)
+	var cap: float = BeltNet.capacity(h.belt, g._belt_speed())
+	fed = drive(g, h, cap * 3.0, 14.0)
+	check("a flooded lane reads as backed up (%s)" % g.lane_text(h.belt), BeltNet.status(h.belt) == "full")
+	check("a BACKED UP sign appears on the belt and Olga mentions it once", h.belt.get("warn", null) != null and (h.belt.warn as Label3D).visible and g.stats.get("net_tip", false))
+	check("the prompt says it and suggests a splitter", g.lane_text(h.belt).find("backed up") >= 0 and g.lane_text(h.belt).find("Splitter") >= 0)
+	var col := BeltNet.status_color(BeltNet.status(h.belt))
+	check("the map colour for it is red", col == BeltNet.status_color("full"))
+	var rate_before := float(h.belt.rate)
+	# a splitter: the same flood now has two lanes
+	g._install_splitter(h, false)
+	var twin: Dictionary = h.belt.twin
+	check("the splitter is on", twin != null)
+	e0 = g.stats.eye_fed
+	var t0: float = 0.0
+	fed = drive(g, h, cap * 3.0, 20.0)
+	var delivered: int = g.stats.eye_fed - e0
+	var rate_now: float = float(delivered) / 20.0
+	check("with a splitter the flood delivers more than one lane can (%.2f vs one lane %.2f fish/s)" % [rate_now, cap], rate_now > cap * 1.25)
+	# unloaded again: the sign goes away
+	g.belt_fish.clear()
+	drive(g, h, 0.0, 8.0)
+	check("the sign hides once the lane clears", h.belt.warn == null or not (h.belt.warn as Label3D).visible)

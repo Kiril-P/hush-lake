@@ -109,3 +109,10 @@ Built and tested headless only. Please check by eye:
 **Splitter.** Kit > Splitter on a belt: where does the second lane go (it picks the side with room), does it cross things, does the splitter gantry look right? Do you ever feel a belt back up (rods pausing)?
 **Broom.** Kit > Broom on open ice near a belt, throw fish near it: does it sweep them onto the belt? Is the brush spin readable? Should it be faster or limited more than 3?
 **Balance.** Back-pressure only appears with brooms or many spurs (rods alone never saturate a lane). If splitters feel pointless, say so: the cure is a smaller lane capacity (`BeltNet.GAP`).
+
+## Round 8 checklist (belt network, first five minutes)
+**First five minutes.** Start a new game and play. Do the banners (FIRST HOLE, FIRST CATCH, THE EYE BLINKS, A BUCKET) feel like small rewards or like noise? Do they collide with the catch card and the slow-mo?
+Is Olga's line readable before it fades? At 5:00 does the recap card help, and is "Next:" the right nudge?
+
+**Belt network.** Build a trunk and several spurs and push it with boosted rods: does the map colour (green, amber, red) read? Does BACKED UP appear on the belt and is it legible? Does a Splitter's second lane look
+like a second lane (side, spacing)? Is 2.0 m between fish too sparse on a belt? Is ~7-15 boosted rods per lane the right point for it to matter (`BeltNet.GAP`)?
