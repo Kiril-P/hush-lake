@@ -317,3 +317,11 @@ Built in layers with a headless suite (`tools/run_opening.sh`, 60+ checks), a re
 - **Not built, on purpose:** splitters, sloped channels and brooms. They need new physics for fish on belts and a retune of the sim; doing that blind (no window, no human) would
   be a larger risk than value. Listed as the next logistics project.
 - **Unverified by eye:** particle scale and ring size were chosen from the models' dimensions, never looked at.
+
+## Peering into a hole (round 6, headless)
+- **Hold C over a hole** (within 4.5 m): a round window shows the water under that very tile, drawn from the lake model's stock (species shares, up to 24 fish; junk lies on the
+  bottom; kelp sways; light shafts; an amber glow if the hole is within 30 m of the Eye). Releasing C closes it. While open, clicks and walking are blocked so you cannot drill by accident.
+- It renders from one shared SubViewport world (`peer_view.gd`), disabled until opened: no cost when closed. `PeerView.fish_plan` (pure) decides what is down there; tests check
+  proportions, caps, the fade, no leaks on reopen, and the input rules.
+- It is information as well as charm: it shows a tile's real remaining mix (like Sonar, but you see it). Open question: should it need the Sonar upgrade? Left free for now.
+- **Unverified by eye:** the window's size, the fish scale (1.6x) and the colours were set from numbers only.

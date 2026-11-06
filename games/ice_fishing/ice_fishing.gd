@@ -1329,6 +1329,10 @@ void fragment() {
 	lcc.add_child(letters_panel)
 	ui.add_child(lcc)
 	letters_panel.read_letter.connect(_on_letter_read)
+	peer = PeerView.new()
+	for sp in SPECIES:
+		peer.colors[sp.name] = sp.color
+	ui.add_child(peer)
 	ledger_panel = LedgerPanel.new()
 	var lgc := CenterContainer.new()
 	lgc.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -1657,6 +1661,9 @@ const VISIT_CAP := 10   # per species per lake: <= ~1800 coins of visitors in a 
 # ---------- the story (story.gd): letters, keepsakes, dreams, the ending ----------
 var story: Dictionary = Story.blank()
 var ledger_panel: LedgerPanel
+var peer: PeerView            # the round window into the water under a hole (peer_view.gd)
+var peer_test_hold := false   # tests cannot press keys: they hold C with this
+const PEER_RANGE := 4.5
 var letters_panel: LettersPanel
 var dream: DreamOverlay
 var keep_rng := RandomNumberGenerator.new()
@@ -2327,6 +2334,9 @@ func _process(delta: float) -> void:
 		prompt_label.text = "" if raw == "ice" else "Too far - walk closer"
 	else:
 		prompt_label.text = _prompt_for(a)
+		if a.begins_with("hole:") and aim_flat <= PEER_RANGE and not peer.want_open:
+			prompt_label.text += "     [hold C: peer in]"
+	_update_peer(delta, raw)
 	_tick_yard(delta, captured)
 	var in_hand := _held_kind() in ["fish", "bucket"]
 	if captured and (a == "" or (a == "ice" and in_hand)) and (in_hand or yard.near($Player.global_position, PICKUP_RADIUS + 1.0) > 0) and not guide.intro_active:
@@ -3518,10 +3528,36 @@ func _under_hud(world: Vector3) -> bool:
 
 ## A full-screen panel or scene that owns the keyboard and the mouse (photo mode only owns the mouse: you can still walk to frame a shot).
 func _overlay_blocks_walk() -> bool:
-	return letters_panel.visible or ledger_panel.visible or (dream != null and dream.active)
+	return letters_panel.visible or ledger_panel.visible or (dream != null and dream.active) or (peer != null and peer.want_open)
 
 func _overlay_blocks_click() -> bool:
-	return refreeze_panel.visible or letters_panel.visible or ledger_panel.visible or photo or (dream != null and dream.active)
+	return refreeze_panel.visible or letters_panel.visible or ledger_panel.visible or photo or (dream != null and dream.active) or (peer != null and peer.want_open)
+
+## Hold C over a hole within reach: a round window opens on the water under it (what is really left in that tile). Releasing C closes it.
+func _hole_of_action(a: String) -> Dictionary:
+	if not a.begins_with("hole:"):
+		return {}
+	for t in holes:
+		if "hole:%d" % t.idx == a:
+			return t
+	return {}
+
+func _update_peer(delta: float, raw: String) -> void:
+	if peer == null:
+		return
+	var hold := (Input.is_physical_key_pressed(KEY_C) or peer_test_hold) and _cap() and not title_active and not guide.intro_active and not photo \
+		and not refreeze_panel.visible and not journal_panel.visible and not letters_panel.visible and not ledger_panel.visible and not (dream != null and dream.active)
+	if hold and not peer.want_open:
+		var t := _hole_of_action(raw)
+		if not t.is_empty() and aim_flat <= PEER_RANGE:
+			var hp: Vector3 = t.node.global_position if t.get("node") != null else Vector3.ZERO
+			peer.open(model.stock.get(t.c, {}), Vector2(hp.x, hp.z).length() < 30.0, "")
+			peer_cell = t.c
+	elif not hold and peer.want_open:
+		peer.close()
+	peer.update(delta)
+
+var peer_cell := Vector2i.ZERO
 
 func _walk(delta: float) -> void:
 	if guide.intro_active or _overlay_blocks_walk():
