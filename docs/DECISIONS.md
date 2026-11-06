@@ -309,3 +309,11 @@ Built in layers with a headless suite (`tools/run_opening.sh`, 60+ checks), a re
   its head to follow you. One of each at most; nobody in the camp (r < 52); deer on the bank only; all flee (fox 10 m, deer 17 m, hare 7 m) and are removed when far.
   Deer must spawn up to 125 m away because the bank is ~90 m from the camp (a first test run showed nothing ever spawned: the spawn ring was empty).
 - **Unverified by eye:** the models are primitives posed from code; nobody has looked at them. Check scale and gait in a playtest.
+
+## Machine spectacle (round 6, headless)
+- **What was built** (`machine_fx.gd`): Overdrive Coils are now visible (an amber coil ring and sparks on every working Auto-Rod and Ice-Breaker, glow, spin and sparks
+  scale with the level); a working Ice-Breaker throws ice chunks at its cutting edge, rumbles and shakes the view as you come within 45 m (rumble loudest beside it).
+  Visual only: no change to the economy beyond Overdrive itself.
+- **Not built, on purpose:** splitters, sloped channels and brooms. They need new physics for fish on belts and a retune of the sim; doing that blind (no window, no human) would
+  be a larger risk than value. Listed as the next logistics project.
+- **Unverified by eye:** particle scale and ring size were chosen from the models' dimensions, never looked at.

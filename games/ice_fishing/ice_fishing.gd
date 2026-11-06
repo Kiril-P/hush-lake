@@ -1898,7 +1898,20 @@ func _upgrade_desc(id: String) -> String:
 		return "every bucket holds %d" % next_capacity()
 	return UPGRADES[id].desc
 
+func _sync_machine_fx() -> void:
+	var lv := GameState.level("overdrive")
+	for t in holes:
+		if t.state == "auto" and t.get("node") != null and is_instance_valid(t.node):
+			var aura: Node = (t.node as Node3D).get_node_or_null("od_aura")
+			if (aura == null and lv > 0) or (aura != null and int(aura.get_meta("level", -1)) != lv):
+				MachineFX.sync_overdrive(t.node, lv, 1.3)
+	for rg in rigs:
+		var ra: Node = (rg.node as Node3D).get_node_or_null("od_aura")
+		if (ra == null and lv > 0) or (ra != null and int(ra.get_meta("level", -1)) != lv):
+			MachineFX.sync_overdrive(rg.node, lv, 3.4)
+
 func _refresh() -> void:
+	_sync_machine_fx()
 	_sync_active()
 	_check_goals()
 	_check_story()
@@ -3537,6 +3550,7 @@ func _tick_hole(t: Dictionary, delta: float) -> void:
 		"auto":
 			var working_rod: bool = model.tile_left(t.c) > 0
 			if working_rod:
+				MachineFX.spin(t.node, delta)
 				t.auto_t -= delta
 				if t.auto_t <= 0.0:
 					if t.belt != null:
@@ -4305,6 +4319,8 @@ func _build_rig(pos: Vector3, pay := true) -> void:
 	hit.visible = false
 	var rp: Dictionary = MachineModels.rig(node)
 	rig.beacon = rp.beacon
+	rig["fx"] = MachineFX.rig_fx(node)
+	rig["rumble_t"] = randf_range(0.0, 3.0)
 	_pop_in(node)
 	rig.tag = _label3d(node, Vector3(0, 8.4, 0), "ICE-BREAKER", 0.016)
 	rig.tag.visibility_range_end = 45.0
@@ -4361,9 +4377,21 @@ func _pick_up_rig(rg: Dictionary) -> void:
 	_refresh()
 
 func _tick_rigs(delta: float) -> void:
+	var ppos: Vector3 = $Player.global_position
 	for rg in rigs:
 		if rg.has("beacon") and is_instance_valid(rg.beacon):
 			rg.beacon.rotation.y += delta * 3.2   # the amber beacon turns while the rig stands
+		MachineFX.spin(rg.node, delta)
+		if rg.has("fx") and is_instance_valid(rg.fx):   # chewing: chunks fly, the hull rumbles, the view shakes as you come close
+			var working: bool = _rig_best(rg).x != 9999 if int(Engine.get_process_frames()) % 20 == int(rg.idx) % 20 else rg.fx.emitting
+			rg.fx.emitting = working
+			rg["rumble_t"] = float(rg.get("rumble_t", 0.0)) - delta
+			if working and rg.rumble_t <= 0.0:
+				rg.rumble_t = 4.5
+				var rb := MachineFX.rumble_for(ppos.distance_to(rg.node.global_position))
+				if rb.shake > 0.0:
+					sfx.play("rumble", float(rb.vol_db), 1.25)
+					shake = maxf(shake, float(rb.shake))
 		rg.t -= delta
 		if rg.t > 0.0:
 			continue
