@@ -1469,6 +1469,8 @@ func _set_setting(key: String, v: float) -> void:
 	_apply_settings()
 
 func _apply_settings() -> void:
+	if scenery != null and scenery.cinematic != GameSettings.on("cinematic"):
+		scenery.apply_cinematic(GameSettings.on("cinematic"))
 	var pl: Node = get_node_or_null("Player")
 	if pl:
 		pl.sensitivity = GameSettings.get_value("sens")

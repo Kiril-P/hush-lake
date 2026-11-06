@@ -220,6 +220,7 @@ shader_type spatial;
 render_mode cull_disabled, specular_schlick_ggx;
 uniform vec3 sky_tint : source_color = vec3(0.62, 0.74, 0.95);
 uniform float glint_amount = 1.0;
+uniform float gloss = 0.0;   // 0 = the matte look; 1 = mirror-glossy ice (cinematic lighting: screen-space reflections pick it up)
 varying vec3 wpos;
 void vertex() { wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; }
 float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
@@ -258,8 +259,8 @@ void fragment() {
 	// sky sheen toward grazing angles
 	float fres = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 6.0);
 	ALBEDO = pow(base, vec3(1.55));   // the mesh colours are chosen as screen colours: darken to linear like the old material did
-	ROUGHNESS = 0.4 - 0.1 * mott;
-	SPECULAR = 0.12;
+	ROUGHNESS = 0.4 - 0.1 * mott - 0.3 * gloss;
+	SPECULAR = 0.12 + 0.38 * gloss;
 	EMISSION = sky_tint * fres * 0.10;
 	// glints: tiny stars that twinkle on the ice near the camera
 	vec2 gp = w * 3.2;
@@ -639,6 +640,37 @@ func set_time(t: float) -> void:
 	moon.visible = _night > 0.15 and gloom < 0.6
 	for g in glow_mats:
 		g[0].emission_energy_multiplier = lerpf(g[1], g[2], _night)
+
+## Cinematic lighting (a setting, off by default): ambient occlusion in the corners and under the stalls, mirror-glossy ice that reflects the Eye and the lamps, soft
+## volumetric light in the air and a filmic tone curve. All Environment flags and one shader uniform, so it is exactly reversible. Costs GPU time: the setting says so.
+func apply_cinematic(on: bool) -> void:
+	if env_ref == null:
+		return
+	env_ref.ssao_enabled = on
+	env_ref.ssao_radius = 1.6
+	env_ref.ssao_intensity = 1.8
+	env_ref.ssao_power = 1.6
+	env_ref.ssr_enabled = on
+	env_ref.ssr_max_steps = 64
+	env_ref.ssr_fade_in = 0.12
+	env_ref.ssr_fade_out = 2.0
+	env_ref.ssr_depth_tolerance = 0.3
+	env_ref.volumetric_fog_enabled = on
+	env_ref.volumetric_fog_density = 0.004
+	env_ref.volumetric_fog_albedo = Color(0.55, 0.78, 0.95)
+	env_ref.volumetric_fog_length = 90.0
+	env_ref.volumetric_fog_anisotropy = 0.55
+	env_ref.volumetric_fog_ambient_inject = 0.2
+	env_ref.tonemap_mode = Environment.TONE_MAPPER_ACES if on else Environment.TONE_MAPPER_FILMIC
+	env_ref.tonemap_exposure = 1.05 if on else 1.0
+	if sun_light != null:
+		sun_light.light_volumetric_fog_energy = 1.4 if on else 1.0
+		sun_light.directional_shadow_max_distance = 140.0 if on else 100.0
+	if ice_mat != null:
+		ice_mat.set_shader_parameter("gloss", 1.0 if on else 0.0)
+	cinematic = on
+
+var cinematic := false
 
 ## Weather greys the sky and the light: the sky colours move toward a flat slate, the sun loses strength, the fog takes the same slate.
 func _apply_gloom() -> void:

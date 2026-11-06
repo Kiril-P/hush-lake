@@ -21,6 +21,7 @@ const DEFS := {
 	"sfx":    {"label": "Effects", "kind": "slider", "def": 1.0, "min": 0.0, "max": 1.0, "tab": 2, "fmt": "pct", "hint": "Kicks, splashes, coins, drills."},
 	"music":  {"label": "Music", "kind": "slider", "def": 0.8, "min": 0.0, "max": 1.0, "tab": 2, "fmt": "pct", "hint": "The score: a piano and glass bells that follow the hour, the weather and the Eye."},
 	"amb":    {"label": "Ambience", "kind": "slider", "def": 1.0, "min": 0.0, "max": 1.0, "tab": 2, "fmt": "pct", "hint": "The wind and the soft pad underneath."},
+	"cinematic": {"label": "Cinematic lighting", "kind": "toggle", "def": 0.0, "tab": 3, "hint": "Ambient occlusion, glossy ice that reflects the Eye and lamps, light shafts. Prettier, needs a stronger GPU; turn off if the frame rate drops."},
 	"full":   {"label": "Fullscreen", "kind": "toggle", "def": 0.0, "tab": 3, "hint": ""},
 	"vsync":  {"label": "V-Sync", "kind": "toggle", "def": 1.0, "tab": 3, "hint": "Smoother picture, may add a little input delay."},
 	"shadows": {"label": "Shadows", "kind": "toggle", "def": 1.0, "tab": 3, "hint": "Turn off for a lighter load on slower machines."},

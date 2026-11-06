@@ -325,3 +325,10 @@ Built in layers with a headless suite (`tools/run_opening.sh`, 60+ checks), a re
   proportions, caps, the fade, no leaks on reopen, and the input rules.
 - It is information as well as charm: it shows a tile's real remaining mix (like Sonar, but you see it). Open question: should it need the Sonar upgrade? Left free for now.
 - **Unverified by eye:** the window's size, the fish scale (1.6x) and the colours were set from numbers only.
+
+## Cinematic lighting (round 6): built blind, OFF by default
+- **A setting, not a change:** Settings > Video > "Cinematic lighting" (default OFF). On: screen-space ambient occlusion, screen-space reflections with mirror-glossy ice
+  (`gloss` uniform in the ice shader), volumetric fog (light shafts), the ACES tone curve, longer sun shadows. Off restores every value exactly (tested).
+- **Why blind:** headless Godot cannot render, and the user asked for no windows. So the plumbing is tested; the LOOK and the COST are not. First thing to do when someone has a window:
+  turn it on, run `tools/perf_render.sh`, compare `tools/refshots.sh` before/after, and tune `Scenery.apply_cinematic` (ssao_intensity, ssr_max_steps, volumetric_fog_density).
+- Risks to check by eye: SSR on the busy low-poly ice may shimmer; volumetric fog may wash the night; SSAO under stalls may be too dark; ACES shifts the teal grade.
