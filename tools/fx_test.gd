@@ -74,5 +74,20 @@ func _ready() -> void:
 	for i in 400:
 		g._tick_rigs(0.05)
 	check("with nothing left to chew the chunks stop", not (rg.fx as CPUParticles3D).emitting)
+	# the review's ghost coil: picking up an Auto-Rod takes its aura with it
+	GameState.upgrades["overdrive"] = 3
+	g._refresh()
+	check("the Auto-Rod wears a coil", h.node.get_node_or_null("od_aura") != null)
+	g._pickup_auto(h)
+	check("picking the rod up removes the coil (no ghost emitter on the empty hole)", h.node.get_node_or_null("od_aura") == null)
+	# sparks only run near the viewer
+	var m2 := Node3D.new()
+	add_child(m2)
+	MachineFX.sync_overdrive(m2, 3, 1.0)
+	m2.global_position = Vector3(0, 0, 0)
+	MachineFX.spin(m2, 0.1, Vector3(10, 0, 0))
+	check("a machine near you has sparks", (m2.get_node("od_aura/sparks") as CPUParticles3D).emitting)
+	MachineFX.spin(m2, 0.1, Vector3(500, 0, 0))
+	check("a machine far from you has none", not (m2.get_node("od_aura/sparks") as CPUParticles3D).emitting)
 	print("FX %s" % ("PASS" if fails == 0 else "FAIL"))
 	get_tree().quit(1 if fails > 0 else 0)

@@ -332,3 +332,9 @@ Built in layers with a headless suite (`tools/run_opening.sh`, 60+ checks), a re
 - **Why blind:** headless Godot cannot render, and the user asked for no windows. So the plumbing is tested; the LOOK and the COST are not. First thing to do when someone has a window:
   turn it on, run `tools/perf_render.sh`, compare `tools/refshots.sh` before/after, and tune `Scenery.apply_cinematic` (ssao_intensity, ssr_max_steps, volumetric_fog_density).
 - Risks to check by eye: SSR on the busy low-poly ice may shimmer; volumetric fog may wash the night; SSAO under stalls may be too dark; ACES shifts the teal grade.
+
+## Round 6 review fixes
+- Juniper no longer barks in a loop when you stand at the fire at night (a stale idle timer, then a re-wake: she now stays in bed until you walk away and come back).
+- Picking up an Auto-Rod removes its Overdrive coil (it was left as a frozen ghost emitter on the empty hole). Coil sparks only run within 70 m of you.
+- While peering, kicks, throws, pickups and slot changes are blocked too (only C and the mouse look work).
+- Not fixed, by design: the dog's first-frame velocity spike (harmless while she is asleep).

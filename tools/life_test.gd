@@ -64,6 +64,18 @@ func _ready() -> void:
 	var asleep := Companion.Brain.new(home)
 	asleep.bark()
 	check("a sleeping dog does not bark at a letter", not asleep.bark_req)
+	# the review's loop: a stale idle timer must not make her bounce between home and follow, barking
+	var nb := Companion.Brain.new(home)
+	nb.state = "follow"
+	nb.pos = home + Vector3(2, 0, 0)
+	var pn := home + Vector3(2.5, 0, 0)
+	var nbarks := 0
+	for i in 1200:   # one minute of the player standing at the fire at deep night
+		nb.step(0.05, pn, Vector3.ZERO, 1.0)
+		if nb.bark_req:
+			nbarks += 1
+			nb.bark_req = false
+	check("standing at the fire at midnight she does not bark in a loop (%d barks in 60 s)" % nbarks, nbarks <= 2)
 	# ---------- the world ----------
 	GameState.save_slot = "test_life"
 	GameState.delete_save()

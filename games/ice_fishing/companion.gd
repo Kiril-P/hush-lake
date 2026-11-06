@@ -24,6 +24,7 @@ class Brain extends RefCounted:
 	var idle_t := 0.0
 	var sniff_t := 0.0
 	var sniff_at := Vector3.ZERO
+	var rearm_needed := false    # she went to bed because it is late and you are idle: she stays asleep until you walk away and come back
 	var bark_req := false        # set when she wants to bark (the node plays the sound and clears it)
 	var t := 0.0
 
@@ -54,11 +55,15 @@ class Brain extends RefCounted:
 		match state:
 			"sleep":
 				speed = 0.0
-				if dist < WAKE_DIST:
+				if rearm_needed:
+					if dist > WAKE_DIST + 4.0:
+						rearm_needed = false
+				elif dist < WAKE_DIST:
 					wake_t += delta
 					if wake_t >= WAKE_TIME:
 						state = "follow"
 						wake_t = 0.0
+						idle_t = 0.0   # (a stale idle timer made her go straight back home and bark again every second)
 						bark_req = true   # a wake-up woof
 				else:
 					wake_t = maxf(wake_t - delta, 0.0)
@@ -72,6 +77,8 @@ class Brain extends RefCounted:
 					behind += Vector3(1.6, 0.0, 1.8)   # standing still: a spot at your side
 				if dist > LOSE_DIST or (night > 0.8 and Vector2(player.x - home.x, player.z - home.z).length() < 14.0 and dist < 9.0 and v2.length() < 0.3 and idle_t > 12.0):
 					state = "home"
+					idle_t = 0.0
+					rearm_needed = night > 0.8 and dist < 14.0   # (only the bedtime case: losing you far away re-arms by distance anyway)
 				elif dist < SIT_DIST and v2.length() < 0.5:
 					idle_t += delta
 					speed = move_toward(speed, 0.0, delta * 14.0)
@@ -96,6 +103,7 @@ class Brain extends RefCounted:
 				if dhome < 0.8:
 					state = "sleep"
 					speed = 0.0
+					idle_t = 0.0
 	func _goto(target: Vector3, delta: float, want_speed: float) -> void:
 		var d := Vector2(target.x - pos.x, target.z - pos.z)
 		var dist := d.length()

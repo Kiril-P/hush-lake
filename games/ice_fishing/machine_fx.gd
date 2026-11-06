@@ -84,10 +84,18 @@ static func sync_overdrive(machine: Node3D, level: int, size := 1.0) -> void:
 	aura.set_meta("spin", p.spin)
 
 ## Spins every aura under `machine` (called from the game's frame loop for the few machines in view).
-static func spin(machine: Node3D, delta: float) -> void:
+## With `viewer` given, the sparks only run while the machine is within SPARK_RANGE of it (hundreds of rods must not all run particles at once).
+const SPARK_RANGE := 70.0
+static func spin(machine: Node3D, delta: float, viewer := Vector3.INF) -> void:
 	var aura: Node3D = machine.get_node_or_null("od_aura")
 	if aura != null:
 		aura.rotation.y += delta * float(aura.get_meta("spin", 1.0))
+		if viewer != Vector3.INF:
+			var sp: CPUParticles3D = aura.get_node_or_null("sparks")
+			if sp != null:
+				var near := machine.global_position.distance_to(viewer) < SPARK_RANGE
+				if sp.emitting != near:
+					sp.emitting = near
 
 ## The Ice-Breaker's working effects: ice chunks thrown up beside the hull and a low spray. Returns the particle node (toggle `.emitting`).
 static func rig_fx(rig: Node3D) -> CPUParticles3D:

@@ -3588,7 +3588,7 @@ func _tick_hole(t: Dictionary, delta: float) -> void:
 		"auto":
 			var working_rod: bool = model.tile_left(t.c) > 0
 			if working_rod:
-				MachineFX.spin(t.node, delta)
+				MachineFX.spin(t.node, delta, $Player.global_position)
 				t.auto_t -= delta
 				if t.auto_t <= 0.0:
 					if t.belt != null:
@@ -4419,7 +4419,7 @@ func _tick_rigs(delta: float) -> void:
 	for rg in rigs:
 		if rg.has("beacon") and is_instance_valid(rg.beacon):
 			rg.beacon.rotation.y += delta * 3.2   # the amber beacon turns while the rig stands
-		MachineFX.spin(rg.node, delta)
+		MachineFX.spin(rg.node, delta, ppos)
 		if rg.has("fx") and is_instance_valid(rg.fx):   # chewing: chunks fly, the hull rumbles, the view shakes as you come close
 			var working: bool = _rig_best(rg).x != 9999 if int(Engine.get_process_frames()) % 20 == int(rg.idx) % 20 else rg.fx.emitting
 			rg.fx.emitting = working
@@ -5288,6 +5288,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if dream != null and dream.active:
 		return
+	if peer != null and peer.want_open and ((event is InputEventKey and event.keycode != KEY_C) or event is InputEventMouseButton):
+		return   # while the window is open your hands are busy looking: no kicks, throws, pickups or slot changes
 	if _letters_input(event):
 		get_viewport().set_input_as_handled()
 		return
@@ -5561,6 +5563,10 @@ func _pickup_auto(t: Dictionary) -> void:
 		t.tag.queue_free()
 		t.tag = null
 	t.arm = null
+	var od_aura: Node = (t.node as Node3D).get_node_or_null("od_aura")   # the Overdrive coil ring belongs to the machine, not the hole
+	if od_aura != null:
+		t.node.remove_child(od_aura)
+		od_aura.queue_free()
 	t.state = "hole"
 	t.cast = 0
 	GameState.add(refund)
