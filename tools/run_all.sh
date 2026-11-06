@@ -7,7 +7,7 @@
 cd "$(dirname "$0")/.."
 quick=0; bots=0
 for a in "$@"; do [ "$a" = quick ] && quick=1; [ "$a" = bots ] && bots=1; done
-suites="hands machines weather opening yard safety guide ui sectors audio score fishing story progress"
+suites="hands machines weather opening yard safety guide ui sectors audio score fishing story progress life"
 [ $quick = 0 ] && suites="smoke $suites econ"
 fails=0
 start=$(date +%s)

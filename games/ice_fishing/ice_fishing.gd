@@ -490,6 +490,7 @@ func _ready() -> void:
 	add_child(living)
 	living.setup(scenery, weather, hut_node)
 	living.cracked.connect(_on_crack)
+	living.sfx_cb = func(n): sfx.play(n, -9.0, randf_range(0.9, 1.1))
 	living.owl_called.connect(func(): sfx.play("owl", -12.0, randf_range(0.9, 1.1)))
 	living.crow_called.connect(func(): sfx.play("caw", -14.0, randf_range(0.85, 1.15)))
 	yard = YardScript.new()
@@ -508,6 +509,7 @@ func _ready() -> void:
 			slide_snd_t = 0.18
 			sfx.play("slide", -10.0 + minf(speed, 14.0) * 0.4, randf_range(0.9, 1.15)))
 	yard.kicked.connect(func(pos: Vector3, dir: Vector3, power: float): _snow_fx(pos - dir * 0.3, 7, 0.9 + power * 0.06))
+	yard.touched.connect(func(p, impact): if impact > 3.0 and living: living.companion_notice(p))   # a fish hitting the ice: Juniper goes to look
 	yard.landed.connect(func(_f, impact): sfx.play("thud", -12.0 + minf(impact, 9.0) * 0.8, randf_range(0.85, 1.25)))
 	_build_ui()
 	for c in model.tile_sector:
@@ -1690,6 +1692,7 @@ func _check_story() -> void:
 		_banner("A letter from Olga is in the mailbox" if fresh.size() == 1 else "%d letters from Olga are in the mailbox" % fresh.size(), Style.AMBER)
 		sfx.play("bells", -10.0, 0.9)
 		sfx.score.hit("catch")
+		living.companion_bark()
 	_sync_story_world()
 
 func _sync_story_world() -> void:
@@ -1751,6 +1754,7 @@ func _found_keep(k: Dictionary) -> void:
 	_banner("KEEPSAKE: %s" % k.name, Style.AMBER)
 	_say("%s\nOlga: %s" % [k.text, "Bring it to me when you are done. I will find a place." if story.keeps.size() == 1 else "On the shelf with the others."])
 	sfx.play("rare", -4.0, 1.1)
+	living.companion_bark()
 	_check_story()
 
 func visitor_ctx() -> Dictionary:
@@ -2346,6 +2350,7 @@ func _animate(delta: float) -> void:
 	weather.enabled = GameSettings.on("weather")
 	if not title_active:   # (the weather's calm start and the run timer are for play, not for the title)
 		weather.tick(delta, scenery._night, not guide.intro_active)
+	living.dawn = Visitors.is_dawn(day_t)
 	living.update(delta, scenery._night, $Player.global_position, guide.intro_active)
 	sfx.set_weather(weather.vals.wind, weather.vals.snow, scenery._night)
 	sfx.score.set_mood(scenery._night, weather.vals.gloom, weather.vals.wind, eye_stage(), eye_open_frac(), weather.aurora_on())

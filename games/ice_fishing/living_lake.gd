@@ -33,6 +33,10 @@ var fire_light: OmniLight3D
 var dog: Node3D
 var dog_body: MeshInstance3D
 var dog_breath := 0.0
+var companion: Companion      # Juniper: wakes when you come near, then follows you (companion.gd)
+var sfx_cb: Callable
+var wildlife: Wildlife        # fox, deer, hare and a perched owl on the bank (wildlife.gd)
+var dawn := false             # set by the game: the clock is in the dawn window
 var night := 0.0
 var wind_dir := Vector2(1.0, 0.25).normalized()
 var rng := RandomNumberGenerator.new()
@@ -46,6 +50,9 @@ func setup(sc: Node3D, w: Weather, hut_node: Node3D) -> void:
 	_build_clouds()
 	_build_birds()
 	_build_cracks()
+	wildlife = Wildlife.new()
+	add_child(wildlife)
+	wildlife.setup(sc)
 
 # ---------- the sky: stars and clouds ----------
 func _build_stars() -> void:
@@ -391,9 +398,23 @@ func _build_woodpile_sled_dog(animate: bool) -> void:
 	tail.rotation.y = 0.5
 	camp["dog"] = dog
 	scenery.obstacles.append(Vector3(root.position.x, root.position.z, 1.4))
+	if companion == null:   # the sleeping lump gives way to a real dog (same spot): she wakes when you walk up
+		companion = Companion.new()
+		add_child(companion)
+		companion.setup(Vector3(dog.position.x, 0.0, dog.position.z))
+		companion.sfx_cb = func(n): if sfx_cb.is_valid(): sfx_cb.call(n)
+		dog.visible = false
 	if animate:
 		_pop(root)
 		_pop(dog)
+
+func companion_notice(at: Vector3) -> void:
+	if companion != null:
+		companion.notice(at)
+
+func companion_bark() -> void:
+	if companion != null:
+		companion.bark()
 
 func _ball_mesh() -> SphereMesh:
 	var sm := SphereMesh.new()
@@ -437,6 +458,10 @@ func update(delta: float, night_in: float, player: Vector3, cutscene := false) -
 	_update_birds(delta, w, player, cutscene)
 	_update_cracks(delta, player, cutscene)
 	_update_camp(delta, player)
+	if wildlife != null:
+		wildlife.update(delta, night_in, dawn, weather.cur, player, cutscene)
+	if companion != null:
+		companion.update(delta, player, night_in, cutscene)
 	_update_calls(delta, w, cutscene)
 
 func _apply_weather(delta: float, w: Dictionary) -> void:

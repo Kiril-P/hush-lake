@@ -300,3 +300,12 @@ Built in layers with a headless suite (`tools/run_opening.sh`, 60+ checks), a re
   Read before the lake counter moves on (a bug the test caught: the offers belong to the lake you are leaving).
 - **Overdrive Coils**: a plain shop upgrade (stall at bearing -114, 38 m) so it needs no new machine state; multiplies auto-rod and rig speed, online and offline.
 - **Open question:** whether 900 x2.4 is the right price curve; it is tuned against the coin glut, not against play.
+
+## Juniper and the shore wildlife (round 6, built headless: no window was opened)
+- **Juniper** (`companion.gd`): the camp's sleeping dog blob becomes a real sled dog. Wakes when you stand near for a beat (a woof), trots behind you, sits when you stop,
+  sniffs fish that land near her, barks at letters and keepsakes, goes home when you are 70 m away or deep night finds you idle at camp. Company only: no carrying,
+  no collision, no economy. All decisions are in `Companion.Brain` (pure, tested).
+- **Wildlife** (`wildlife.gd`): a fox at dusk/night/dawn, one group of three deer by day and at dawn, a hare on clear days, an owl on a perch pole at night that turns
+  its head to follow you. One of each at most; nobody in the camp (r < 52); deer on the bank only; all flee (fox 10 m, deer 17 m, hare 7 m) and are removed when far.
+  Deer must spawn up to 125 m away because the bank is ~90 m from the camp (a first test run showed nothing ever spawned: the spawn ring was empty).
+- **Unverified by eye:** the models are primitives posed from code; nobody has looked at them. Check scale and gait in a playtest.
