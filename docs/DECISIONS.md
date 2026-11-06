@@ -345,4 +345,20 @@ Built in layers with a headless suite (`tools/run_opening.sh`, 60+ checks), a re
 - **Why this shape:** a per-machine upgrade is the late coin sink that matches "tier 2 machines" without new belt physics, and it needs no new kit mode, so saves and the kit UI are untouched.
 - **Fair to pick up:** a picked-up Auto-Rod refunds 60% of its tier spending; a moved Ice-Breaker keeps its tier. Tiers are saved (`tr` on holes, a third number on rigs) and restored (tested by a real save/load).
 - **Economy:** the sim does not model tiers (like Overdrive), so first-lake times are unchanged; with tiers a late lake runs faster. Prices are tuned against the coin glut, not against play.
-- **Still not built:** belt splitters, sloped channels, brooms (new fish-on-belt physics + a sim retune).
+- **Belt splitters, sloped channels and brooms** were built next: see "Belt physics" below.
+
+## Belt physics: spacing, spurs, splitters, chutes, brooms (round 7, headless)
+- **`BeltNet` (pure, tested):** fish keep a 0.9 m gap, so a lane carries at most speed/0.9 fish a second (5/s at base speed, 10/s at Belt Motor 4); a blocked head backs the queue up and a rod/rig
+  waits for a gap instead of stacking fish. Belts are compared by a unique `id` (never by content: the dictionaries are cyclic).
+- **Spur:** with the Belt tool on an Auto-Rod that is 1.6-11 m from a trunk belt (and cheaper than its own belt to the Eye), the click lays a **spur** that ends on the trunk's side. Its fish merge in
+  when there is a gap, else wait at the end. Only plain trunks take spurs (no spur on a spur). A trunk with spurs cannot be picked up until its spurs are.
+- **Splitter** (kit item, on a belt, 150 x1.8 per): a second lane to the Eye starts at the splitter's mark. Every other fish takes it, and every fish does while the main lane is backed up
+  (without this a jammed spur never reached its own mark). On a trunk it sits after the last spur's join; on a spur it is a bypass of the merge. Cannery/Sorter multipliers are applied when a fish leaves a belt.
+- **Chute** (kit item, on an Auto-Rod with no belt): a sloped channel (1.1 m drop). No motor: fish speed up from 1.1 to 3.4 m/s as they slide, it ignores Belt Motor and pays no motor bonus, no cannery/sorter/splitter.
+  Costs 8 + 45% of a belt. A cheap early lane, outgrown by belts.
+- **Broom** (kit item, free-standing, 95 x1.5 per, max 3): every 1.1 s it sweeps the nearest settled loose fish within 6.5 m onto the nearest belt with room within 9 m (else it flies to the Eye at the hand-feed rate).
+  It automates hand-fishing's drop-and-walk-away loop. Saved as a prop; belts save kind, trunk (by hole index), join point and splitter, and spurs/splitters are restored after their trunks exist.
+- **Economy rerun (`tools/run_econ.sh`):** unchanged (first lake emptied at ~49:30, same milestones; the sim does not model lanes). New finding printed at its end: even with ALL 17 auto-rods and 7 rigs on
+  one lane the load is 2 fish/s of a 10/s lane (0.07 fish/s per rod), so **saturation never happens from rods alone**. It bites only with brooms (up to ~2.7/s) or bursts. Splitters are therefore a
+  logistics toy for broom-fed trunks, not a required step; if they should matter, raise `BeltNet.GAP` or give rods burst output (not changed: it would move the economy).
+- **Unverified by eye:** the spur/twin/chute geometry (a chute is tilted 1.1 m; the twin lane runs 1.9 m aside), the splitter and broom models, and fish popping across at the merge point.

@@ -273,4 +273,9 @@ func run() -> void:
 		print("%-8s %s" % [k, "%02d:%02d" % [int(milestones[k] / 60.0), int(milestones[k]) % 60]])
 	print("longest wait between purchases: %ds at %s" % [int(max_gap), gap_at])
 	print("tithe level %d | rigs %d | autos %d | awakened %d | coins left %d" % [g.stats.tithe, rigs, autos, g.stats.awakened, int(GameState.currency)])
+	# belt physics (BeltNet): each machine's fish ride its own lane, so only a hand-built trunk with spurs can saturate. Worst case: everything on one lane.
+	var load_all := auto_fish_rate() + rig_fish_rate()
+	var lane_cap := BeltNet.capacity({"kind": "belt"}, g._belt_speed())
+	print("belt load if ALL %d autos and %d rigs shared one lane: %.2f fish/s of %.2f/s (a lane saturates beyond that; a splitter adds a second lane)" % [autos, rigs, load_all, lane_cap])
+	print("one auto-rod: %.2f fish/s, a lane carries %d of them; a chute carries %.2f fish/s" % [auto_fish_rate() / maxf(autos, 1), int(lane_cap / maxf(auto_fish_rate() / maxf(autos, 1), 0.01)), BeltNet.capacity({"kind": "chute"}, g._belt_speed())])
 	print("lake emptied: %s" % ("yes at " + stamp() if milestones.has("empty") else "NO within 8h (left %d)" % g.model.total_left()))

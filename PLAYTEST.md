@@ -100,3 +100,12 @@ Is the shake near them pleasant or annoying?
 
 **Cinematic lighting (Settings > Video, OFF by default).** Turn it on and look: is it prettier or noisier (reflections shimmer, fog too thick at night, corners too dark)? Run `tools/perf_render.sh`
 with it on and off: if it costs more than ~3 ms a frame, tune `Scenery.apply_cinematic`.
+
+## Round 7 checklist (belt physics: spurs, splitters, chutes, brooms)
+Built and tested headless only. Please check by eye:
+
+**Spurs.** Lay a belt, then an Auto-Rod a few metres from it and click with the Belt tool: does the prompt offer a spur, is it clearly cheaper, does it meet the trunk neatly, do fish merge without popping?
+**Chute.** Kit > Chute on an Auto-Rod with no belt: does the tilt read as a slide? Is "slower, no bonus" a fair trade for the price?
+**Splitter.** Kit > Splitter on a belt: where does the second lane go (it picks the side with room), does it cross things, does the splitter gantry look right? Do you ever feel a belt back up (rods pausing)?
+**Broom.** Kit > Broom on open ice near a belt, throw fish near it: does it sweep them onto the belt? Is the brush spin readable? Should it be faster or limited more than 3?
+**Balance.** Back-pressure only appears with brooms or many spurs (rods alone never saturate a lane). If splitters feel pointless, say so: the cure is a smaller lane capacity (`BeltNet.GAP`).

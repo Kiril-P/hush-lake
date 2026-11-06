@@ -374,12 +374,12 @@ func nearest(pos: Vector3) -> Variant:
 	return best
 
 ## Picks up to `limit` fish within `radius` (nearest first) and removes them from the ice.
-func collect(pos: Vector3, radius: float, limit: int) -> Array:
+func collect(pos: Vector3, radius: float, limit: int, still_min := 0.0) -> Array:
 	last_collected.clear()
 	var cands := []
 	for e in fish:
 		var d := Vector2(e.pos.x - pos.x, e.pos.z - pos.z).length()
-		if d <= radius:
+		if d <= radius and e.still >= still_min:
 			cands.append([d, e])
 	cands.sort_custom(func(a, b): return a[0] < b[0])
 	var got := []

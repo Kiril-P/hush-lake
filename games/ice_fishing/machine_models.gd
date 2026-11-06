@@ -438,3 +438,29 @@ static func rig(node: Node3D) -> Dictionary:
 		for sz in [-4.0, 0.0, 4.0]:
 			box(node, Vector3(sx, 1.9, sz), Vector3(0.2, 0.34, 0.2), AMBER, 1.8)
 	return {"beacon": beacon}
+
+## Splitter: a small gantry over the belt with a diverter blade angled toward the side lane. Local -Z is downstream.
+static func splitter(m: Node3D) -> void:
+	for sx in [-0.78, 0.78]:
+		post(m, Vector3(sx, 0.6, 0.0), 0.05, 1.3, STEEL_DARK, 0.5)
+	box(m, Vector3(0, 1.3, 0), Vector3(1.7, 0.12, 0.3), TEAL, 0.0, 0.5, 0.3)
+	var blade := box(m, Vector3(0.0, 0.5, -0.1), Vector3(0.08, 0.5, 1.5), STEEL_LIGHT, 0.0, 0.4, 0.5)
+	blade.rotation.y = 0.55
+	box(m, Vector3(0.0, 1.44, 0.0), Vector3(0.5, 0.16, 0.2), STEEL_DARK)
+	lamp(m, Vector3(-0.5, 1.5, 0.0), 0.07)
+	lamp(m, Vector3(0.5, 1.5, 0.0), 0.07)
+
+## Broom: a squat post carrying a long spinning brush that sweeps loose fish on the ice toward the belt. Returns {brush}.
+static func broom(m: Node3D) -> Dictionary:
+	box(m, Vector3(0, 0.12, 0), Vector3(1.6, 0.24, 1.6), STEEL_DARK, 0.0, 0.7, 0.2)
+	post(m, Vector3(0, 0.9, 0), 0.12, 1.5, STEEL, 0.4)
+	var brush := Node3D.new()
+	brush.position = Vector3(0, 1.45, 0)
+	m.add_child(brush)
+	for i in 4:
+		var arm := box(brush, Vector3(0, 0, 0), Vector3(2.6, 0.1, 0.16), TEAL, 0.0, 0.5, 0.2)
+		arm.rotation.y = i * PI * 0.25
+		var bristle := box(brush, Vector3(0, -0.32, 0), Vector3(2.5, 0.5, 0.05), WOOD, 0.0, 0.9)
+		bristle.rotation.y = i * PI * 0.25
+	lamp(m, Vector3(0, 1.75, 0), 0.07)
+	return {"brush": brush}

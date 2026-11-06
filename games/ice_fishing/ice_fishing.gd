@@ -35,7 +35,13 @@ const RIDE_SPEED := [1.0, 2.4, 3.0, 3.6]   # snowmobile levels 0..3
 const CANNERY_MULT := 1.5                   # a cannery on a belt: every fish riding it is worth x1.5
 const SORTER_MULT := 1.6                    # a sorter: fish worth 5+ get x1.6
 const DEPOT_MULT := 1.05                    # a depot's sled run pays a little less than hand-feeding the Eye
-const BUILD_ITEMS := ["Cannery", "Sorter", "Depot", "Ice-Breaker", "Bait Grinder", "Wind Fan"]
+const BUILD_ITEMS := ["Cannery", "Sorter", "Depot", "Ice-Breaker", "Bait Grinder", "Wind Fan", "Splitter", "Chute", "Broom"]
+const CHUTE_DROP := 1.1      # a chute starts this much higher than it ends: gravity does the work
+const SPUR_MAX := 11.0       # a rod this close to a trunk belt can lay a spur onto it instead of a full belt
+const MAX_BROOMS := 3
+const BROOM_R := 6.5         # a broom sweeps loose fish this close to it...
+const BROOM_BELT_R := 9.0    # ...onto a belt this close to it (else it sends them to the Eye)
+const BROOM_EVERY := 1.1
 const BAIT_SECS := 12.0      # a fish ground into bait: 12 s of faster bites, plus 1.5 s per coin of base value (up to 30 s a fish)
 const BAIT_MAX := 180.0
 const BAIT_MULT := 0.6       # bites come in 60% of the time while there is bait
@@ -312,7 +318,7 @@ var ground_serial := 0
 var rack_mounts: Array = []   # the rack's three mounted tools (shown while the tool is on the rack)
 var rack_pos := Vector3.ZERO
 var journal := {}          # species name -> count
-var stats := {"holes": 0, "caught": 0, "deliveries": 0, "earned": 0.0, "autos": 0, "smokes": 0, "gutted": 0, "tiles_cleared": 0, "sectors": 0, "ended": 0, "eye_fed": 0, "belts": 0, "cans": 0, "sorters": 0, "depots": 0, "rigs": 0, "rides": 0, "tithe": 0, "awakened": 0, "grinders": 0, "fans": 0, "grinds": 0, "ajar": 0}
+var stats := {"holes": 0, "caught": 0, "deliveries": 0, "earned": 0.0, "autos": 0, "smokes": 0, "gutted": 0, "tiles_cleared": 0, "sectors": 0, "ended": 0, "eye_fed": 0, "belts": 0, "cans": 0, "sorters": 0, "depots": 0, "rigs": 0, "rides": 0, "tithe": 0, "awakened": 0, "grinders": 0, "fans": 0, "grinds": 0, "ajar": 0, "splitters": 0, "chutes": 0, "brooms": 0, "spurs": 0}
 var unlocked := {}
 var goal_done: Array = []
 var combo := 0
@@ -343,7 +349,10 @@ var card_tween: Tween
 var tiles := {}            # hex fish cells: invisible, hold the stock and the shoal shadows
 var holes: Array = []      # every hole you drilled; each is a "tile-like" dict (see _make_hole)
 var belts: Array = []
-var belt_fish: Array = []  # fish riding belts: {belt, d, f}
+var belt_fish: Array = []  # fish riding belts: {belt, d, f, m} (BeltNet moves them)
+var belt_serial := 0
+var restore_late: Array = []
+var belt_held := 0         # fish held back by a queue or a blocked merge, last step
 var belt_mm: MultiMesh
 var sector_patches := {}
 var aim_pos := Vector3.ZERO
@@ -2360,6 +2369,14 @@ func _process(delta: float) -> void:
 		var part: Node3D = pr.part
 		if pr.kind == "fan":
 			part.rotation.z -= delta * 11.0
+		elif pr.kind == "broom":
+			pr["sweep_t"] = float(pr.get("sweep_t", 1.0)) - delta
+			pr["work"] = maxf(float(pr.get("work", 0.0)) - delta, 0.0)
+			if pr.sweep_t <= 0.0:
+				pr.sweep_t = BROOM_EVERY
+				if _broom_sweep(pr):
+					pr.work = 0.9
+			part.rotation.y += delta * (1.0 + 7.0 * minf(pr.work, 1.0))
 		else:
 			pr["work"] = maxf(float(pr.get("work", 0.0)) - delta, 0.0)
 			part.rotation.x += delta * (1.5 + 12.0 * minf(pr.work, 1.0))
@@ -2702,7 +2719,7 @@ func _hands_have_fish() -> bool:
 	return inv.cargo_count() > 0
 
 # the builder's kit does one thing at a time: [tool id, build item], cycled with B through whatever is unlocked
-const KIT := [[2, -1], [3, -1], [4, -1], [5, -1], [6, 0], [6, 1], [6, 2], [6, 3], [6, 4], [6, 5]]
+const KIT := [[2, -1], [3, -1], [4, -1], [5, -1], [6, 0], [6, 1], [6, 2], [6, 3], [6, 4], [6, 5], [6, 6], [6, 7], [6, 8]]
 
 func _kit_modes() -> Array:
 	var out := []
@@ -3638,11 +3655,14 @@ func _tick_hole(t: Dictionary, delta: float) -> void:
 				t.auto_t -= delta
 				if t.auto_t <= 0.0:
 					if t.belt != null:
-						var f := _draw_fish(t)
-						if not f.is_empty():
-							_belt_spawn(t, f)
-							_after_draw(t)
-						t.auto_t = _auto_wait(t)
+						if not _belt_room(t.belt):
+							t.auto_t = 0.25   # the lane is full: the rod waits for a gap rather than dropping a fish on top of another
+						else:
+							var f := _draw_fish(t)
+							if not f.is_empty():
+								_belt_spawn(t, f)
+								_after_draw(t)
+							t.auto_t = _auto_wait(t)
 					elif t.stash.size() < STASH_MAX:
 						var f2 := _draw_fish(t)
 						if not f2.is_empty():
@@ -4160,38 +4180,113 @@ func _setup_belt_fish() -> void:
 	drill_marker.visible = false
 	add_child(drill_marker)
 
-## Lays a belt from an Auto-Rod straight to the Eye. Fish ride it (instanced) and drop in.
-func _build_belt(t: Dictionary, pay := true) -> void:
-	if t.belt != null or t.state != "auto":
-		return
-	var cost := belt_cost(t)
-	if pay and not _spend(float(cost)):
-		return
-	var a := Vector3(t.pos.x, 0.0, t.pos.z)
-	var dir := (-a).normalized()
-	var b := dir * (PUPIL_R + 0.4)
-	var blen := a.distance_to(b)
+func _next_belt_id() -> int:
+	belt_serial += 1
+	return belt_serial
+
+func chute_cost(t: Dictionary) -> int:
+	return int(ceil(8.0 + 0.45 * belt_cost(t)))
+
+## The trunk belt an Auto-Rod could lay a spur onto (cheaper than its own belt to the Eye), or {}.
+func spur_option(t: Dictionary) -> Dictionary:
+	var p := Vector3(t.pos.x, 0.0, t.pos.z)
+	var direct := belt_cost(t)
+	var best := {}
+	for b in belts:
+		if b.get("kind", "belt") != "belt" or b.get("parent", null) != null or b.has("owner_id"):
+			continue   # only plain trunks: no spur on a spur, a chute or a splitter lane
+		var pr := BeltNet.project(b.a, b.b, p)
+		if pr.t < 0.12 or pr.t > 0.92 or pr.perp > SPUR_MAX or pr.perp < 1.6:
+			continue
+		var cost := int(ceil(12.0 + pr.perp * 0.9))
+		if cost < direct and (best.is_empty() or cost < int(best.cost)):
+			best = {"belt": b, "d": pr.t * float(b.len), "point": pr.point, "cost": cost}
+	return best
+
+## Builds the node for a belt dictionary (flat, or tilted for a chute). Its -Z points downstream.
+func _make_belt_node(belt: Dictionary) -> void:
+	var a: Vector3 = belt.a
+	var b: Vector3 = belt.b
 	var node := Node3D.new()
 	add_child(node)
 	var mid := (a + b) * 0.5
-	node.look_at_from_position(Vector3(mid.x, 0.55, mid.z), Vector3(b.x, 0.55, b.z), Vector3.UP)
-	MachineModels.belt(node, blen, _belt_speed())
-	_pop_in(node)
-	var belt := {"hole": t, "a": a, "b": b, "len": blen, "dir": dir, "node": node, "cost": cost}
+	var drop := CHUTE_DROP if belt.get("kind", "belt") == "chute" else 0.0
+	node.look_at_from_position(Vector3(mid.x, 0.55 + drop * 0.5, mid.z), Vector3(b.x, 0.55, b.z), Vector3.UP)
+	MachineModels.belt(node, float(belt.len), BeltNet.speed_at(belt, 20.0, _belt_speed()))
+	belt["node"] = node
+
+func _new_belt(a: Vector3, b: Vector3, kind: String, cost: int) -> Dictionary:
+	return {"id": _next_belt_id(), "a": a, "b": b, "len": a.distance_to(b), "dir": (b - a).normalized(), "cost": cost,
+		"kind": kind, "parent": null, "join_d": 0.0, "twin": null, "split_d": 0.0, "flip": false}
+
+## Lays a belt (or a chute) from an Auto-Rod straight to the Eye, or a spur onto a trunk belt `parent`. Fish ride it (instanced).
+func _build_belt(t: Dictionary, pay := true, kind := "belt", parent = null, join_d := 0.0) -> void:
+	if t.belt != null or t.state != "auto":
+		return
+	var a := Vector3(t.pos.x, 0.0, t.pos.z)
+	var cost := belt_cost(t)
+	var belt: Dictionary
+	if parent != null:
+		var jp: Vector3 = (parent.a as Vector3).lerp(parent.b, join_d / float(parent.len))
+		cost = int(ceil(12.0 + Vector2(a.x - jp.x, a.z - jp.z).length() * 0.9))
+		belt = _new_belt(a, jp, "belt", cost)
+		belt.parent = parent
+		belt.join_d = join_d
+	else:
+		if kind == "chute":
+			cost = chute_cost(t)
+		var dir := (-a).normalized()
+		belt = _new_belt(a, dir * (PUPIL_R + 0.4), kind, cost)
+	if pay and not _spend(float(cost)):
+		return
+	belt["hole"] = t
+	_make_belt_node(belt)
+	_pop_in(belt.node)
 	belts.append(belt)
 	t.belt = belt
-	stats.belts += 1
+	if kind == "chute":
+		stats.chutes += 1
+	else:
+		stats.belts += 1
+		if parent != null:
+			stats.spurs += 1
 	if pay:
-		_say("Belt laid. Watch the catch ride into the Eye.")
+		if kind == "chute":
+			_say("Chute laid. Fish slide down it on their own: slower than a belt, no motor, no bonus.")
+		elif parent != null:
+			_say("Spur laid onto the neighbouring belt. Its fish merge in when there is a gap.")
+		else:
+			_say("Belt laid. Watch the catch ride into the Eye.")
 		_refresh()
 
 # ---------- the builder's kit: cannery, sorter, depot, ice-breaker (B cycles what it builds) ----------
 func _count_belts(flag: String) -> int:
 	var n := 0
 	for b in belts:
-		if b.get(flag, false):
+		if flag == "splitter":
+			if b.get("twin", null) != null:
+				n += 1
+		elif b.get(flag, false):
 			n += 1
 	return n
+
+## Kit items that go on a belt or an Auto-Rod rather than on open ice.
+func _on_belt_item(i: int) -> bool:
+	return i <= 1 or i == 6 or i == 7
+
+## Kit items that stand free on the ice as props.
+func _prop_kind(i: int) -> String:
+	match i:
+		4: return "grinder"
+		5: return "fan"
+		8: return "broom"
+	return ""
+
+func _prop_item(kind: String) -> int:
+	return 4 if kind == "grinder" else (5 if kind == "fan" else 8)
+
+func _prop_max(kind: String) -> int:
+	return MAX_GRINDERS if kind == "grinder" else (MAX_FANS if kind == "fan" else MAX_BROOMS)
 
 func _build_cost(item: int) -> int:
 	match item:
@@ -4200,6 +4295,9 @@ func _build_cost(item: int) -> int:
 		2: return int(ceil(70.0 * pow(1.5, depots.size())))
 		4: return int(ceil(110.0 * pow(1.6, _prop_count("grinder"))))
 		5: return int(ceil(140.0 * pow(1.6, _prop_count("fan"))))
+		6: return int(ceil(150.0 * pow(1.8, _count_belts("splitter"))))
+		7: return 10   # "from": a chute's price depends on how far it runs (chute_cost)
+		8: return int(ceil(95.0 * pow(1.5, _prop_count("broom"))))
 		_: return 0 if int(stats.get("rig_moves", 0)) > 0 else int(ceil(RIG_BASE * pow(RIG_GROWTH, rigs.size())))
 
 ## Is p a legal spot for a free-standing building (depot / ice-breaker)?
@@ -4266,6 +4364,75 @@ func _install_machine(t: Dictionary, kind: String, pay := true) -> void:
 		_say("%s built. Everything on this belt is worth more." % kind.capitalize())
 		_refresh()
 
+## A splitter on a belt: from its mark every other fish takes a second lane to the Eye, and every fish does while the main lane is backed up.
+func _install_splitter(t: Dictionary, pay := true) -> void:
+	var belt = t.belt
+	if t.state != "auto" or belt == null:
+		_say("Click an Auto-Rod that has a belt.")
+		return
+	if belt.get("kind", "belt") != "belt":
+		_say("A chute has no room for a splitter: it is only a slide.")
+		sfx.play("deny")
+		return
+	if belt.get("twin", null) != null:
+		_say("That belt already has a splitter.")
+		return
+	if float(belt.len) < 9.0:
+		_say("Too short a belt for a splitter.")
+		sfx.play("deny")
+		return
+	var cost := _build_cost(6)
+	if pay and not _spend(float(cost)):
+		return
+	var sd := float(belt.len) * (0.35 if belt.get("parent", null) != null else 0.45)
+	for c in belts:   # (a trunk's splitter sits just after the last spur joins it)
+		var cp = c.get("parent", null)
+		if cp != null and int(cp.id) == int(belt.id):
+			sd = maxf(sd, float(c.join_d) + 1.5)
+	sd = minf(sd, float(belt.len) - 3.0)
+	var pt: Vector3 = (belt.a as Vector3) + (belt.dir as Vector3) * sd
+	var side: Vector3 = (belt.dir as Vector3).rotated(Vector3.UP, PI * 0.5) * 1.9
+	for sgn in [1.0, -1.0]:   # the lane goes out the side with more room (not into a neighbouring belt's line)
+		var cand: Vector3 = pt + side * sgn
+		var clear := true
+		for ob in belts:
+			if int(ob.id) != int(belt.id) and BeltNet.project(ob.a, ob.b, cand).perp < 1.3:
+				clear = false
+		if clear:
+			side = side * sgn
+			break
+	var a2: Vector3 = pt + side
+	var twin := _new_belt(a2, (-a2).normalized() * (PUPIL_R + 0.4), "belt", 0)
+	twin["owner_id"] = belt.id
+	_make_belt_node(twin)
+	_pop_in(twin.node)
+	belts.append(twin)
+	belt["twin"] = twin
+	belt["split_d"] = sd
+	belt["splitter_cost"] = cost
+	var sv := Node3D.new()
+	(belt.node as Node3D).add_child(sv)
+	sv.position = Vector3(0, 0, float(belt.len) * 0.5 - sd)
+	MachineModels.splitter(sv)
+	_pop_in(sv)
+	belt["split_node"] = sv
+	var l := _label3d(sv, Vector3(0, 2.2, 0), "SPLITTER", 0.012)
+	l.visibility_range_end = 18.0
+	l.no_depth_test = false
+	l.modulate = Color(0.7, 1.0, 0.85)
+	stats.splitters += 1
+	if pay:
+		_say("Splitter built. A second lane carries every other fish, and takes the lot when this lane backs up.")
+		sfx.play("buy")
+		_refresh()
+
+func _belt_has_children(belt: Dictionary) -> bool:
+	for c in belts:
+		var cp = c.get("parent", null)
+		if cp != null and int(cp.id) == int(belt.id):
+			return true
+	return false
+
 func _build_depot(pos: Vector3, pay := true) -> void:
 	if pay and not _spend(float(_build_cost(2))):
 		return
@@ -4299,7 +4466,7 @@ func _prop_count(kind: String) -> int:
 
 ## A bait grinder or a wind fan on open ice (the kit's last two builds). The fan always faces the Eye.
 func _build_prop(pos: Vector3, kind: String, pay := true) -> void:
-	if pay and not _spend(float(_build_cost(4 if kind == "grinder" else 5))):
+	if pay and not _spend(float(_build_cost(_prop_item(kind)))):
 		return
 	var node := Node3D.new()
 	node.position = Vector3(pos.x, 0.0, pos.z)
@@ -4313,6 +4480,11 @@ func _build_prop(pos: Vector3, kind: String, pay := true) -> void:
 		yard.sinks.append({"pos": Vector3(pos.x, 0, pos.z), "r": 1.5, "h": 3.0, "id": "grinder:%d" % pr.idx, "accept": func(): return true})
 		if pay:
 			stats.grinders += 1
+	elif kind == "broom":
+		pr.part = MachineModels.broom(node).brush
+		pr["sweep_t"] = 1.0
+		if pay:
+			stats.brooms += 1
 	else:
 		pr.part = MachineModels.fan(node).rotor
 		var dir := Vector2(-pos.x, -pos.z).normalized()
@@ -4320,13 +4492,13 @@ func _build_prop(pos: Vector3, kind: String, pay := true) -> void:
 		if pay:
 			stats.fans += 1
 	_pop_in(node)
-	var lb := _label3d(node, Vector3(0, 3.7 if kind == "grinder" else 3.4, 0), "BAIT GRINDER" if kind == "grinder" else "WIND FAN", 0.013)
+	var lb := _label3d(node, Vector3(0, 3.7 if kind == "grinder" else (2.6 if kind == "broom" else 3.4), 0), "BAIT GRINDER" if kind == "grinder" else ("BROOM" if kind == "broom" else "WIND FAN"), 0.013)
 	lb.visibility_range_end = 22.0
 	lb.modulate = Color(1.0, 0.9, 0.7)
 	props.append(pr)
 	scenery.obstacles.append(Vector3(pos.x, pos.z, 1.5))
 	if pay:
-		_say("Bait Grinder built. Throw fish in: each one is bait, and every bite comes sooner." if kind == "grinder" else "Wind Fan built. It blows loose fish along the ice toward the Eye.")
+		_say("Bait Grinder built. Throw fish in: each one is bait, and every bite comes sooner." if kind == "grinder" else ("Broom built. It sweeps loose fish nearby onto a belt (or to the Eye)." if kind == "broom" else "Wind Fan built. It blows loose fish along the ice toward the Eye."))
 		sfx.play("buy")
 		_refresh()
 
@@ -4353,6 +4525,8 @@ func _click_prop(pr: Dictionary) -> void:
 			_grind(hf, pr.pos)
 		else:
 			_say("Bait Grinder: click or throw a single fish in. Buckets stay safe: take a fish out first.")
+	elif pr.kind == "broom":
+		_say("Broom: it sweeps loose fish within %d m onto a belt, or sends them to the Eye." % int(BROOM_R))
 	else:
 		_say("Wind Fan: it blows loose fish along the ice toward the Eye.")
 
@@ -4363,6 +4537,8 @@ func _prop_text(pr: Dictionary) -> String:
 		if not _held_fish().is_empty():
 			return "Click: grind this fish into bait"
 		return "Bait Grinder: throw a fish in (bait %d s)" % int(bait_t)
+	if pr.kind == "broom":
+		return "Broom: sweeps loose fish onto a belt"
 	return "Wind Fan: blows fish toward the Eye"
 
 func _use_depot(d: Dictionary) -> void:
@@ -4398,7 +4574,7 @@ func _build_rig(pos: Vector3, pay := true) -> void:
 	var dir := (-a).normalized()
 	var b := dir * (PUPIL_R + 0.4)
 	var rig := {"pos": node.position, "node": node, "idx": idx, "t": RIG_INTERVAL, "tag": null,
-		"belt": {"a": a, "b": b, "len": a.distance_to(b), "dir": dir}}
+		"belt": {"id": _next_belt_id(), "a": a, "b": b, "len": a.distance_to(b), "dir": dir, "kind": "belt", "parent": null, "join_d": 0.0, "twin": null, "split_d": 0.0}}
 	var hit := _box(node, Vector3(0, 0.7, 0), Vector3(5.6, 1.5, 11.0), Color.WHITE, "rig:%d" % idx)   # the click target
 	hit.visible = false
 	var rp: Dictionary = MachineModels.rig(node)
@@ -4491,6 +4667,9 @@ func _tick_rigs(delta: float) -> void:
 			rg.tag.text = "ICE-BREAKER (idle: nothing left nearby)"
 			continue
 		rg.tag.text = "ICE-BREAKER"
+		if not _belt_room(rg.belt):
+			rg.t = 0.3
+			continue
 		var pseudo := {"c": best, "node": rg.node}
 		var f := _draw_fish(pseudo)
 		if not f.is_empty():
@@ -4502,21 +4681,32 @@ func _remove_belt(t: Dictionary) -> void:
 	var belt: Dictionary = t.belt
 	if belt == null:
 		return
+	var twin = belt.get("twin", null)
 	for i in range(belt_fish.size() - 1, -1, -1):
-		if belt_fish[i].belt == belt:
+		var bid := int(belt_fish[i].belt.id)
+		if bid == int(belt.id) or (twin != null and bid == int(twin.id)):
 			belt_fish.remove_at(i)
-	belts.erase(belt)
+	for i in range(belts.size() - 1, -1, -1):
+		var oid := int(belts[i].id)
+		if oid == int(belt.id) or (twin != null and oid == int(twin.id)):
+			belts.remove_at(i)
+	if twin != null and is_instance_valid(twin.node):
+		(twin.node as Node).queue_free()
 	belt.node.queue_free()
 	t.belt = null
 
 func _belt_spawn(t: Dictionary, f: Dictionary) -> void:
 	_belt_push(t.belt, f)
 
-func _belt_push(belt: Dictionary, f: Dictionary) -> void:
+func _belt_push(belt: Dictionary, f: Dictionary, d := 0.0) -> void:
 	if belt_fish.size() >= BELT_MAX_FISH:
-		_feed_eye(f, _belt_mult() * _belt_flag_mult(belt, f))
+		_feed_eye(f, _lane_mult(belt) * _belt_flag_mult(belt, f))
 		return
-	belt_fish.append({"belt": belt, "d": 0.0, "f": f})
+	belt_fish.append({"belt": belt, "d": d, "f": f, "m": 1.0})
+
+## What the Eye pays per fish that arrives down this lane: a chute has no motor, so no Belt Motor bonus.
+func _lane_mult(belt: Dictionary) -> float:
+	return EYE_MULT if belt.get("kind", "belt") == "chute" else _belt_mult()
 
 ## Machines on a belt change what its fish are worth when they reach the Eye.
 func _belt_flag_mult(belt: Dictionary, f: Dictionary) -> float:
@@ -4527,28 +4717,60 @@ func _belt_flag_mult(belt: Dictionary, f: Dictionary) -> float:
 		m *= SORTER_MULT
 	return m
 
+## A fish leaves a belt (onto a trunk, a side lane or into the Eye): that belt's machines have had their say.
+func _belt_leave(it: Dictionary, belt: Dictionary) -> void:
+	it["m"] = float(it.get("m", 1.0)) * _belt_flag_mult(belt, it.f)
+
+func _belt_arrive(it: Dictionary) -> void:
+	_feed_eye(it.f, _lane_mult(it.belt) * float(it.get("m", 1.0)))
+	_belt_dive(it.f, (it.belt.b as Vector3) + Vector3(0, 0.78, 0), it.belt.dir)
+
 func _update_belt_fish(delta: float) -> void:
 	if belt_mm == null:
 		return
 	if belt_fish.is_empty():
 		belt_mm.visible_instance_count = 0
 		return
-	var sp := _belt_speed()
-	for i in range(belt_fish.size() - 1, -1, -1):
-		var it: Dictionary = belt_fish[i]
-		it.d += sp * delta
-		if it.d >= it.belt.len:
-			belt_fish.remove_at(i)
-			_feed_eye(it.f, _belt_mult() * _belt_flag_mult(it.belt, it.f))
-			_belt_dive(it.f, it.belt.b + Vector3(0, 0.78, 0), it.belt.dir)
+	belt_held = BeltNet.step(belt_fish, _belt_speed(), delta, Callable(self, "_belt_arrive"), Callable(self, "_belt_leave"))
 	for k in belt_fish.size():
 		var it2: Dictionary = belt_fish[k]
 		var b: Dictionary = it2.belt
-		var pos: Vector3 = b.a.lerp(b.b, it2.d / b.len) + Vector3(0, 0.78 + sin(it2.d * 3.0 + k) * 0.02, 0)
+		var u := clampf(it2.d / b.len, 0.0, 1.0)
+		var lift := CHUTE_DROP * (1.0 - u) if b.get("kind", "belt") == "chute" else 0.0
+		var pos: Vector3 = (b.a as Vector3).lerp(b.b, u) + Vector3(0, 0.78 + lift + sin(it2.d * 3.0 + k) * 0.02, 0)
 		var yaw := atan2(-b.dir.z, b.dir.x) + sin(it2.d * 4.0 + k * 1.7) * 0.12   # a little wriggle as it rides
 		belt_mm.set_instance_transform(k, Transform3D(Basis.from_euler(Vector3(0, yaw, 0)).scaled(Vector3.ONE * 0.95), pos))
 		belt_mm.set_instance_color(k, it2.f.color)
 	belt_mm.visible_instance_count = belt_fish.size()
+
+## Is there room on this belt for the next fish its rod or rig would put on?
+func _belt_room(belt: Dictionary) -> bool:
+	return BeltNet.has_room(belt_fish, belt)
+
+## One sweep of a broom: the nearest loose fish that has settled goes onto the nearest belt with room (else flies to the Eye). True if it moved one.
+func _broom_sweep(pr: Dictionary) -> bool:
+	var pos: Vector3 = pr.pos
+	var target := {}
+	var best := 9999.0
+	for b in belts:
+		var pj := BeltNet.project(b.a, b.b, pos)
+		if pj.perp < BROOM_BELT_R and pj.t < 0.95 and pj.perp < best:
+			var d: float = pj.t * float(b.len)
+			if BeltNet.has_room(belt_fish, b, d):
+				best = pj.perp
+				target = {"belt": b, "d": d, "point": pj.point}
+	var got := yard.collect(pos, BROOM_R, 1, 0.5)
+	if got.is_empty():
+		return false
+	var f: Dictionary = got[0]
+	var from: Vector3 = yard.last_collected[0] if not yard.last_collected.is_empty() else pos
+	if not target.is_empty() and belt_fish.size() < BELT_MAX_FISH:
+		_belt_push(target.belt, f, float(target.d))
+		_float_text(from + Vector3(0, 1.2, 0), "swept", Color(0.7, 0.95, 1.0), 0.012)
+	else:
+		_fly_fish(f, from + Vector3(0, 0.5, 0), 0.1, "eye", EYE_MULT)
+	sfx.play("tick", -9.0, 0.7)
+	return true
 
 func _aim_raw() -> String:
 	var from := cam.global_position
@@ -4627,13 +4849,23 @@ func _tile_action_text(t: Dictionary) -> String:
 			return "Hole (hold the Rod to cast)"
 		"auto":
 			if tool == 6 and _tool_unlocked(6):
+				if build_item == 7:
+					if t.belt != null: return "This Auto-Rod already has a belt"
+					return "Click: lay a chute to the Eye (%d): slower, no motor, no bonus" % chute_cost(t)
 				if t.belt == null: return "Lay a belt here first (kit: Belt)"
 				if build_item <= 1:
 					var kind0 := "cannery" if build_item == 0 else "sorter"
 					if t.belt.get(kind0, false): return "This belt already has a %s" % kind0
 					return "Click: build %s on this belt (%d)" % [BUILD_ITEMS[build_item], _build_cost(build_item)]
-				return "Depots and ice-breakers go on open ice (B to switch)"
-			if tool == 5 and _tool_unlocked(5) and t.belt == null: return "Click: lay a belt to the Eye (%d)" % belt_cost(t)
+				if build_item == 6:
+					if t.belt.get("kind", "belt") != "belt": return "A chute cannot take a splitter"
+					if t.belt.get("twin", null) != null: return "This belt already has a splitter"
+					return "Click: build a Splitter on this belt (%d)" % _build_cost(6)
+				return "Depots, ice-breakers and brooms go on open ice (B to switch)"
+			if tool == 5 and _tool_unlocked(5) and t.belt == null:
+				var so := spur_option(t)
+				if not so.is_empty(): return "Click: lay a spur onto the next belt over (%d, merges when there is a gap)" % so.cost
+				return "Click: lay a belt to the Eye (%d)" % belt_cost(t)
 			if not t.stash.is_empty():
 				return "Click: collect %d fish (what does not fit spills onto the ice)" % t.stash.size()
 			if model.tile_left(t.c) == 0:
@@ -4710,14 +4942,14 @@ func _prompt_for(a: String) -> String:
 			return "LOCKED - clear a neighbouring sector to open %s" % sec.name
 		var head := "Solid ice (hold the Drill to dig)"
 		if tool == 6 and _tool_unlocked(6):
-			if build_item <= 1:
-				head = "Click an Auto-Rod with a belt to add a %s (B: switch)" % BUILD_ITEMS[build_item]
+			if _on_belt_item(build_item):
+				head = ("Click an Auto-Rod with no belt to lay a chute (B: switch)" if build_item == 7 else "Click an Auto-Rod with a belt to add a %s (B: switch)" % BUILD_ITEMS[build_item])
 			else:
 				var rad := 2.6 if build_item == 2 else (2.2 if build_item >= 4 else 6.0)
 				var ok := _can_place_at(Vector3(aim_pos.x, 0, aim_pos.z), rad)
 				if build_item == 3 and rigs.size() >= rig_cap():
 					head = "The lake bears %d ice-breakers: wake the Eye for more" % rig_cap()
-				elif build_item >= 4 and _prop_count("grinder" if build_item == 4 else "fan") >= (MAX_GRINDERS if build_item == 4 else MAX_FANS):
+				elif _prop_kind(build_item) != "" and _prop_count(_prop_kind(build_item)) >= _prop_max(_prop_kind(build_item)):
 					head = "You have enough of those out on the ice"
 				elif ok:
 					head = "Click: build %s (%d)  [B: switch]" % [BUILD_ITEMS[build_item], _build_cost(build_item)]
@@ -5096,7 +5328,9 @@ func _on_about_to_save() -> void:
 	for t in holes:
 		hl.append({"p": [t.pos.x, t.pos.z], "s": t.state, "st": t.stash.map(_fish_to), "sl": t.slot.map(_fish_to),
 			"sm": t.smoke_t, "b": t.belt != null, "cn": t.belt != null and t.belt.get("cannery", false),
-			"so": t.belt != null and t.belt.get("sorter", false), "tr": int(t.get("tier", 1))})
+			"so": t.belt != null and t.belt.get("sorter", false), "tr": int(t.get("tier", 1)),
+			"bk": t.belt.get("kind", "belt") if t.belt != null else "", "bp": int(t.belt.parent.hole.idx) if t.belt != null and t.belt.get("parent", null) != null else -1,
+			"bj": float(t.belt.join_d) if t.belt != null else 0.0, "sp": t.belt != null and t.belt.get("twin", null) != null})
 	# fish already drawn from the lake must not vanish: a fight in progress lies on the ice by its hole, fish riding belts
 	# and fish mid-throw are written down with the multiplier they were owed
 	var loose: Array = yard.fish.map(func(e): return {"f": _fish_to(e.f), "p": [e.pos.x, e.pos.z]})
@@ -5108,7 +5342,7 @@ func _on_about_to_save() -> void:
 				loose.append({"f": _fish_to(f), "p": [tp.x + to_eye.x * 1.5, tp.z + to_eye.z * 1.5]})
 	var pend: Array = []
 	for it in belt_fish:
-		pend.append({"f": _fish_to(it.f), "m": _belt_mult() * _belt_flag_mult(it.belt, it.f)})
+		pend.append({"f": _fish_to(it.f), "m": _lane_mult(it.belt) * float(it.get("m", 1.0)) * _belt_flag_mult(it.belt, it.f)})
 	for rec in flying:
 		pend.append({"f": _fish_to(rec.f), "m": rec.m})
 	var p: Node3D = $Player
@@ -5184,22 +5418,25 @@ func _restore_inner(d: Dictionary) -> bool:
 			_settle_fish(_fish_from(ld.f), EYE_MULT)
 			continue
 		yard.spawn(_fish_from(ld.f), Vector3(ld.p[0], FishYard.GROUND, ld.p[1]), Vector3.ZERO)
+	var by_saved := {}      # saved hole index -> the restored hole (spurs name their trunk's hole by that index)
+	var spurs := []
+	var saved_i := -1
 	for hd in d.get("holes", []):
+		saved_i += 1
 		var t := _make_hole(Vector3(hd.p[0], 0.0, hd.p[1]), false)
 		if t.is_empty():
 			continue
+		by_saved[saved_i] = t
 		match hd.get("s", ""):
 			"auto":
 				_build_auto(t, false)
 				var tr := clampi(int(hd.get("tr", 1)), 1, MachineFX.TIER_MAX)
 				t["tier"] = tr
 				MachineFX.sync_tier(t.node, tr, 1.3)
-				if hd.get("b", false):
-					_build_belt(t, false)
-					if hd.get("cn", false):
-						_install_machine(t, "cannery", false)
-					if hd.get("so", false):
-						_install_machine(t, "sorter", false)
+				if hd.get("b", false) and int(hd.get("bp", -1)) >= 0:
+					spurs.append([t, hd])   # (a spur needs its trunk to exist first: below)
+				elif hd.get("b", false):
+					_restore_belt(t, hd)
 			"smoker": _build_smoker(t)
 			"table": _build_table(t)
 		for fd in hd.get("st", []):
@@ -5207,6 +5444,18 @@ func _restore_inner(d: Dictionary) -> bool:
 		for fd in hd.get("sl", []):
 			t.slot.append(_fish_from(fd))
 		t.smoke_t = hd.get("sm", 0.0)
+	var progress := true
+	while progress and not spurs.is_empty():   # spurs go on once their trunk's belt is down
+		progress = false
+		for sp in spurs.duplicate():
+			var trunk: Dictionary = by_saved.get(int(sp[1].get("bp", -1)), {})
+			if not trunk.is_empty() and trunk.belt != null:
+				_restore_belt(sp[0], sp[1], trunk.belt)
+				spurs.erase(sp)
+				progress = true
+	for lt in restore_late:
+		_install_splitter(lt, false)
+	restore_late.clear()
 	for dp in d.get("depots", []):
 		_build_depot(Vector3(dp[0], 0.0, dp[1]), false)
 	for pd in d.get("props", []):
@@ -5524,17 +5773,17 @@ func _click(a: String) -> void:
 			sfx.play("deny")
 		elif tool == 6 and _tool_unlocked(6):
 			var bp := Vector3(aim_pos.x, 0.0, aim_pos.z)
-			if build_item <= 1:
-				_say("Click an Auto-Rod that has a belt to add a %s." % BUILD_ITEMS[build_item])
+			if _on_belt_item(build_item):
+				_say("Click an Auto-Rod with no belt to lay a chute." if build_item == 7 else "Click an Auto-Rod that has a belt to add a %s." % BUILD_ITEMS[build_item])
 			elif build_item == 2:
 				if _can_place_at(bp, 2.6):
 					_build_depot(bp)
 				else:
 					_say("Can't build a depot there.")
 					sfx.play("deny")
-			elif build_item >= 4:
-				var kind := "grinder" if build_item == 4 else "fan"
-				if _prop_count(kind) >= (MAX_GRINDERS if kind == "grinder" else MAX_FANS):
+			elif _prop_kind(build_item) != "":
+				var kind := _prop_kind(build_item)
+				if _prop_count(kind) >= _prop_max(kind):
 					_say("You have enough of those out on the ice.")
 					sfx.play("deny")
 				elif _can_place_at(bp, 2.2):
@@ -5590,11 +5839,22 @@ func _click(a: String) -> void:
 			if tool == 6 and _tool_unlocked(6):
 				if build_item <= 1:
 					_install_machine(t, "cannery" if build_item == 0 else "sorter")
+				elif build_item == 6:
+					_install_splitter(t)
+				elif build_item == 7:
+					if t.belt != null:
+						_say("This Auto-Rod already has a belt.")
+					else:
+						_build_belt(t, true, "chute")
 				else:
-					_say("Depots and ice-breakers go on open ice.")
+					_say("Depots, ice-breakers and brooms go on open ice.")
 				return
 			if tool == 5 and _tool_unlocked(5) and t.belt == null:
-				_build_belt(t)
+				var spo := spur_option(t)
+				if not spo.is_empty():
+					_build_belt(t, true, "belt", spo.belt, float(spo.d))
+				else:
+					_build_belt(t)
 				return
 			if t.stash.is_empty() and model.tile_left(t.c) == 0:
 				_pickup_auto(t)
@@ -5612,10 +5872,26 @@ func _click(a: String) -> void:
 		"smoker":
 			_use_smoker(t)
 
+## Puts a saved belt back: its kind, a spur's trunk, then the cannery / sorter / splitter on it.
+func _restore_belt(t: Dictionary, hd: Dictionary, trunk = null) -> void:
+	_build_belt(t, false, String(hd.get("bk", "belt")) if String(hd.get("bk", "")) != "" else "belt", trunk, float(hd.get("bj", 0.0)))
+	if t.belt == null:
+		return
+	if hd.get("cn", false):
+		_install_machine(t, "cannery", false)
+	if hd.get("so", false):
+		_install_machine(t, "sorter", false)
+	if hd.get("sp", false):
+		restore_late.append(t)   # (a splitter goes in once every spur is down: it sits after the last join)
+
 func _pickup_auto(t: Dictionary) -> void:
+	if t.belt != null and _belt_has_children(t.belt):
+		_say("Other belts feed into this one: pick those Auto-Rods up first.")
+		sfx.play("deny")
+		return
 	var refund := _refund() + int(0.6 * MachineFX.invested("auto", int(t.get("tier", 1))))   # the coins you put into its tiers come back at the usual share
 	if t.belt != null:
-		refund += int(0.6 * t.belt.cost)
+		refund += int(0.6 * (int(t.belt.cost) + int(t.belt.get("splitter_cost", 0))))
 		_remove_belt(t)
 	if t.extra:
 		t.extra.queue_free()
