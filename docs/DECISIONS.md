@@ -338,3 +338,11 @@ Built in layers with a headless suite (`tools/run_opening.sh`, 60+ checks), a re
 - Picking up an Auto-Rod removes its Overdrive coil (it was left as a frozen ghost emitter on the empty hole). Coil sparks only run within 70 m of you.
 - While peering, kicks, throws, pickups and slot changes are blocked too (only C and the mouse look work).
 - Not fixed, by design: the dog's first-frame velocity spike (harmless while she is asleep).
+
+## Machine tiers (round 6, completing "machine tier 2")
+- **Aim at an Auto-Rod or an Ice-Breaker and press U** to raise it a tier (3 at most): x1.0 / x1.3 / x1.6 work speed on top of the global Overdrive (`machine_speed`).
+  Auto-Rod 250 then 750 coins; Ice-Breaker 4000 then 12000. Gold band and corner studs at tier 2, a lamp crown at tier 3. The prompt shows the next step and its price.
+- **Why this shape:** a per-machine upgrade is the late coin sink that matches "tier 2 machines" without new belt physics, and it needs no new kit mode, so saves and the kit UI are untouched.
+- **Fair to pick up:** a picked-up Auto-Rod refunds 60% of its tier spending; a moved Ice-Breaker keeps its tier. Tiers are saved (`tr` on holes, a third number on rigs) and restored (tested by a real save/load).
+- **Economy:** the sim does not model tiers (like Overdrive), so first-lake times are unchanged; with tiers a late lake runs faster. Prices are tuned against the coin glut, not against play.
+- **Still not built:** belt splitters, sloped channels, brooms (new fish-on-belt physics + a sim retune).

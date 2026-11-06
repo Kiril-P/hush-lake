@@ -23,7 +23,7 @@ const CONTROLS := [
 	["Your hands (three slots)", [["1  2  3 / wheel", "pick the slot in your hand: a tool, a fish or a bucket"], ["Q", "put what you hold down (a tool or bucket stays where it lands)"], ["E", "pick up what you look at, or sweep the fish at your feet into a bucket"], ["Z", "take a fish out of the bucket in your hand"]]],
 	["Tools", [["Drill", "hold click on ice to drill a hole"], ["Rod", "click a hole to cast, click again when it bites"], ["Builder's Kit", "from the tool rack by Olga's hut: B switches what it builds"]]],
 	["Fish and buckets", [["Click a fish", "grab it (into a slot, or the bucket you hold)"], ["Click empty ice", "drop a fish, or set a bucket down where you aim"], ["Hold right mouse / F", "charge a throw (or a kick), let go to release; a kick tips a bucket over"], ["Click the Eye / a depot / a smoker", "feed it everything you carry"], ["Click a bucket on the ice", "put a fish in, or take one out"]]],
-	["Everything else", [["H", "ask Olga what to do next"], ["Tab", "field journal"], ["P", "photo mode: hides the interface, click takes a picture"], ["L", "the ledger: lifetime goals that pay pearls"], ["C (hold)", "peer into a hole: see the fish swimming under it"], ["R", "refreeze the lake (after clearing sectors)"], ["M", "mute"]]],
+	["Everything else", [["H", "ask Olga what to do next"], ["Tab", "field journal"], ["P", "photo mode: hides the interface, click takes a picture"], ["L", "the ledger: lifetime goals that pay pearls"], ["C (hold)", "peer into a hole: see the fish swimming under it"], ["U", "upgrade the Auto-Rod or Ice-Breaker you look at (tier 2 and 3)"], ["R", "refreeze the lake (after clearing sectors)"], ["M", "mute"]]],
 ]
 
 const HOWTO := [

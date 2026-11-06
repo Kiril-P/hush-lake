@@ -89,5 +89,64 @@ func _ready() -> void:
 	check("a machine near you has sparks", (m2.get_node("od_aura/sparks") as CPUParticles3D).emitting)
 	MachineFX.spin(m2, 0.1, Vector3(500, 0, 0))
 	check("a machine far from you has none", not (m2.get_node("od_aura/sparks") as CPUParticles3D).emitting)
+	# ---- machine tiers ----
+	check("tier speed: x1.0 / 1.3 / 1.6 and clamped", is_equal_approx(MachineFX.tier_speed(1), 1.0) and is_equal_approx(MachineFX.tier_speed(2), 1.3) and is_equal_approx(MachineFX.tier_speed(3), 1.6) and is_equal_approx(MachineFX.tier_speed(9), 1.6))
+	check("costs: Auto-Rod 250 / 750, Ice-Breaker 4000 / 12000, nothing past tier 3", MachineFX.upgrade_cost("auto", 1) == 250 and MachineFX.upgrade_cost("auto", 2) == 750 and MachineFX.upgrade_cost("rig", 1) == 4000 and MachineFX.upgrade_cost("rig", 2) == 12000 and MachineFX.upgrade_cost("auto", 3) == -1)
+	check("invested coins add up (rod at tier 3: 1000)", MachineFX.invested("auto", 3) == 1000 and MachineFX.invested("auto", 1) == 0)
+	GameState.upgrades["overdrive"] = 0
+	GameState.currency = 99999.0
+	var h2: Dictionary = g._make_hole(g._hex_pos(Vector2i(-1, 1)) * 1.25)
+	g._build_auto(h2)
+	var plain := 0.0
+	for i in 300:
+		plain += g._auto_wait(h2)
+	var c0: float = GameState.currency
+	check("U on an Auto-Rod pays 250 and makes it tier 2", g.upgrade_machine(h2) and int(h2.tier) == 2 and is_equal_approx(GameState.currency, c0 - 250.0))
+	var fast := 0.0
+	for i in 300:
+		fast += g._auto_wait(h2)
+	check("tier 2 shortens its wait by ~23%% (x%.2f)" % (fast / plain), fast / plain < 0.82 and fast / plain > 0.72)
+	check("tier 2 wears gold trim", h2.node.get_node_or_null("tier_trim") != null)
+	check("tier 3 for 750, then it is done", g.upgrade_machine(h2) and int(h2.tier) == 3 and not g.upgrade_machine(h2) and int(h2.tier) == 3)
+	check("tier 3 adds the lamp crown (4 studs, band, crown)", h2.node.get_node("tier_trim").get_child_count() == 6)
+	check("the prompt names the next step or says it is done", g.machine_prompt_suffix("hole:%d" % h2.idx).contains("fully upgraded"))
+	var h3: Dictionary = g._make_hole(g._hex_pos(Vector2i(0, 1)) * 1.25)
+	g._build_auto(h3)
+	check("the prompt offers tier 2 with its price", g.machine_prompt_suffix("hole:%d" % h3.idx).contains("tier 2 for 250"))
+	GameState.currency = 100.0
+	check("without the coins it refuses and keeps the tier", not g.upgrade_machine(h3) and int(h3.get("tier", 1)) == 1 and is_equal_approx(GameState.currency, 100.0))
+	GameState.currency = 99999.0
+	check("an Ice-Breaker upgrades for 4000", g.upgrade_machine(rg) and int(rg.tier) == 2 and rg.node.get_node_or_null("tier_trim") != null)
+	var saved_dict_ok := true
+	g._on_about_to_save()
+	var ex: Dictionary = GameState.extra
+	check("the save keeps tiers (rod tier 3, rig tier 2)", ex.holes.any(func(x): return x.get("tr", 1) == 3) and ex.rigs.any(func(x): return x.size() > 2 and x[2] == 2))
+	var before := GameState.currency
+	g._pickup_auto(h2)
+	check("picking up a tier-3 rod refunds a share of the upgrades too (>= +600)", GameState.currency - before >= 600.0)
+	# a rig that is moved keeps its tier
+	g.stats["rig_tier"] = 1
+	g._pick_up_rig(rg)
+	check("a moved Ice-Breaker remembers its tier", int(g.stats.rig_tier) == 2)
+	g._build_rig(g._hex_pos(Vector2i(2, 1)) * 1.1, true)
+	check("and goes back down at tier 2, free", g.rigs.size() == 1 and int(g.rigs[0].get("tier", 1)) == 2 and g.rigs[0].node.get_node_or_null("tier_trim") != null)
+	# round trip: a saved game comes back with its tiers
+	var h4: Dictionary = g._make_hole(g._hex_pos(Vector2i(-1, 0)) * 1.25)
+	g._build_auto(h4)
+	g.upgrade_machine(h4)
+	g.upgrade_machine(g.rigs[0])
+	g._on_about_to_save()   # (save_game(false) does not rebuild the data: refresh it first or an older snapshot is written)
+	GameState.save_game(false)
+	var g2 = load("res://games/ice_fishing/ice_fishing.tscn").instantiate()
+	add_child(g2)
+	g2.test_capture = true
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var tiers := []
+	for t in g2.holes:
+		if t.state == "auto":
+			tiers.append(int(t.get("tier", 1)))
+	tiers.sort()
+	check("a loaded game has the same Auto-Rod tiers (%s) and the rig at tier 3" % str(tiers), tiers == [1, 2] and g2.rigs.size() == 1 and int(g2.rigs[0].get("tier", 1)) == 3 and g2.rigs[0].node.get_node_or_null("tier_trim") != null)
 	print("FX %s" % ("PASS" if fails == 0 else "FAIL"))
 	get_tree().quit(1 if fails > 0 else 0)

@@ -1576,7 +1576,52 @@ func work_speed() -> float: return 1.0 + 0.6 * GameState.level("drill")
 func drill_time() -> float: return DRILL_BASE_TIME / work_speed()
 func wait_time(t: Dictionary) -> float: return randf_range(2.0, 5.0) * bite_mult() * model.wait_factor(t.c)
 func overdrive_mult() -> float: return 1.0 + 0.2 * GameState.level("overdrive")
-func _auto_wait(t: Dictionary) -> float: return randf_range(AUTO_WAIT[0], AUTO_WAIT[1]) * bite_mult() * model.wait_factor(t.c) / overdrive_mult()
+## One machine's work speed: the global Overdrive times its own tier (x1.0 / 1.3 / 1.6, MachineFX.tier_speed).
+func machine_speed(m: Dictionary) -> float: return overdrive_mult() * MachineFX.tier_speed(int(m.get("tier", 1)))
+func _auto_wait(t: Dictionary) -> float: return randf_range(AUTO_WAIT[0], AUTO_WAIT[1]) * bite_mult() * model.wait_factor(t.c) / machine_speed(t)
+
+## U on an Auto-Rod or an Ice-Breaker: pay to raise it one tier (3 at most). Returns true if it was upgraded.
+func _machine_at(a: String) -> Dictionary:
+	if a.begins_with("hole:"):
+		var t := _hole_of_action(a)
+		return t if (not t.is_empty() and t.state == "auto") else {}
+	if a.begins_with("rig:"):
+		for rg in rigs:
+			if "rig:%d" % rg.idx == a:
+				return rg
+	return {}
+
+func _machine_kind(m: Dictionary) -> String:
+	return "rig" if m.has("belt") and m.has("idx") and m.has("beacon") else "auto"
+
+func upgrade_machine(m: Dictionary) -> bool:
+	if m.is_empty():
+		return false
+	var kind := _machine_kind(m)
+	var tier := int(m.get("tier", 1))
+	var cost := MachineFX.upgrade_cost(kind, tier)
+	if cost < 0:
+		_say("That %s is already at its best (tier %d)." % ["Ice-Breaker" if kind == "rig" else "Auto-Rod", tier])
+		return false
+	if not _spend(float(cost)):
+		_say("Tier %d needs %d coins." % [tier + 1, cost])
+		sfx.play("deny")
+		return false
+	m["tier"] = tier + 1
+	MachineFX.sync_tier(m.node, tier + 1, 3.4 if kind == "rig" else 1.3)
+	_say("%s upgraded to tier %d: it works %d%% faster than a plain one." % ["Ice-Breaker" if kind == "rig" else "Auto-Rod", tier + 1, int(round((MachineFX.tier_speed(tier + 1) - 1.0) * 100.0))])
+	sfx.play("goal", -6.0)
+	shake = maxf(shake, 0.03)
+	_refresh()
+	return true
+
+func machine_prompt_suffix(a: String) -> String:
+	var m := _machine_at(a)
+	if m.is_empty():
+		return ""
+	var tier := int(m.get("tier", 1))
+	var cost := MachineFX.upgrade_cost(_machine_kind(m), tier)
+	return "     [U: upgrade to tier %d for %d]" % [tier + 1, cost] if cost >= 0 else "     (tier %d, fully upgraded)" % tier
 func auto_cost() -> float: return ceil(AUTO_BASE * pow(AUTO_GROWTH, _count("auto")))
 func smoker_cost() -> float: return ceil(90.0 * pow(1.5, _count("smoker")))
 func table_cost() -> float: return ceil(60.0 * pow(1.5, _count("table")))
@@ -2338,6 +2383,7 @@ func _process(delta: float) -> void:
 		prompt_label.text = _prompt_for(a)
 		if a.begins_with("hole:") and aim_flat <= PEER_RANGE and not peer.want_open:
 			prompt_label.text += "     [hold C: peer in]"
+		prompt_label.text += machine_prompt_suffix(a)
 	_update_peer(delta, raw)
 	_tick_yard(delta, captured)
 	var in_hand := _held_kind() in ["fish", "bucket"]
@@ -4357,6 +4403,10 @@ func _build_rig(pos: Vector3, pay := true) -> void:
 	hit.visible = false
 	var rp: Dictionary = MachineModels.rig(node)
 	rig.beacon = rp.beacon
+	if free_move and int(stats.get("rig_tier", 1)) > 1:
+		rig["tier"] = int(stats.rig_tier)
+		stats["rig_tier"] = 1
+		MachineFX.sync_tier(node, int(rig.tier), 3.4)
 	rig["fx"] = MachineFX.rig_fx(node)
 	rig["rumble_t"] = randf_range(0.0, 3.0)
 	_pop_in(node)
@@ -4407,6 +4457,7 @@ func _pick_up_rig(rg: Dictionary) -> void:
 		if absf(o.x - rg.pos.x) < 0.01 and absf(o.y - rg.pos.z) < 0.01:
 			scenery.obstacles.remove_at(i)
 			break
+	stats["rig_tier"] = int(rg.get("tier", 1))   # a moved Ice-Breaker keeps its tier (it goes down again for free)
 	rg.node.queue_free()
 	rigs.erase(rg)
 	stats["rig_moves"] = int(stats.get("rig_moves", 0)) + 1
@@ -4445,7 +4496,7 @@ func _tick_rigs(delta: float) -> void:
 		if not f.is_empty():
 			_belt_push(rg.belt, f)
 			_after_draw(pseudo)
-		rg.t = (RIG_INTERVAL * model.wait_factor(best) * 0.6 + 0.6) / overdrive_mult()
+		rg.t = (RIG_INTERVAL * model.wait_factor(best) * 0.6 + 0.6) / machine_speed(rg)
 
 func _remove_belt(t: Dictionary) -> void:
 	var belt: Dictionary = t.belt
@@ -5045,7 +5096,7 @@ func _on_about_to_save() -> void:
 	for t in holes:
 		hl.append({"p": [t.pos.x, t.pos.z], "s": t.state, "st": t.stash.map(_fish_to), "sl": t.slot.map(_fish_to),
 			"sm": t.smoke_t, "b": t.belt != null, "cn": t.belt != null and t.belt.get("cannery", false),
-			"so": t.belt != null and t.belt.get("sorter", false)})
+			"so": t.belt != null and t.belt.get("sorter", false), "tr": int(t.get("tier", 1))})
 	# fish already drawn from the lake must not vanish: a fight in progress lies on the ice by its hole, fish riding belts
 	# and fish mid-throw are written down with the multiplier they were owed
 	var loose: Array = yard.fish.map(func(e): return {"f": _fish_to(e.f), "p": [e.pos.x, e.pos.z]})
@@ -5067,7 +5118,7 @@ func _on_about_to_save() -> void:
 		"loose": loose, "pending": pend, "pos": [p.position.x, p.position.z],
 		"yaw": p.rotation.y, "pitch": cam.rotation.x,
 		"day": day_t, "time": play_time, "weather": weather.to_dict(),
-		"depots": depots.map(func(d): return [d.pos.x, d.pos.z]), "props": props.map(func(pr): return [pr.kind, pr.pos.x, pr.pos.z]), "bait": bait_t, "rigs": rigs.map(func(rg): return [rg.pos.x, rg.pos.z]),
+		"depots": depots.map(func(d): return [d.pos.x, d.pos.z]), "props": props.map(func(pr): return [pr.kind, pr.pos.x, pr.pos.z]), "bait": bait_t, "rigs": rigs.map(func(rg): return [rg.pos.x, rg.pos.z, int(rg.get("tier", 1))]),
 		"order": order, "orders_done": orders_done, "visits": visit_count, "lake": model.to_dict()}
 
 func _restore(d: Dictionary) -> bool:
@@ -5140,6 +5191,9 @@ func _restore_inner(d: Dictionary) -> bool:
 		match hd.get("s", ""):
 			"auto":
 				_build_auto(t, false)
+				var tr := clampi(int(hd.get("tr", 1)), 1, MachineFX.TIER_MAX)
+				t["tier"] = tr
+				MachineFX.sync_tier(t.node, tr, 1.3)
 				if hd.get("b", false):
 					_build_belt(t, false)
 					if hd.get("cn", false):
@@ -5160,6 +5214,10 @@ func _restore_inner(d: Dictionary) -> bool:
 	bait_t = float(d.get("bait", 0.0))
 	for rp in d.get("rigs", []):
 		_build_rig(Vector3(rp[0], 0.0, rp[1]), false)
+		if rp.size() > 2 and not rigs.is_empty():
+			var rtier := clampi(int(rp[2]), 1, MachineFX.TIER_MAX)
+			rigs[rigs.size() - 1]["tier"] = rtier
+			MachineFX.sync_tier(rigs[rigs.size() - 1].node, rtier, 3.4)
 	_sync_active()
 	day_t = d.get("day", 0.0)
 	play_time = float(d.get("time", 0.0))
@@ -5222,13 +5280,13 @@ func _offline(away: float) -> void:
 				break
 			earned += _settle_fish(rf, _belt_mult() * _belt_flag_mult(rg.belt, rf), true, false)
 			_after_draw(pseudo)
-			rb -= (RIG_INTERVAL * model.wait_factor(best) * 0.6 + 0.6) / overdrive_mult() * 2.5
+			rb -= (RIG_INTERVAL * model.wait_factor(best) * 0.6 + 0.6) / machine_speed(rg) * 2.5
 	for t in holes:
 		if t.state != "auto":
 			continue
 		var budget := away
 		while budget > 0.0 and model.tile_left(t.c) > 0:
-			budget -= (AUTO_WAIT[0] + AUTO_WAIT[1]) * 0.5 * bite_mult_base() * model.wait_factor(t.c) / overdrive_mult()
+			budget -= (AUTO_WAIT[0] + AUTO_WAIT[1]) * 0.5 * bite_mult_base() * model.wait_factor(t.c) / machine_speed(t)
 			if t.belt != null:
 				var f := _draw_fish(t)
 				if f.is_empty():
@@ -5322,6 +5380,9 @@ func _unhandled_input(event: InputEvent) -> void:
 				return
 		if event.keycode == KEY_R:
 			_toggle_refreeze()
+			return
+		if event.keycode == KEY_U and _cap():
+			upgrade_machine(_machine_at(_aim()))
 			return
 		if event.keycode == KEY_P and _cap() and not journal_panel.visible and not refreeze_panel.visible:
 			_toggle_photo()
@@ -5552,7 +5613,7 @@ func _click(a: String) -> void:
 			_use_smoker(t)
 
 func _pickup_auto(t: Dictionary) -> void:
-	var refund := _refund()
+	var refund := _refund() + int(0.6 * MachineFX.invested("auto", int(t.get("tier", 1))))   # the coins you put into its tiers come back at the usual share
 	if t.belt != null:
 		refund += int(0.6 * t.belt.cost)
 		_remove_belt(t)
@@ -5562,6 +5623,11 @@ func _pickup_auto(t: Dictionary) -> void:
 	if t.tag:
 		t.tag.queue_free()
 		t.tag = null
+	t.erase("tier")   # (a picked-up rod goes down again as a plain tier-1 rod: the upgrade stays with the machine)
+	var gold_trim: Node = (t.node as Node3D).get_node_or_null("tier_trim")
+	if gold_trim != null:
+		t.node.remove_child(gold_trim)
+		gold_trim.queue_free()
 	t.arm = null
 	var od_aura: Node = (t.node as Node3D).get_node_or_null("od_aura")   # the Overdrive coil ring belongs to the machine, not the hole
 	if od_aura != null:

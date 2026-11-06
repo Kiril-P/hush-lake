@@ -8,6 +8,83 @@ extends RefCounted
 
 const AMBER := Color(1.0, 0.78, 0.35)
 
+## ---- machine tiers (aim at an Auto-Rod or an Ice-Breaker and press U) ----
+const TIER_MAX := 3
+
+## Work speed of a machine at a tier: x1.0, x1.3, x1.6.
+static func tier_speed(tier: int) -> float:
+	return 1.0 + 0.3 * float(clampi(tier, 1, TIER_MAX) - 1)
+
+## Coins to take a machine from `tier` to tier + 1; -1 at the top. Auto-Rod 250 / 750, Ice-Breaker 4000 / 12000.
+static func upgrade_cost(kind: String, tier: int) -> int:
+	if tier >= TIER_MAX or tier < 1:
+		return -1
+	var base := 250.0 if kind == "auto" else 4000.0
+	return int(ceil(base * pow(3.0, tier - 1)))
+
+## Coins spent getting a machine to `tier` (what a pickup refunds a share of).
+static func invested(kind: String, tier: int) -> int:
+	var n := 0
+	for t in range(1, clampi(tier, 1, TIER_MAX)):
+		n += upgrade_cost(kind, t)
+	return n
+
+## Gold trim for tier 2 and 3: a gold band round the base and, at tier 3, a lamp crown. Replaces any earlier trim (idempotent).
+static func sync_tier(machine: Node3D, tier: int, size := 1.0) -> void:
+	var old: Node = machine.get_node_or_null("tier_trim")
+	if old != null:
+		machine.remove_child(old)
+		old.queue_free()
+	if tier < 2:
+		return
+	var trim := Node3D.new()
+	trim.name = "tier_trim"
+	machine.add_child(trim)
+	var gold := Color(1.0, 0.82, 0.38)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = gold
+	mat.metallic = 0.7
+	mat.roughness = 0.35
+	mat.emission_enabled = true
+	mat.emission = gold
+	mat.emission_energy_multiplier = 0.6
+	var band := TorusMesh.new()
+	band.inner_radius = 0.85 * size
+	band.outer_radius = 0.93 * size
+	band.rings = 20
+	band.ring_segments = 5
+	var bm := MeshInstance3D.new()
+	bm.mesh = band
+	bm.position = Vector3(0, 0.12 * size, 0)
+	bm.material_override = mat
+	bm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	trim.add_child(bm)
+	for i in 4:   # four gold corner studs
+		var s := MeshInstance3D.new()
+		var sb := BoxMesh.new()
+		sb.size = Vector3(0.14, 0.5, 0.14) * size
+		s.mesh = sb
+		var a := TAU * i / 4.0 + PI * 0.25
+		s.position = Vector3(cos(a) * 0.9 * size, 0.3 * size, sin(a) * 0.9 * size)
+		s.material_override = mat
+		trim.add_child(s)
+	if tier >= 3:
+		var crown := MeshInstance3D.new()
+		var cm := SphereMesh.new()
+		cm.radius = 0.2 * size
+		cm.height = 0.4 * size
+		crown.mesh = cm
+		crown.position = Vector3(0, 2.6 * size, 0)
+		var lamp := StandardMaterial3D.new()
+		lamp.albedo_color = gold
+		lamp.emission_enabled = true
+		lamp.emission = gold
+		lamp.emission_energy_multiplier = 3.0
+		crown.material_override = lamp
+		crown.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		trim.add_child(crown)
+	trim.set_meta("tier", tier)
+
 ## What the coil aura looks like at an Overdrive level (0..5).
 static func od_params(level: int) -> Dictionary:
 	var l := clampi(level, 0, 5)
