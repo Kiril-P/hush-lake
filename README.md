@@ -1,9 +1,34 @@
-# Hush Lake (cozy incrementals prototype)
+# Hush Lake
 
-A first-person cozy ice-fishing incremental in Godot 4.7. Feed the Eye under the ice: drill, fish, push your catch across the ice into the Eye, and build machines that do it for you.
+A first-person cozy ice-fishing incremental, made in Godot 4.7.
+
+Something old lives under the ice of Hush Lake, and it is hungry. Drill holes, catch fish, push and throw your catch across the ice into the Eye, then build machines that do the work for you: auto-rods, belts, smokers, canneries, sorters, depots and ice-breaker rigs. Feed the Eye enough and it wakes.
+
+![A short tour of Hush Lake](docs/media/tour.gif)
+
+> **Status:** a finished prototype that is no longer being worked on. It runs and is playable start to finish, but expect rough edges. The screenshots are from development builds.
+
+## Screenshots
+
+| | |
+|---|---|
+| ![Title screen at dusk](docs/media/title.jpg) | ![Arriving at the lake by dog sled](docs/media/arrival.jpg) |
+| ![Olga's fish hut](docs/media/olga.jpg) | ![Aurora night over the Eye](docs/media/aurora.jpg) |
+| ![The Eye under the ice](docs/media/eye.jpg) | ![A fish in hand, ready to throw](docs/media/hands.jpg) |
+| ![Buckets of fish on the ice](docs/media/buckets.jpg) | ![The camp at night](docs/media/camp_night.jpg) |
+| ![The Eye awakening](docs/media/awakening.jpg) | ![The village on the ice](docs/media/town.jpg) |
+
+## How it plays
+- **Fish anywhere.** Drill through the ice, cast, wait for a bite and fight the fish in.
+- **Everything is physical.** Caught fish drop onto the ice and slide. Grab them, carry three things at once, throw them in an arc, kick them, or sweep them into buckets.
+- **Feed the Eye.** Every fish you deliver grows it through five stages, each with its own reward, until it wakes.
+- **Automate.** Build auto-rods, belts with real back-pressure, splitters, chutes, smokers, gut tables, canneries, sorters, depots, bait grinders, wind fans and ice-breaker rigs. Then ride a snowmobile out to the far sectors.
+- **A small story.** Olga, who has watched the Eye for forty winters, leaves letters in the mailbox. There are dreams, keepsakes and an ending.
+- **A living lake.** Day and night, weather (snow, fog, blizzards, aurora nights), visiting rare fish, a field journal and a photo mode.
+- **Keep going.** Refreeze the lake and choose what the next one is like, with perks and a ledger of lifetime goals.
 
 ## Play
-`tools/run.sh` (or open the project in Godot 4.7 and press F5). The game opens on a title (Hush Lake at dusk, the title forming out of frost); Play runs a short sled-ride opening (click to skip), Continue a "previously" beat. Esc opens the menu (Settings: look & feel, interface, audio, video; Controls; How to play; Lake stats).
+Install [Godot 4.7](https://godotengine.org/), then run `tools/run.sh` (or open `project.godot` in Godot and press F5). The game opens on a title (Hush Lake at dusk, the title forming out of frost); Play runs a short sled-ride opening (click to skip), Continue a "previously" beat. Esc opens the menu (Settings: look & feel, interface, audio, video; Controls; How to play; Lake stats).
 
 | Key | Does |
 |---|---|
